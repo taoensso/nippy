@@ -1,0 +1,4 @@
+nippy
+=====
+
+TODO: serialization lib
