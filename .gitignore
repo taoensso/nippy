@@ -1,5 +1,14 @@
+/target
+/lib
+/classes
+/checkouts
+/logs
+/docs
 pom.xml
-*jar
-/lib/
-/classes/
+*.jar
+*.class
+*.sh
 .lein-deps-sum
+.lein-failures
+.lein-plugins
+dump.rdb
