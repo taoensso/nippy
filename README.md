@@ -8,7 +8,7 @@ Current [semantic](http://semver.org/) version:
 
 Clojure's [rich data types](http://clojure.org/datatypes) are *awesome*. And its [reader](http://clojure.org/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
-Nippy is an attempt to provide a drop-in, high-performance alternative to the reader. It's a fork of [Deep-Freeze](https://github.com/halgari/deep-freeze).
+Nippy is an attempt to provide a drop-in, high-performance alternative to the reader. It's a fork of [Deep-Freeze](https://github.com/halgari/deep-freeze) and is used as the [Carmine Redis client](https://github.com/ptaoussanis/carmine) serializer.
 
 ## What's In The Box?
  * Simple, **high-performance** all-Clojure de/serializer.
@@ -19,7 +19,7 @@ Nippy is an attempt to provide a drop-in, high-performance alternative to the re
 
 ## Status [![Build Status](https://secure.travis-ci.org/ptaoussanis/nippy.png?branch=master)](http://travis-ci.org/ptaoussanis/nippy)
 
-Nippy is relatively mature and is used as the [Carmine Redis client](https://github.com/ptaoussanis/carmine) serializer. The API is expected to remain more or less stable. To run tests against all supported Clojure versions, use:
+Nippy is still currently *experimental*. It **has not yet been thoroughly tested in production** and its API is subject to change. To run tests against all supported Clojure versions, use:
 
 ```bash
 lein2 all test
@@ -47,13 +47,71 @@ and `require` the library:
 
 ### De/Serializing
 
-TODO
+As an example of what Nippy can do, let's take a look at its own reference stress data:
+
+```clojure
+nippy/stress-data
+=>
+{:bytes       (byte-array [(byte 1) (byte 2) (byte 3)])
+ :nil          nil
+ :boolean      true
+
+ :char-utf8    \ಬ
+ :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
+ :string-long  (apply str (range 1000))
+ :keyword      :keyword
+
+ :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
+ :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
+ :list-empty   (list)
+ :vector       [1 2 3 4 5 [6 7 8 [9 10]]]
+ :vector-empty []
+ :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7}}}
+ :map-empty    {}
+ :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
+ :set-empty    #{}
+ :meta         (with-meta {:a :A} {:metakey :metaval})
+ :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
+ :queue-empty  (PersistentQueue/EMPTY)
+ :coll         (repeatedly 1000 rand)
+
+ :byte         (byte 16)
+ :short        (short 42)
+ :integer      (int 3)
+ :long         (long 3)
+ :bigint       (bigint 31415926535897932384626433832795)
+
+ :float        (float 3.14)
+ :double       (double 3.14)
+ :bigdec       (bigdec 3.1415926535897932384626433832795)
+
+ :ratio        22/7}
+```
+
+Serialize it:
+
+```clojure
+(def frozen-stress-data (nippy/freeze-to-bytes nippy/stress-data))
+=> #<byte[] [B@3253bcf3>
+```
+
+Deserialize it:
+
+```clojure
+(nippy/thaw-from-bytes frozen-stress-data)
+=> {:bytes       (byte-array [(byte 1) (byte 2) (byte 3)])
+    :nil          nil
+    :boolean      true
+    <...> }
+```
+
+Couldn't be simpler!
 
 ## Performance
 
-TODO
+![Performance comparison chart](https://github.com/ptaoussanis/nippy/raw/master/benchmarks/chart1.png)
 
-![Performance comparison chart]()
+![Data size chart](https://github.com/ptaoussanis/nippy/raw/master/benchmarks/chart2.png)
 
 [Detailed benchmark information](https://docs.google.com/spreadsheet/ccc?key=0AuSXb68FH4uhdE5kTTlocGZKSXppWG9sRzA5Y2pMVkE&pli=1#gid=0) is available on Google Docs.
 
