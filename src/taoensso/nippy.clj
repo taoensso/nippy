@@ -87,7 +87,7 @@
        ~@body)))
 
 (defmacro coll-freezer
-  "Helper to freeze simple collection types."
+  "Helper to extend Freezable protocol to simple collection types."
   [type id & body]
   `(freezer
     ~type ~id
@@ -243,7 +243,7 @@
 (def stress-data
   "Reference data used for tests & benchmarks."
   {;; Breaks reader, roundtrip equality
-   :bytes       (byte-array [(byte 1) (byte 2) (byte 3)])
+   :bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
 
    :nil          nil
    :boolean      true

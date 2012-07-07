@@ -52,7 +52,7 @@ As an example of what Nippy can do, let's take a look at its own reference stres
 ```clojure
 nippy/stress-data
 =>
-{:bytes       (byte-array [(byte 1) (byte 2) (byte 3)])
+{:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
  :nil          nil
  :boolean      true
 
@@ -99,7 +99,7 @@ Deserialize it:
 
 ```clojure
 (nippy/thaw-from-bytes frozen-stress-data)
-=> {:bytes       (byte-array [(byte 1) (byte 2) (byte 3)])
+=> {:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
     :nil          nil
     :boolean      true
     <...> }
