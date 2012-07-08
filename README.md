@@ -1,7 +1,7 @@
 Current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "0.9.0"]
+[com.taoensso/nippy "0.9.1"]
 ```
 
 # Nippy, a serialization library for Clojure
@@ -13,7 +13,7 @@ Nippy is an attempt to provide a drop-in, high-performance alternative to the re
 ## What's In The Box?
  * Simple, **high-performance** all-Clojure de/serializer.
  * Comprehesive, extensible **support for all major data types**.
- * **Reader-fallback** for difficult/future types.
+ * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
  * **Full test coverage** for every supported type.
  * [Snappy](http://code.google.com/p/snappy/) **integrated de/compression** for efficient storage and network transfer.
 
@@ -36,7 +36,7 @@ Nippy uses [Snappy](http://code.google.com/p/snappy-java/) which currently has a
 Depend on Nippy in your `project.clj`:
 
 ```clojure
-[com.taoensso/nippy "0.9.0"]
+[com.taoensso/nippy "0.9.1"]
 ```
 
 and `require` the library:
@@ -52,7 +52,7 @@ As an example of what Nippy can do, let's take a look at its own reference stres
 ```clojure
 nippy/stress-data
 =>
-{:bytes       (byte-array [(byte 1) (byte 2) (byte 3)])
+{:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
  :nil          nil
  :boolean      true
 
@@ -60,6 +60,7 @@ nippy/stress-data
  :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
  :string-long  (apply str (range 1000))
  :keyword      :keyword
+ :ns-keyword   ::keyword
 
  :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
  :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
@@ -85,7 +86,12 @@ nippy/stress-data
  :double       (double 3.14)
  :bigdec       (bigdec 3.1415926535897932384626433832795)
 
- :ratio        22/7}
+ :ratio        22/7
+
+ ;; Clojure 1.4+
+ ;; :tagged-uuid  (java.util.UUID/randomUUID)
+ ;; :tagged-date  (java.util.Date.)
+ }
 ```
 
 Serialize it:
@@ -99,7 +105,7 @@ Deserialize it:
 
 ```clojure
 (nippy/thaw-from-bytes frozen-stress-data)
-=> {:bytes       (byte-array [(byte 1) (byte 2) (byte 3)])
+=> {:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
     :nil          nil
     :boolean      true
     <...> }

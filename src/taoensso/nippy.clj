@@ -87,7 +87,7 @@
        ~@body)))
 
 (defmacro coll-freezer
-  "Helper to freeze simple collection types."
+  "Helper to extend Freezable protocol to simple collection types."
   [type id & body]
   `(freezer
     ~type ~id
@@ -100,7 +100,9 @@
 
 (freezer Character id-char    (.writeChar s (int x)))
 (freezer String    id-string  (.writeUTF s x))
-(freezer Keyword   id-keyword (.writeUTF s (name x)))
+(freezer Keyword   id-keyword (.writeUTF s (if-let [ns (namespace x)]
+                                             (str ns "/" (name x))
+                                             (name x))))
 
 (declare freeze-to-stream!*)
 
@@ -243,7 +245,7 @@
 (def stress-data
   "Reference data used for tests & benchmarks."
   {;; Breaks reader, roundtrip equality
-   :bytes       (byte-array [(byte 1) (byte 2) (byte 3)])
+   :bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
 
    :nil          nil
    :boolean      true
@@ -252,6 +254,7 @@
    :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
    :string-long  (apply str (range 1000))
    :keyword      :keyword
+   :ns-keyword   ::keyword
 
    :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
    :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
@@ -280,4 +283,9 @@
    :double       (double 3.14)
    :bigdec       (bigdec 3.1415926535897932384626433832795)
 
-   :ratio        22/7})
+   :ratio        22/7
+
+   ;; Clojure 1.4+
+   ;; :tagged-uuid  (java.util.UUID/randomUUID)
+   ;; :tagged-date  (java.util.Date.)
+   })
