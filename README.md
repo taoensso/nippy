@@ -13,7 +13,7 @@ Nippy is an attempt to provide a drop-in, high-performance alternative to the re
 ## What's In The Box?
  * Simple, **high-performance** all-Clojure de/serializer.
  * Comprehesive, extensible **support for all major data types**.
- * **Reader-fallback** for difficult/future types.
+ * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
  * **Full test coverage** for every supported type.
  * [Snappy](http://code.google.com/p/snappy/) **integrated de/compression** for efficient storage and network transfer.
 
@@ -85,7 +85,12 @@ nippy/stress-data
  :double       (double 3.14)
  :bigdec       (bigdec 3.1415926535897932384626433832795)
 
- :ratio        22/7}
+ :ratio        22/7
+
+ ;; Clojure 1.4+
+ ;; :tagged-uuid  (java.util.UUID/randomUUID)
+ ;; :tagged-date  (java.util.Date.)
+ }
 ```
 
 Serialize it:

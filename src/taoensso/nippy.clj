@@ -280,4 +280,9 @@
    :double       (double 3.14)
    :bigdec       (bigdec 3.1415926535897932384626433832795)
 
-   :ratio        22/7})
+   :ratio        22/7
+
+   ;; Clojure 1.4+
+   ;; :tagged-uuid  (java.util.UUID/randomUUID)
+   ;; :tagged-date  (java.util.Date.)
+   })
