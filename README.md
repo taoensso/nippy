@@ -60,6 +60,7 @@ nippy/stress-data
  :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
  :string-long  (apply str (range 1000))
  :keyword      :keyword
+ :ns-keyword   ::keyword
 
  :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
  :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))

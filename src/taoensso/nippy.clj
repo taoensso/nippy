@@ -100,7 +100,9 @@
 
 (freezer Character id-char    (.writeChar s (int x)))
 (freezer String    id-string  (.writeUTF s x))
-(freezer Keyword   id-keyword (.writeUTF s (name x)))
+(freezer Keyword   id-keyword (.writeUTF s (if-let [ns (namespace x)]
+                                             (str ns "/" (name x))
+                                             (name x))))
 
 (declare freeze-to-stream!*)
 
@@ -252,6 +254,7 @@
    :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
    :string-long  (apply str (range 1000))
    :keyword      :keyword
+   :ns-keyword   ::keyword
 
    :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
    :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
