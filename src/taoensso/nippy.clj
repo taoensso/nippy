@@ -14,18 +14,20 @@
 
 (def ^:const schema-header "\u0000~0.9.0")
 
-(def ^:const id-reader  (int 1)) ; Fallback: *print-dup* pr-str output
+;;                           1
 (def ^:const id-bytes   (int 2))
 (def ^:const id-nil     (int 3))
 (def ^:const id-boolean (int 4))
+(def ^:const id-reader  (int 5)) ; Fallback: *print-dup* pr-str output
 
 (def ^:const id-char    (int 10))
-(def ^:const id-string  (int 11))
+;;                           11
 (def ^:const id-keyword (int 12))
+(def ^:const id-string  (int 13))
 
 (def ^:const id-list    (int 20))
 (def ^:const id-vector  (int 21))
-(def ^:const id-old-map (int 22)) ; DEPRECATED as of 0.9.0
+;;                           22
 (def ^:const id-set     (int 23))
 (def ^:const id-coll    (int 24)) ; Fallback: non-specific collection
 (def ^:const id-meta    (int 25))
@@ -44,29 +46,36 @@
 
 (def ^:const id-ratio   (int 70))
 
+;;; DEPRECATED (old types will be supported only for thawing)
+(def ^:const id-old-reader (int 1))  ; as of 0.9.2, for +64k support
+(def ^:const id-old-string (int 11)) ; as of 0.9.2, for +64k support
+(def ^:const id-old-map    (int 22)) ; as of 0.9.0, for more efficient thaw
+
 ;;;; Shared low-level stream stuff
 
 (defn- write-id! [^DataOutputStream stream ^Integer id] (.writeByte stream id))
 
 (defn- write-bytes!
+  "Writes arbitrary byte data, preceded by its length."
   [^DataOutputStream stream ^bytes ba]
   (let [size (alength ba)]
     (.writeInt stream size) ; Encode size of byte array
     (.write stream ba 0 size)))
 
+(defn- write-biginteger!
+  "Wrapper around `write-bytes!` for common case of writing a BigInteger."
+  [^DataOutputStream stream ^BigInteger x]
+  (write-bytes! stream (.toByteArray x)))
+
 (defn- read-bytes!
+  "Reads arbitrary byte data, preceded by its length."
   ^bytes [^DataInputStream stream]
   (let [size (.readInt stream)
         ba   (byte-array size)]
     (.read stream ba 0 size) ba))
 
-(defn- write-as-bytes!
-  "Write arbitrary object as bytes using reflection."
-  [^DataOutputStream stream obj]
-  (write-bytes! stream (.toByteArray obj)))
-
 (defn- read-biginteger!
-  "Wrapper around read-bytes! for common case of reading to a BigInteger.
+  "Wrapper around `read-bytes!` for common case of reading a BigInteger.
   Note that as of Clojure 1.3, java.math.BigInteger ≠ clojure.lang.BigInt."
   ^BigInteger [^DataInputStream stream]
   (BigInteger. (read-bytes! stream)))
@@ -99,7 +108,7 @@
 (freezer Boolean              id-boolean (.writeBoolean s x))
 
 (freezer Character id-char    (.writeChar s (int x)))
-(freezer String    id-string  (.writeUTF s x))
+(freezer String    id-string  (write-bytes! s (.getBytes x "UTF-8")))
 (freezer Keyword   id-keyword (.writeUTF s (if-let [ns (namespace x)]
                                              (str ns "/" (name x))
                                              (name x))))
@@ -121,21 +130,21 @@
 (freezer Short      id-short   (.writeShort s x))
 (freezer Integer    id-integer (.writeInt s x))
 (freezer Long       id-long    (.writeLong s x))
-(freezer BigInt     id-bigint  (write-as-bytes! s (.toBigInteger x)))
-(freezer BigInteger id-bigint  (write-as-bytes! s x))
+(freezer BigInt     id-bigint  (write-biginteger! s (.toBigInteger x)))
+(freezer BigInteger id-bigint  (write-biginteger! s x))
 
 (freezer Float      id-float   (.writeFloat s x))
 (freezer Double     id-double  (.writeDouble s x))
 (freezer BigDecimal id-bigdec
-         (write-as-bytes! s (.unscaledValue x))
+         (write-biginteger! s (.unscaledValue x))
          (.writeInt s (.scale x)))
 
 (freezer Ratio id-ratio
-         (write-as-bytes! s (.numerator   x))
-         (write-as-bytes! s (.denominator x)))
+         (write-biginteger! s (.numerator   x))
+         (write-biginteger! s (.denominator x)))
 
 ;; Use Clojure's own reader as final fallback
-(freezer Object id-reader (.writeUTF s (pr-str x)))
+(freezer Object id-reader (write-bytes! s (.getBytes (pr-str x) "UTF-8")))
 
 (defn- freeze-to-stream!* [^DataOutputStream s x]
   (if-let [m (meta x)]
@@ -175,13 +184,13 @@
     (utils/case-eval
      type-id
 
-     id-reader  (read-string (.readUTF s))
+     id-reader  (read-string (String. (read-bytes! s) "UTF-8"))
      id-bytes   (read-bytes! s)
      id-nil     nil
      id-boolean (.readBoolean s)
 
      id-char    (.readChar s)
-     id-string  (.readUTF s)
+     id-string  (String. (read-bytes! s) "UTF-8")
      id-keyword (keyword (.readUTF s))
 
      id-list    (apply list (coll-thaw! s))
@@ -190,10 +199,6 @@
      id-map     (apply hash-map (coll-thaw! s))
      id-coll    (doall (coll-thaw! s))
      id-queue   (into  (PersistentQueue/EMPTY) (coll-thaw! s))
-
-     ;; DEPRECATED as of 0.9.0
-     id-old-map (apply hash-map (repeatedly (* 2 (.readInt s))
-                                            (partial thaw-from-stream!* s)))
 
      id-meta (let [m (thaw-from-stream!* s)] (with-meta (thaw-from-stream!* s) m))
 
@@ -209,6 +214,12 @@
 
      id-ratio (/ (bigint (read-biginteger! s))
                  (bigint (read-biginteger! s)))
+
+     ;;; DEPRECATED
+     id-old-reader (read-string (.readUTF s))
+     id-old-string (.readUTF s)
+     id-old-map    (apply hash-map (repeatedly (* 2 (.readInt s))
+                                               (partial thaw-from-stream!* s)))
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
 
@@ -254,7 +265,7 @@
    :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
    :string-long  (apply str (range 1000))
    :keyword      :keyword
-   :ns-keyword   ::keyword
+   :keyword-ns   ::keyword
 
    :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
    :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))

@@ -1,7 +1,7 @@
 Current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "0.9.1"]
+[com.taoensso/nippy "0.9.2"]
 ```
 
 # Nippy, a serialization library for Clojure
@@ -36,7 +36,7 @@ Nippy uses [Snappy](http://code.google.com/p/snappy-java/) which currently has a
 Depend on Nippy in your `project.clj`:
 
 ```clojure
-[com.taoensso/nippy "0.9.1"]
+[com.taoensso/nippy "0.9.2"]
 ```
 
 and `require` the library:
