@@ -49,24 +49,26 @@
 (defn- write-id! [^DataOutputStream stream ^Integer id] (.writeByte stream id))
 
 (defn- write-bytes!
+  "Writes arbitrary byte data, preceded by its length."
   [^DataOutputStream stream ^bytes ba]
   (let [size (alength ba)]
     (.writeInt stream size) ; Encode size of byte array
     (.write stream ba 0 size)))
 
+(defn- write-biginteger!
+  "Wrapper around `write-bytes!` for common case of writing a BigInteger."
+  [^DataOutputStream stream ^BigInteger x]
+  (write-bytes! stream (.toByteArray x)))
+
 (defn- read-bytes!
+  "Reads arbitrary byte data, preceded by its length."
   ^bytes [^DataInputStream stream]
   (let [size (.readInt stream)
         ba   (byte-array size)]
     (.read stream ba 0 size) ba))
 
-(defn- write-as-bytes!
-  "Write arbitrary object as bytes using reflection."
-  [^DataOutputStream stream obj]
-  (write-bytes! stream (.toByteArray obj)))
-
 (defn- read-biginteger!
-  "Wrapper around read-bytes! for common case of reading to a BigInteger.
+  "Wrapper around `read-bytes!` for common case of reading a BigInteger.
   Note that as of Clojure 1.3, java.math.BigInteger ≠ clojure.lang.BigInt."
   ^BigInteger [^DataInputStream stream]
   (BigInteger. (read-bytes! stream)))
@@ -121,18 +123,18 @@
 (freezer Short      id-short   (.writeShort s x))
 (freezer Integer    id-integer (.writeInt s x))
 (freezer Long       id-long    (.writeLong s x))
-(freezer BigInt     id-bigint  (write-as-bytes! s (.toBigInteger x)))
-(freezer BigInteger id-bigint  (write-as-bytes! s x))
+(freezer BigInt     id-bigint  (write-biginteger! s (.toBigInteger x)))
+(freezer BigInteger id-bigint  (write-biginteger! s x))
 
 (freezer Float      id-float   (.writeFloat s x))
 (freezer Double     id-double  (.writeDouble s x))
 (freezer BigDecimal id-bigdec
-         (write-as-bytes! s (.unscaledValue x))
+         (write-biginteger! s (.unscaledValue x))
          (.writeInt s (.scale x)))
 
 (freezer Ratio id-ratio
-         (write-as-bytes! s (.numerator   x))
-         (write-as-bytes! s (.denominator x)))
+         (write-biginteger! s (.numerator   x))
+         (write-biginteger! s (.denominator x)))
 
 ;; Use Clojure's own reader as final fallback
 (freezer Object id-reader (.writeUTF s (pr-str x)))
