@@ -46,9 +46,9 @@
 
 (def ^:const id-ratio   (int 70))
 
-;;; DEPRECATED
-(def ^:const id-old-reader (int 1))  ; as of 0.9.1, for +64k support
-(def ^:const id-old-string (int 11)) ; as of 0.9.1, for +64k support
+;;; DEPRECATED (old types will be supported only for thawing)
+(def ^:const id-old-reader (int 1))  ; as of 0.9.2, for +64k support
+(def ^:const id-old-string (int 11)) ; as of 0.9.2, for +64k support
 (def ^:const id-old-map    (int 22)) ; as of 0.9.0, for more efficient thaw
 
 ;;;; Shared low-level stream stuff
