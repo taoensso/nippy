@@ -29,13 +29,13 @@
                        (bench (thaw-from-bytes frozen)))
              :round  (bench (roundtrip data))}})
 
-  ;; Clojure 1.3.0, Nippy 0.9.0
-  ;;  {:reader {:freeze 23573, :thaw 31923, :round 53253},
-  ;;   :nippy  {:freeze 3805,  :thaw 3789,  :round 7522}}
-  ;; (float (/ 53253 7522)) = 7.079633
+  ;; Clojure 1.3.0, Nippy 0.9.2
+  ;; {:reader {:freeze 28505, :thaw 36451, :round 59545},
+  ;;  :nippy  {:freeze 3751,  :thaw 4184,  :round 7769}}
+  ;; (float (/ 59545 7769)) = 7.6644354
 
   ;;; Data size
   (let [frozen (reader-freeze data)]   (count (.getBytes frozen "UTF8")))
   (let [frozen (freeze-to-bytes data)] (count frozen))
-  ;; 22711, 12168
+  ;; 22788, 12224
   )
