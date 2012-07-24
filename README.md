@@ -4,9 +4,9 @@ Current [semantic](http://semver.org/) version:
 [com.taoensso/nippy "0.10.0"]
 ```
 
-**Breaking changes** (minor) since _0.9.x_:
+**Breaking changes** since _0.9.x_:
  * Affecting **users that were manually disabling compression**:
-   * API has changed for `freeze-to-bytes` and `thaw-from-bytes` _when not using default options_.
+   * API has changed for `freeze-to-bytes` and `thaw-from-bytes` when not using default options.
 
 # Nippy, a serialization library for Clojure
 
