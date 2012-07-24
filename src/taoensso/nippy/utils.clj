@@ -1,5 +1,6 @@
 (ns taoensso.nippy.utils
-  {:author "Peter Taoussanis"})
+  {:author "Peter Taoussanis"}
+  (:require [clojure.string :as str]))
 
 (defmacro case-eval
   "Like `case` but evaluates test constants for their compile-time value."
@@ -36,3 +37,14 @@
                         dorun))))]
           (if ~as-ms? (Math/round (/ nanosecs# 1000000.0)) nanosecs#))
         (catch Exception e# (str "DNF: " (.getMessage e#)))))
+
+(defn version-compare
+  "Comparator for version strings like x.y.z, etc."
+  [x y]
+  (let [vals (fn [s] (vec (map #(Integer/parseInt %) (str/split s #"\."))))]
+    (compare (vals x) (vals y))))
+
+(defn version-sufficient?
+  [version-str min-version-str]
+  (try (>= (version-compare version-str min-version-str) 0)
+       (catch Exception _ false)))

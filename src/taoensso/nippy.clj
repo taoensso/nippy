@@ -161,13 +161,13 @@
 
 (defn freeze-to-bytes
   "Serializes x to a byte array and returns the array."
-  (^bytes [x] (freeze-to-bytes x true))
-  (^bytes [x compress?]
-          (let [ba     (ByteArrayOutputStream.)
-                stream (DataOutputStream. ba)]
-            (freeze-to-stream! stream x)
-            (let [ba (.toByteArray ba)]
-              (if compress? (Snappy/compress ba) ba)))))
+  ^bytes [x & {:keys [compress?]
+               :or   {compress? true}}]
+  (let [ba     (ByteArrayOutputStream.)
+        stream (DataOutputStream. ba)]
+    (freeze-to-stream! stream x)
+    (let [ba (.toByteArray ba)]
+      (if compress? (Snappy/compress ba) ba))))
 
 ;;;; Thawing
 
@@ -226,8 +226,8 @@
 ;; TODO Scheduled for Carmine version 1.0.0
 ;; (defn thaw-from-stream!
 ;;   "Deserializes an object from given input stream."
-;;   [data-input-stream]
-;;   (binding [*read-eval* false] ; For `read-string` injection safety - NB!!!
+;;   [data-input-stream read-eval?]
+;;   (binding [*read-eval* read-eval?]
 ;;     (let [schema-header (thaw-from-stream!* data-input-stream)]
 ;;       (thaw-from-stream!* data-input-stream))))
 
@@ -236,8 +236,8 @@
 ;; Carmine < 0.8.3 and haven't yet migrated their databases.
 (defn thaw-from-stream!
   "Deserializes an object from given input stream."
-  [data-input-stream]
-  (binding [*read-eval* false] ; For `read-string` injection safety - NB!!!
+  [data-input-stream read-eval?]
+  (binding [*read-eval* read-eval?]
     (let [maybe-schema-header (thaw-from-stream!* data-input-stream)]
       (if (and (string? maybe-schema-header)
                (.startsWith ^String maybe-schema-header "\u0000~"))
@@ -246,57 +246,60 @@
 
 (defn thaw-from-bytes
   "Deserializes an object from given byte array."
-  ([ba] (thaw-from-bytes ba true))
-  ([ba compressed?]
-     (->> (if compressed? (Snappy/uncompress ba) ba)
-          (ByteArrayInputStream.)
-          (DataInputStream.)
-          (thaw-from-stream!))))
+  [ba & {:keys [read-eval? compressed?]
+         :or   {read-eval?  false ; For `read-string` injection safety - NB!!!
+                compressed? true}}]
+  (-> (if compressed? (Snappy/uncompress ba) ba)
+      (ByteArrayInputStream.)
+      (DataInputStream.)
+      (thaw-from-stream! read-eval?)))
 
 (def stress-data
   "Reference data used for tests & benchmarks."
-  {;; Breaks reader, roundtrip equality
-   :bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
+  (let [support-tagged-literals?
+        (utils/version-sufficient? (clojure-version) "1.4.0")]
 
-   :nil          nil
-   :boolean      true
+    {;; Breaks reader, roundtrip equality
+     :bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
 
-   :char-utf8    \ಬ
-   :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
-   :string-long  (apply str (range 1000))
-   :keyword      :keyword
-   :keyword-ns   ::keyword
+     :nil          nil
+     :boolean      true
 
-   :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
-   :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
-   :list-empty   (list)
-   :vector       [1 2 3 4 5 [6 7 8 [9 10]]]
-   :vector-empty []
-   :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7}}}
-   :map-empty    {}
-   :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
-   :set-empty    #{}
-   :meta         (with-meta {:a :A} {:metakey :metaval})
+     :char-utf8    \ಬ
+     :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
+     :string-long  (apply str (range 1000))
+     :keyword      :keyword
+     :keyword-ns   ::keyword
 
-   ;; Breaks reader
-   :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
-   :queue-empty  (PersistentQueue/EMPTY)
+     :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
+     :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
+     :list-empty   (list)
+     :vector       [1 2 3 4 5 [6 7 8 [9 10]]]
+     :vector-empty []
+     :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7}}}
+     :map-empty    {}
+     :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
+     :set-empty    #{}
+     :meta         (with-meta {:a :A} {:metakey :metaval})
 
-   :coll         (repeatedly 1000 rand)
+     ;; Breaks reader
+     :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
+     :queue-empty  (PersistentQueue/EMPTY)
 
-   :byte         (byte 16)
-   :short        (short 42)
-   :integer      (int 3)
-   :long         (long 3)
-   :bigint       (bigint 31415926535897932384626433832795)
+     :coll         (repeatedly 1000 rand)
 
-   :float        (float 3.14)
-   :double       (double 3.14)
-   :bigdec       (bigdec 3.1415926535897932384626433832795)
+     :byte         (byte 16)
+     :short        (short 42)
+     :integer      (int 3)
+     :long         (long 3)
+     :bigint       (bigint 31415926535897932384626433832795)
 
-   :ratio        22/7
+     :float        (float 3.14)
+     :double       (double 3.14)
+     :bigdec       (bigdec 3.1415926535897932384626433832795)
 
-   ;; Clojure 1.4+
-   ;; :tagged-uuid  (java.util.UUID/randomUUID)
-   ;; :tagged-date  (java.util.Date.)
-   })
+     :ratio        22/7
+
+     ;; Clojure 1.4+
+     :tagged-uuid  (when support-tagged-literals? (java.util.UUID/randomUUID))
+     :tagged-date  (when support-tagged-literals? (java.util.Date.))}))
