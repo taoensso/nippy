@@ -1,8 +1,12 @@
 Current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "0.9.2"]
+[com.taoensso/nippy "0.10.0"]
 ```
+
+**Breaking changes** (minor) since _0.9.x_:
+ * Affecting **users that were manually disabling compression**:
+   * API has changed for `freeze-to-bytes` and `thaw-from-bytes` _when not using default options_.
 
 # Nippy, a serialization library for Clojure
 
@@ -36,7 +40,7 @@ Nippy uses [Snappy](http://code.google.com/p/snappy-java/) which currently has a
 Depend on Nippy in your `project.clj`:
 
 ```clojure
-[com.taoensso/nippy "0.9.2"]
+[com.taoensso/nippy "0.10.0"]
 ```
 
 and `require` the library:
