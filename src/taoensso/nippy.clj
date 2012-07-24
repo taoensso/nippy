@@ -161,13 +161,13 @@
 
 (defn freeze-to-bytes
   "Serializes x to a byte array and returns the array."
-  (^bytes [x] (freeze-to-bytes x true))
-  (^bytes [x compress?]
-          (let [ba     (ByteArrayOutputStream.)
-                stream (DataOutputStream. ba)]
-            (freeze-to-stream! stream x)
-            (let [ba (.toByteArray ba)]
-              (if compress? (Snappy/compress ba) ba)))))
+  ^bytes [x & {:keys [compress?]
+               :or   {compress? true}}]
+  (let [ba     (ByteArrayOutputStream.)
+        stream (DataOutputStream. ba)]
+    (freeze-to-stream! stream x)
+    (let [ba (.toByteArray ba)]
+      (if compress? (Snappy/compress ba) ba))))
 
 ;;;; Thawing
 
@@ -226,8 +226,8 @@
 ;; TODO Scheduled for Carmine version 1.0.0
 ;; (defn thaw-from-stream!
 ;;   "Deserializes an object from given input stream."
-;;   [data-input-stream]
-;;   (binding [*read-eval* false] ; For `read-string` injection safety - NB!!!
+;;   [data-input-stream read-eval?]
+;;   (binding [*read-eval* read-eval?]
 ;;     (let [schema-header (thaw-from-stream!* data-input-stream)]
 ;;       (thaw-from-stream!* data-input-stream))))
 
@@ -236,8 +236,8 @@
 ;; Carmine < 0.8.3 and haven't yet migrated their databases.
 (defn thaw-from-stream!
   "Deserializes an object from given input stream."
-  [data-input-stream]
-  (binding [*read-eval* false] ; For `read-string` injection safety - NB!!!
+  [data-input-stream read-eval?]
+  (binding [*read-eval* read-eval?]
     (let [maybe-schema-header (thaw-from-stream!* data-input-stream)]
       (if (and (string? maybe-schema-header)
                (.startsWith ^String maybe-schema-header "\u0000~"))
@@ -246,12 +246,13 @@
 
 (defn thaw-from-bytes
   "Deserializes an object from given byte array."
-  ([ba] (thaw-from-bytes ba true))
-  ([ba compressed?]
-     (->> (if compressed? (Snappy/uncompress ba) ba)
-          (ByteArrayInputStream.)
-          (DataInputStream.)
-          (thaw-from-stream!))))
+  [ba & {:keys [read-eval? compressed?]
+         :or   {read-eval?  false ; For `read-string` injection safety - NB!!!
+                compressed? true}}]
+  (-> (if compressed? (Snappy/uncompress ba) ba)
+      (ByteArrayInputStream.)
+      (DataInputStream.)
+      (thaw-from-stream! read-eval?)))
 
 (def stress-data
   "Reference data used for tests & benchmarks."
