@@ -12,8 +12,6 @@
 
 ;;;; Define type IDs
 
-(def ^:const schema-header "\u0000~0.9.0")
-
 ;;                           1
 (def ^:const id-bytes   (int 2))
 (def ^:const id-nil     (int 3))
@@ -156,7 +154,6 @@
   "Serializes x to given output stream."
   [data-output-stream x]
   (binding [*print-dup* true] ; For `pr-str`
-    (freeze-to-stream!* data-output-stream schema-header)
     (freeze-to-stream!* data-output-stream x)))
 
 (defn freeze-to-bytes
@@ -223,22 +220,12 @@
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
 
-;; TODO Scheduled for Carmine version 1.0.0
-;; (defn thaw-from-stream!
-;;   "Deserializes an object from given input stream."
-;;   [data-input-stream read-eval?]
-;;   (binding [*read-eval* read-eval?]
-;;     (let [schema-header (thaw-from-stream!* data-input-stream)]
-;;       (thaw-from-stream!* data-input-stream))))
-
-;; DEPRECATED: Includes temporary support for older versions of serialization
-;; schema that didn't include a version header. This is for people that used
-;; Carmine < 0.8.3 and haven't yet migrated their databases.
 (defn thaw-from-stream!
   "Deserializes an object from given input stream."
   [data-input-stream read-eval?]
   (binding [*read-eval* read-eval?]
-    (let [maybe-schema-header (thaw-from-stream!* data-input-stream)]
+    (let [;; Support older versions of Nippy that wrote a version header
+          maybe-schema-header (thaw-from-stream!* data-input-stream)]
       (if (and (string? maybe-schema-header)
                (.startsWith ^String maybe-schema-header "\u0000~"))
         (thaw-from-stream!* data-input-stream)
