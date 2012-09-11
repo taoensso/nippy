@@ -1,7 +1,7 @@
 Current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "0.10.1"]
+[com.taoensso/nippy "0.10.2"]
 ```
 
 **Breaking changes** since _0.9.x_:
@@ -40,7 +40,7 @@ Nippy uses [Snappy](http://code.google.com/p/snappy-java/) which currently has a
 Depend on Nippy in your `project.clj`:
 
 ```clojure
-[com.taoensso/nippy "0.10.1"]
+[com.taoensso/nippy "0.10.2"]
 ```
 
 and `require` the library:
