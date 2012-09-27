@@ -1,7 +1,7 @@
 Current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "0.10.2"]
+[com.taoensso/nippy "0.10.3"]
 ```
 
 **Breaking changes** since _0.9.x_:
@@ -36,7 +36,7 @@ lein2 all test
 Depend on Nippy in your `project.clj`:
 
 ```clojure
-[com.taoensso/nippy "0.10.2"]
+[com.taoensso/nippy "0.10.3"]
 ```
 
 and `require` the library:
