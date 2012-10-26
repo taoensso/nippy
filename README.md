@@ -21,12 +21,12 @@ Nippy is an attempt to provide a drop-in, high-performance alternative to the re
  * **Full test coverage** for every supported type.
  * [Snappy](http://code.google.com/p/snappy/) **integrated de/compression** for efficient storage and network transfer.
 
-## Status [![Build Status](https://secure.travis-ci.org/ptaoussanis/nippy.png?branch=master)](http://travis-ci.org/ptaoussanis/nippy)
+## Status
 
 Nippy is still currently *experimental*. It **has not yet been thoroughly tested in production** and its API is subject to change. To run tests against all supported Clojure versions, use:
 
 ```bash
-lein2 all test
+lein all test
 ```
 
 ## Getting Started
