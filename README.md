@@ -1,33 +1,22 @@
 Current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "0.10.4"]
+[com.taoensso/nippy "1.0.0"]
 ```
 
-**Breaking changes** since _0.9.x_:
- * Affecting **users that were manually disabling compression**:
-   * API has changed for `freeze-to-bytes` and `thaw-from-bytes` when not using default options.
-
-# Nippy, a serialization library for Clojure
+# Nippy, a Clojure serialization library
 
 Clojure's [rich data types](http://clojure.org/datatypes) are *awesome*. And its [reader](http://clojure.org/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
 Nippy is an attempt to provide a drop-in, high-performance alternative to the reader. It's a fork of [Deep-Freeze](https://github.com/halgari/deep-freeze) and is used as the [Carmine Redis client](https://github.com/ptaoussanis/carmine) serializer.
 
 ## What's In The Box?
- * Simple, **high-performance** all-Clojure de/serializer.
+ * Small, uncomplicated **all-Clojure** library.
+ * **Good performance**.
  * Comprehesive, extensible **support for all major data types**.
  * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
  * **Full test coverage** for every supported type.
  * [Snappy](http://code.google.com/p/snappy/) **integrated de/compression** for efficient storage and network transfer.
-
-## Status [![Build Status](https://secure.travis-ci.org/ptaoussanis/nippy.png?branch=master)](http://travis-ci.org/ptaoussanis/nippy)
-
-Nippy is still currently *experimental*. It **has not yet been thoroughly tested in production** and its API is subject to change. To run tests against all supported Clojure versions, use:
-
-```bash
-lein2 all test
-```
 
 ## Getting Started
 
@@ -36,7 +25,7 @@ lein2 all test
 Depend on Nippy in your `project.clj`:
 
 ```clojure
-[com.taoensso/nippy "0.10.4"]
+[com.taoensso/nippy "1.0.0"]
 ```
 
 and `require` the library:
@@ -127,12 +116,8 @@ ClojureWerkz is a growing collection of open-source, batteries-included [Clojure
 
 ## Contact & Contribution
 
-Reach me (Peter Taoussanis) at *ptaoussanis at gmail.com* for questions/comments/suggestions/whatever. I'm very open to ideas if you have any!
-
-I'm also on Twitter: [@ptaoussanis](https://twitter.com/#!/ptaoussanis).
+Reach me (Peter Taoussanis) at *ptaoussanis at gmail.com* for questions/comments/suggestions/whatever. I'm very open to ideas if you have any! I'm also on Twitter: [@ptaoussanis](https://twitter.com/#!/ptaoussanis).
 
 ## License
 
-Copyright &copy; 2012 Peter Taoussanis
-
-Distributed under the [Eclipse Public License](http://www.eclipse.org/legal/epl-v10.html), the same as Clojure.
+Copyright &copy; 2012 Peter Taoussanis. Distributed under the [Eclipse Public License](http://www.eclipse.org/legal/epl-v10.html), the same as Clojure.

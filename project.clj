@@ -1,5 +1,5 @@
-(defproject com.taoensso/nippy "0.10.4"
-  :description "Simple, high-performance Clojure serialization library."
+(defproject com.taoensso/nippy "1.0.0"
+  :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
   :license {:name "Eclipse Public License"}
   :dependencies [[org.clojure/clojure           "1.3.0"]
