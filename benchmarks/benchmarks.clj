@@ -34,6 +34,11 @@
   ;;  :nippy  {:freeze 3751,  :thaw 4184,  :round 7769}}
   ;; (float (/ 59545 7769)) = 7.6644354
 
+  ;; Clojure 1.4.0, Nippy 1.0.0
+  ;; {:reader {:freeze 22595, :thaw 31148, :round 54059}
+  ;;  :nippy  {:freeze 3324,  :thaw 3725,  :round 6918}}
+  ;; (float (/ 54059 6918)) = 7.814253
+
   ;;; Data size
   (let [frozen (reader-freeze data)]   (count (.getBytes frozen "UTF8")))
   (let [frozen (freeze-to-bytes data)] (count frozen))
