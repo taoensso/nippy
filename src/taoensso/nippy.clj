@@ -193,7 +193,7 @@
      id-list    (apply list (coll-thaw! s))
      id-vector  (into  [] (coll-thaw! s))
      id-set     (into #{} (coll-thaw! s))
-     id-map     (apply hash-map (coll-thaw! s))
+     id-map     (into {} (map vec (partition 2 (coll-thaw! s))))
      id-coll    (doall (coll-thaw! s))
      id-queue   (into  (PersistentQueue/EMPTY) (coll-thaw! s))
 
