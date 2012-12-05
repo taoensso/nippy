@@ -13,6 +13,14 @@
                       clauses)
        ~(when default default))))
 
+(defn pairs
+  "Like (partition 2 coll) but faster and returns lazy seq of vector pairs."
+  [coll]
+  (lazy-seq
+   (when-let [s (seq coll)]
+     (let [n (next s)]
+       (cons [(first s) (first n)] (pairs (next n)))))))
+
 (defmacro time-ns
   "Returns number of nanoseconds it takes to execute body."
   [& body]

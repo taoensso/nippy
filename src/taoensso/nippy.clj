@@ -175,6 +175,12 @@
   [^DataInputStream s]
   (repeatedly (.readInt s) (partial thaw-from-stream!* s)))
 
+(defn coll-thaw-pairs!
+  "Helper to thaw pair-based collection types (e.g. hash maps)."
+  [^DataInputStream s]
+  (repeatedly (/ (.readInt s) 2)
+              (fn [] [(thaw-from-stream!* s) (thaw-from-stream!* s)])))
+
 (defn- thaw-from-stream!*
   [^DataInputStream s]
   (let [type-id (.readByte s)]
@@ -190,10 +196,13 @@
      id-string  (String. (read-bytes! s) "UTF-8")
      id-keyword (keyword (.readUTF s))
 
-     id-list    (apply list (coll-thaw! s))
+     id-list    (apply list (coll-thaw! s)) ; TODO OOMs for big colls
      id-vector  (into  [] (coll-thaw! s))
      id-set     (into #{} (coll-thaw! s))
-     id-map     (apply hash-map (coll-thaw! s))
+     ;; id-map  (apply hash-map (coll-thaw! s)) ; OOMs for big colls
+     ;; id-map  (into {} (map vec (partition 2 (coll-thaw! s))) ; ~6.4x time
+     ;; id-map  (into {} (utils/pairs (coll-thaw! s)))          ; ~1.8x time
+     id-map     (into  {} (coll-thaw-pairs! s))                 ; ~0.8x time
      id-coll    (doall (coll-thaw! s))
      id-queue   (into  (PersistentQueue/EMPTY) (coll-thaw! s))
 
