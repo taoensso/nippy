@@ -14,6 +14,8 @@
 (def roundtrip        (comp thaw-from-bytes freeze-to-bytes))
 (def reader-roundtrip (comp reader-thaw reader-freeze))
 
+(defn autobench [] (bench (roundtrip data)))
+
 (comment
 
   ;;; Times
