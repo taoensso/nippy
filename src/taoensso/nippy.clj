@@ -5,7 +5,6 @@
   (:require [taoensso.nippy.utils :as utils])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
-            [org.xerial.snappy Snappy]
             [clojure.lang IPersistentList IPersistentVector IPersistentMap
              IPersistentSet PersistentQueue IPersistentCollection Keyword
              BigInt Ratio]))
@@ -165,7 +164,7 @@
         stream (DataOutputStream. ba)]
     (freeze-to-stream! stream x print-dup?)
     (let [ba (.toByteArray ba)]
-      (if compress? (Snappy/compress ba) ba))))
+      (if compress? (utils/compress-bytes ba) ba))))
 
 ;;;; Thawing
 
@@ -243,7 +242,7 @@
   [ba & {:keys [read-eval? compressed?]
          :or   {read-eval?  false ; For `read-string` injection safety - NB!!!
                 compressed? true}}]
-  (-> (if compressed? (Snappy/uncompress ba) ba)
+  (-> (if compressed? (utils/uncompress-bytes ba) ba)
       (ByteArrayInputStream.)
       (DataInputStream.)
       (thaw-from-stream! read-eval?)))

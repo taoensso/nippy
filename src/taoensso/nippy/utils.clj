@@ -1,6 +1,7 @@
 (ns taoensso.nippy.utils
   {:author "Peter Taoussanis"}
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str])
+  (:import  org.iq80.snappy.Snappy))
 
 (defmacro case-eval
   "Like `case` but evaluates test constants for their compile-time value."
@@ -56,3 +57,14 @@
   [version-str min-version-str]
   (try (>= (version-compare version-str min-version-str) 0)
        (catch Exception _ false)))
+
+;; TODO Unnecessarily complicated. Waiting on http://goo.gl/7mbR3 merge.
+(defn compress-bytes [ba]
+  (let [ba-size     (alength ^bytes ba)
+        ba-out      (byte-array (Snappy/maxCompressedLength ba-size))
+        ba-out-size (Snappy/compress ba (int 0) (int ba-size) ba-out (int 0))]
+    (java.util.Arrays/copyOf ba-out ba-out-size)))
+
+(defn uncompress-bytes [ba] (Snappy/uncompress ba 0 (alength ^bytes ba)))
+
+(comment (String. (uncompress-bytes (compress-bytes (.getBytes "Test")))))
