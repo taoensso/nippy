@@ -15,3 +15,14 @@
 (println (benchmarks/autobench))
 (println (benchmarks/autobench))
 (println (benchmarks/autobench))
+
+(deftest test-snappy-library-compatibility
+  (let [thaw             #(nippy/thaw-from-bytes % :compressed? false)
+        ^bytes raw-ba    (nippy/freeze-to-bytes test-data :compress? false)
+        ^bytes xerial-ba (org.xerial.snappy.Snappy/compress raw-ba)
+        ^bytes iq80-ba   (org.iq80.snappy.Snappy/compress   raw-ba)]
+    (is (= (thaw raw-ba)
+           (thaw (org.xerial.snappy.Snappy/uncompress xerial-ba))
+           (thaw (org.xerial.snappy.Snappy/uncompress iq80-ba))
+           (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
+           (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba)))))))
