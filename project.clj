@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "1.1.0-beta3"
+(defproject com.taoensso/nippy "1.1.0"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
   :license {:name "Eclipse Public License"}
