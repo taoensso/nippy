@@ -5,7 +5,6 @@
   (:require [taoensso.nippy.utils :as utils])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
-            [org.xerial.snappy Snappy]
             [clojure.lang IPersistentList IPersistentVector IPersistentMap
              IPersistentSet PersistentQueue IPersistentCollection Keyword
              BigInt Ratio]))
@@ -82,8 +81,6 @@
 
 (defprotocol Freezable (freeze [this stream]))
 
-(comment (meta '^:DataOutputStream s))
-
 (defmacro freezer
   "Helper to extend Freezable protocol."
   [type id & body]
@@ -152,19 +149,22 @@
 
 (defn freeze-to-stream!
   "Serializes x to given output stream."
-  [data-output-stream x]
-  (binding [*print-dup* true] ; For `pr-str`
-    (freeze-to-stream!* data-output-stream x)))
+  ([data-output-stream x] ; For <= 1.0.1 compatibility
+     (freeze-to-stream! data-output-stream x true))
+  ([data-output-stream x print-dup?]
+     (binding [*print-dup* print-dup?] ; For `pr-str`
+       (freeze-to-stream!* data-output-stream x))))
 
 (defn freeze-to-bytes
   "Serializes x to a byte array and returns the array."
-  ^bytes [x & {:keys [compress?]
-               :or   {compress? true}}]
+  ^bytes [x & {:keys [compress?  print-dup?]
+               :or   {compress?  true
+                      print-dup? true}}]
   (let [ba     (ByteArrayOutputStream.)
         stream (DataOutputStream. ba)]
-    (freeze-to-stream! stream x)
+    (freeze-to-stream! stream x print-dup?)
     (let [ba (.toByteArray ba)]
-      (if compress? (Snappy/compress ba) ba))))
+      (if compress? (utils/compress-bytes ba) ba))))
 
 ;;;; Thawing
 
@@ -199,10 +199,7 @@
      id-list    (apply list (coll-thaw! s)) ; TODO OOMs for big colls
      id-vector  (into  [] (coll-thaw! s))
      id-set     (into #{} (coll-thaw! s))
-     ;; id-map  (apply hash-map (coll-thaw! s)) ; OOMs for big colls
-     ;; id-map  (into {} (map vec (partition 2 (coll-thaw! s))) ; ~6.4x time
-     ;; id-map  (into {} (utils/pairs (coll-thaw! s)))          ; ~1.8x time
-     id-map     (into  {} (coll-thaw-pairs! s))                 ; ~0.8x time
+     id-map     (into  {} (coll-thaw-pairs! s))
      id-coll    (doall (coll-thaw! s))
      id-queue   (into  (PersistentQueue/EMPTY) (coll-thaw! s))
 
@@ -245,7 +242,7 @@
   [ba & {:keys [read-eval? compressed?]
          :or   {read-eval?  false ; For `read-string` injection safety - NB!!!
                 compressed? true}}]
-  (-> (if compressed? (Snappy/uncompress ba) ba)
+  (-> (if compressed? (utils/uncompress-bytes ba) ba)
       (ByteArrayInputStream.)
       (DataInputStream.)
       (thaw-from-stream! read-eval?)))

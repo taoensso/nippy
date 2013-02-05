@@ -1,6 +1,7 @@
 (ns taoensso.nippy.utils
   {:author "Peter Taoussanis"}
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str])
+  (:import  org.iq80.snappy.Snappy))
 
 (defmacro case-eval
   "Like `case` but evaluates test constants for their compile-time value."
@@ -56,3 +57,6 @@
   [version-str min-version-str]
   (try (>= (version-compare version-str min-version-str) 0)
        (catch Exception _ false)))
+
+(defn compress-bytes   [^bytes ba] (Snappy/compress   ba))
+(defn uncompress-bytes [^bytes ba] (Snappy/uncompress ba 0 (alength ba)))

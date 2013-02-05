@@ -14,6 +14,8 @@
 (def roundtrip        (comp thaw-from-bytes freeze-to-bytes))
 (def reader-roundtrip (comp reader-thaw reader-freeze))
 
+(defn autobench [] (bench (roundtrip data)))
+
 (comment
 
   ;;; Times
@@ -43,4 +45,10 @@
   (let [frozen (reader-freeze data)]   (count (.getBytes frozen "UTF8")))
   (let [frozen (freeze-to-bytes data)] (count frozen))
   ;; 22788, 12224
+
+  ;;; Snappy implementations
+  (println (bench (roundtrip data)))
+  ;;                No Snappy: 6163 6064 6042 6176
+  ;;               Snappy JNI: 6489 6446 6542 6412
+  ;; Snappy native array copy: 6569 6419 6414 6590
   )

@@ -1,7 +1,7 @@
 Current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "1.0.1"]
+[com.taoensso/nippy "1.1.0"]
 ```
 
 # Nippy, a Clojure serialization library
@@ -25,7 +25,7 @@ Nippy is an attempt to provide a drop-in, high-performance alternative to the re
 Depend on Nippy in your `project.clj`:
 
 ```clojure
-[com.taoensso/nippy "1.0.1"]
+[com.taoensso/nippy "1.1.0"]
 ```
 
 and `require` the library:
@@ -118,7 +118,7 @@ CDS (Clojure Documentation Site) is a contributor-friendly community project aim
 
 ## Contact & Contribution
 
-Reach me (Peter Taoussanis) at *ptaoussanis at gmail.com* for questions/comments/suggestions/whatever. I'm very open to ideas if you have any! I'm also on Twitter: [@ptaoussanis](https://twitter.com/#!/ptaoussanis).
+Reach me (Peter Taoussanis) at [taoensso.com](https://www.taoensso.com) for questions/comments/suggestions/whatever. I'm very open to ideas if you have any! I'm also on Twitter: [@ptaoussanis](https://twitter.com/#!/ptaoussanis).
 
 ## License
 
