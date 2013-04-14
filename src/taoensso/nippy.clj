@@ -209,7 +209,7 @@
      id-sorted-set (into (sorted-set) (coll-thaw! s))
      id-sorted-map (into (sorted-map) (coll-thaw-kvs! s))
 
-     id-list    (apply list (coll-thaw! s)) ; TODO OOMs for big colls
+     id-list    (into '() (reverse (coll-thaw! s)))
      id-vector  (into  [] (coll-thaw! s))
      id-set     (into #{} (coll-thaw! s))
      id-map     (into  {} (coll-thaw-kvs! s))
