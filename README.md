@@ -51,6 +51,11 @@ nippy/stress-data
  :keyword      :keyword
  :ns-keyword   ::keyword
 
+ :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
+ :queue-empty  (PersistentQueue/EMPTY)
+ :sorted-set   (sorted-set 1 2 3 4 5)
+ :sorted-map   (sorted-map :b 2 :a 1 :d 4 :c 3)
+
  :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
  :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
  :list-empty   (list)
@@ -61,8 +66,6 @@ nippy/stress-data
  :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
  :set-empty    #{}
  :meta         (with-meta {:a :A} {:metakey :metaval})
- :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
- :queue-empty  (PersistentQueue/EMPTY)
  :coll         (repeatedly 1000 rand)
 
  :byte         (byte 16)

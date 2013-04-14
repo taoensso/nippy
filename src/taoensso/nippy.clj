@@ -5,43 +5,45 @@
   (:require [taoensso.nippy.utils :as utils])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
-            [clojure.lang IPersistentList IPersistentVector IPersistentMap
-             IPersistentSet PersistentQueue IPersistentCollection Keyword
-             BigInt Ratio]))
+            [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
+             PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
+             IPersistentSet IPersistentCollection]))
 
 ;;;; Define type IDs
 
-;;                           1
-(def ^:const id-bytes   (int 2))
-(def ^:const id-nil     (int 3))
-(def ^:const id-boolean (int 4))
-(def ^:const id-reader  (int 5)) ; Fallback: *print-dup* pr-str output
+;;                              1
+(def ^:const id-bytes      (int 2))
+(def ^:const id-nil        (int 3))
+(def ^:const id-boolean    (int 4))
+(def ^:const id-reader     (int 5)) ; Fallback: *print-dup* pr-str output
 
-(def ^:const id-char    (int 10))
-;;                           11
-(def ^:const id-keyword (int 12))
-(def ^:const id-string  (int 13))
+(def ^:const id-char       (int 10))
+;;                              11
+(def ^:const id-keyword    (int 12))
+(def ^:const id-string     (int 13))
 
-(def ^:const id-list    (int 20))
-(def ^:const id-vector  (int 21))
-;;                           22
-(def ^:const id-set     (int 23))
-(def ^:const id-coll    (int 24)) ; Fallback: non-specific collection
-(def ^:const id-meta    (int 25))
-(def ^:const id-queue   (int 26))
-(def ^:const id-map     (int 27))
+(def ^:const id-list       (int 20))
+(def ^:const id-vector     (int 21))
+;;                              22
+(def ^:const id-set        (int 23))
+(def ^:const id-coll       (int 24)) ; Fallback: non-specific collection
+(def ^:const id-meta       (int 25))
+(def ^:const id-queue      (int 26))
+(def ^:const id-map        (int 27))
+(def ^:const id-sorted-set (int 28))
+(def ^:const id-sorted-map (int 29))
 
-(def ^:const id-byte    (int 40))
-(def ^:const id-short   (int 41))
-(def ^:const id-integer (int 42))
-(def ^:const id-long    (int 43))
-(def ^:const id-bigint  (int 44))
+(def ^:const id-byte       (int 40))
+(def ^:const id-short      (int 41))
+(def ^:const id-integer    (int 42))
+(def ^:const id-long       (int 43))
+(def ^:const id-bigint     (int 44))
 
-(def ^:const id-float   (int 60))
-(def ^:const id-double  (int 61))
-(def ^:const id-bigdec  (int 62))
+(def ^:const id-float      (int 60))
+(def ^:const id-double     (int 61))
+(def ^:const id-bigdec     (int 62))
 
-(def ^:const id-ratio   (int 70))
+(def ^:const id-ratio      (int 70))
 
 ;;; DEPRECATED (old types will be supported only for thawing)
 (def ^:const id-old-reader (int 1))  ; as of 0.9.2, for +64k support
@@ -91,12 +93,20 @@
        ~@body)))
 
 (defmacro coll-freezer
-  "Helper to extend Freezable protocol to simple collection types."
+  "Extends Freezable to simple collection types."
   [type id & body]
-  `(freezer
-    ~type ~id
+  `(freezer ~type ~id
     (.writeInt ~'s (count ~'x)) ; Encode collection length
     (doseq [i# ~'x] (freeze-to-stream!* ~'s i#))))
+
+(defmacro kv-freezer
+  "Extends Freezable to key-value collection types."
+  [type id & body]
+  `(freezer ~type ~id
+    (.writeInt ~'s (* 2 (count ~'x))) ; Encode num kvs
+    (doseq [[k# v#] ~'x]
+      (freeze-to-stream!* ~'s k#)
+      (freeze-to-stream!* ~'s v#))))
 
 (freezer (Class/forName "[B") id-bytes   (write-bytes! s x))
 (freezer nil                  id-nil)
@@ -110,15 +120,14 @@
 
 (declare freeze-to-stream!*)
 
+(coll-freezer PersistentQueue       id-queue)
+(coll-freezer PersistentTreeSet     id-sorted-set)
+(kv-freezer   PersistentTreeMap     id-sorted-map)
+
 (coll-freezer IPersistentList       id-list)
 (coll-freezer IPersistentVector     id-vector)
-(freezer      IPersistentMap        id-map
-              (.writeInt s (* 2 (count x))) ; Encode num kvs
-              (doseq [[k v] x]
-                (freeze-to-stream!* s k)
-                (freeze-to-stream!* s v)))
 (coll-freezer IPersistentSet        id-set)
-(coll-freezer PersistentQueue       id-queue)
+(kv-freezer   IPersistentMap        id-map)
 (coll-freezer IPersistentCollection id-coll) ; Must be LAST collection freezer!
 
 (freezer Byte       id-byte    (.writeByte s x))
@@ -171,12 +180,12 @@
 (declare thaw-from-stream!*)
 
 (defn coll-thaw!
-  "Helper to thaw simple collection types."
+  "Thaws simple collection types."
   [^DataInputStream s]
   (repeatedly (.readInt s) (partial thaw-from-stream!* s)))
 
-(defn coll-thaw-pairs!
-  "Helper to thaw pair-based collection types (e.g. hash maps)."
+(defn coll-thaw-kvs!
+  "Thaws key-value collection types."
   [^DataInputStream s]
   (repeatedly (/ (.readInt s) 2)
               (fn [] [(thaw-from-stream!* s) (thaw-from-stream!* s)])))
@@ -196,12 +205,15 @@
      id-string  (String. (read-bytes! s) "UTF-8")
      id-keyword (keyword (.readUTF s))
 
+     id-queue      (into (PersistentQueue/EMPTY) (coll-thaw! s))
+     id-sorted-set (into (sorted-set) (coll-thaw! s))
+     id-sorted-map (into (sorted-map) (coll-thaw-kvs! s))
+
      id-list    (apply list (coll-thaw! s)) ; TODO OOMs for big colls
      id-vector  (into  [] (coll-thaw! s))
      id-set     (into #{} (coll-thaw! s))
-     id-map     (into  {} (coll-thaw-pairs! s))
+     id-map     (into  {} (coll-thaw-kvs! s))
      id-coll    (doall (coll-thaw! s))
-     id-queue   (into  (PersistentQueue/EMPTY) (coll-thaw! s))
 
      id-meta (let [m (thaw-from-stream!* s)] (with-meta (thaw-from-stream!* s) m))
 
@@ -252,9 +264,7 @@
   (let [support-tagged-literals?
         (utils/version-sufficient? (clojure-version) "1.4.0")]
 
-    {;; Breaks reader, roundtrip equality
-     :bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
-
+    {:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
      :nil          nil
      :boolean      true
 
@@ -263,6 +273,11 @@
      :string-long  (apply str (range 1000))
      :keyword      :keyword
      :keyword-ns   ::keyword
+
+     :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
+     :queue-empty  (PersistentQueue/EMPTY)
+     :sorted-set   (sorted-set 1 2 3 4 5)
+     :sorted-map   (sorted-map :b 2 :a 1 :d 4 :c 3)
 
      :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
      :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
@@ -274,10 +289,6 @@
      :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
      :set-empty    #{}
      :meta         (with-meta {:a :A} {:metakey :metaval})
-
-     ;; Breaks reader
-     :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
-     :queue-empty  (PersistentQueue/EMPTY)
 
      :coll         (repeatedly 1000 rand)
 
