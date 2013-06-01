@@ -10,31 +10,26 @@ Clojure's [rich data types](http://clojure.org/datatypes) are *awesome*. And its
 
 Nippy is an attempt to provide a drop-in, high-performance alternative to the reader. It's a fork of [Deep-Freeze](https://github.com/halgari/deep-freeze) and is used as the [Carmine Redis client](https://github.com/ptaoussanis/carmine) serializer.
 
-## What's In The Box?
- * Small, uncomplicated **all-Clojure** library.
- * **Good performance**.
- * Comprehesive, extensible **support for all major data types**.
- * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
- * **Full test coverage** for every supported type.
- * [Snappy](http://code.google.com/p/snappy/) **integrated de/compression** for efficient storage and network transfer.
+## What's in the box™?
+  * Small, uncomplicated **all-Clojure** library.
+  * **Great performance**.
+  * Comprehesive, extensible **support for all major data types**.
+  * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
+  * **Full test coverage** for every supported type.
+  * [Snappy](http://code.google.com/p/snappy/) **integrated de/compression** for efficient storage and network transfer.
 
-## Getting Started
+## Getting started
 
-### Leiningen
+### Dependencies
 
-Depend on Nippy in your `project.clj`:
-
-```clojure
-[com.taoensso/nippy "1.2.0"]
-```
-
-and `require` the library:
+Add the necessary dependency to your [Leiningen](http://leiningen.org/) `project.clj` and `require` the library in your ns:
 
 ```clojure
-(ns my-app (:require [taoensso.nippy :as nippy]))
+[com.taoensso/nippy "1.2.0"] ; project.clj
+(ns my-app (:require [taoensso.nippy :as nippy])) ; ns
 ```
 
-### De/Serializing
+### De/serializing
 
 As an example of what Nippy can do, let's take a look at its own reference stress data:
 
@@ -113,16 +108,23 @@ Couldn't be simpler!
 
 [Detailed benchmark information](https://docs.google.com/spreadsheet/ccc?key=0AuSXb68FH4uhdE5kTTlocGZKSXppWG9sRzA5Y2pMVkE&pli=1#gid=0) is available on Google Docs.
 
-## Nippy Supports the ClojureWerkz and CDS Project Goals
+## Project links
 
-ClojureWerkz is a growing collection of open-source, batteries-included [Clojure libraries](http://clojurewerkz.org/) that emphasise modern targets, great documentation, and thorough testing.
+  * [API documentation](http://ptaoussanis.github.io/nippy/).
+  * My other [Clojure libraries](https://www.taoensso.com/clojure-libraries) (Redis & DynamoDB clients, logging+profiling, I18n+L10n, serialization, A/B testing).
 
-CDS (Clojure Documentation Site) is a contributor-friendly community project aimed at producing top-notch [Clojure tutorials](http://clojure-doc.org/) and documentation.
+##### This project supports the **CDS and ClojureWerkz project goals**:
 
-## Contact & Contribution
+  * [CDS](http://clojure-doc.org/), the **Clojure Documentation Site**, is a contributer-friendly community project aimed at producing top-notch Clojure tutorials and documentation.
 
-Reach me (Peter Taoussanis) at [taoensso.com](https://www.taoensso.com) for questions/comments/suggestions/whatever. I'm very open to ideas if you have any! I'm also on Twitter: [@ptaoussanis](https://twitter.com/#!/ptaoussanis).
+  * [ClojureWerkz](http://clojurewerkz.org/) is a growing collection of open-source, batteries-included **Clojure libraries** that emphasise modern targets, great documentation, and thorough testing.
+
+## Contact & contribution
+
+Please use the [project's GitHub issues page](https://github.com/ptaoussanis/nippy/issues) for project questions/comments/suggestions/whatever **(pull requests welcome!)**. Am very open to ideas if you have any!
+
+Otherwise reach me (Peter Taoussanis) at [taoensso.com](https://www.taoensso.com) or on Twitter ([@ptaoussanis](https://twitter.com/#!/ptaoussanis)). Cheers!
 
 ## License
 
-Copyright &copy; 2012 Peter Taoussanis. Distributed under the [Eclipse Public License](http://www.eclipse.org/legal/epl-v10.html), the same as Clojure.
+Copyright &copy; 2013 Peter Taoussanis. Distributed under the [Eclipse Public License](http://www.eclipse.org/legal/epl-v10.html), the same as Clojure.
