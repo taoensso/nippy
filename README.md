@@ -127,4 +127,4 @@ Otherwise reach me (Peter Taoussanis) at [taoensso.com](https://www.taoensso.com
 
 ## License
 
-Copyright &copy; 2013 Peter Taoussanis. Distributed under the [Eclipse Public License](http://www.eclipse.org/legal/epl-v10.html), the same as Clojure.
+Copyright &copy; 2012, 2013 Peter Taoussanis. Distributed under the [Eclipse Public License](http://www.eclipse.org/legal/epl-v10.html), the same as Clojure.
