@@ -182,7 +182,7 @@
 (defn coll-thaw!
   "Thaws simple collection types."
   [^DataInputStream s]
-  (repeatedly (.readInt s) (partial thaw-from-stream!* s)))
+  (repeatedly (.readInt s) #(thaw-from-stream!* s)))
 
 (defn coll-thaw-kvs!
   "Thaws key-value collection types."
@@ -234,7 +234,7 @@
      id-old-reader (read-string (.readUTF s))
      id-old-string (.readUTF s)
      id-old-map    (apply hash-map (repeatedly (* 2 (.readInt s))
-                                               (partial thaw-from-stream!* s)))
+                                               #(thaw-from-stream!* s)))
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
 
