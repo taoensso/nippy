@@ -36,19 +36,26 @@
   ;;  :nippy  {:freeze 3751,  :thaw 4184,  :round 7769}}
   ;; (float (/ 59545 7769)) = 7.6644354
 
-  ;; Clojure 1.4.0, Nippy 1.0.0
+  ;; Clojure 1.4.0, Nippy 1.0.0 (+ tagged-uuid, tagged-date)
   ;; {:reader {:freeze 22595, :thaw 31148, :round 54059}
   ;;  :nippy  {:freeze 3324,  :thaw 3725,  :round 6918}}
   ;; (float (/ 54059 6918)) = 7.814253
 
-  ;;; Data size
-  (let [frozen (reader-freeze data)]   (count (.getBytes frozen "UTF8")))
-  (let [frozen (freeze-to-bytes data)] (count frozen))
-  ;; 22788, 12224
+  ;; Clojure 1.5.1, Nippy 1.2.1 (+ sorted-set, sorted-map)
+  ;; (def data (dissoc data :sorted-set :sorted-map))
+  ;; {:reader {:freeze 15037, :thaw 27885, :round 43945},
+  ;;  :nippy  {:freeze 3194,  :thaw 4734,  :round 8380}}
+  ;; (float (/ 43945 8380)) = 5.2440333
 
-  ;;; Snappy implementations
-  (println (bench (roundtrip data)))
-  ;;                No Snappy: 6163 6064 6042 6176
-  ;;               Snappy JNI: 6489 6446 6542 6412
-  ;; Snappy native array copy: 6569 6419 6414 6590
-  )
+;;; Data size
+   (let [frozen (reader-freeze data)]   (count (.getBytes frozen "UTF8")))
+   (let [frozen (freeze-to-bytes data)] (count frozen))
+   ;; 22955, 12402
+   ;; (float (/ 22955 12402)) = 1.8509111
+
+;;; Snappy implementations
+   (println (bench (roundtrip data)))
+   ;;                No Snappy: 6163 6064 6042 6176
+   ;;               Snappy JNI: 6489 6446 6542 6412
+   ;; Snappy native array copy: 6569 6419 6414 6590
+   )
