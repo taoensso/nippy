@@ -1,7 +1,8 @@
 (defproject com.taoensso/nippy "1.2.0"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
-  :license {:name "Eclipse Public License"}
+  :license {:name "Eclipse Public License"
+            :url  "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure    "1.3.0"]
                  [org.iq80.snappy/snappy "0.3"]]
   :profiles {:1.3  {:dependencies [[org.clojure/clojure "1.3.0"]]}
