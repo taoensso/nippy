@@ -61,7 +61,7 @@
           iv-ba  (rand-bytes aes128-block-size)
           iv     (javax.crypto.spec.IvParameterSpec. iv-ba)]
       (.init cipher javax.crypto.Cipher/ENCRYPT_MODE key iv)
-      (.doFinal cipher (utils/ba-concat iv-ba ba))))
+      (utils/ba-concat iv-ba (.doFinal cipher ba))))
 
   (decrypt [{:keys [cipher-type cache] :as crypto} salt pwd ba]
     (let [cipher (cipher cipher-type)
