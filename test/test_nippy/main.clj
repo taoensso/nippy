@@ -7,9 +7,8 @@
 (def test-data (dissoc nippy/stress-data :bytes))
 
 (def roundtrip-defaults  (comp nippy/thaw-from-bytes nippy/freeze-to-bytes))
-(def roundtrip-encrypted (comp #(nippy/thaw-from-bytes % :password "secret")
-                               #(nippy/freeze-to-bytes % :password "secret")))
-
+(def roundtrip-encrypted (comp #(nippy/thaw-from-bytes % :password [:cached "secret"])
+                               #(nippy/freeze-to-bytes % :password [:cached "secret"])))
 (deftest test-roundtrip-defaults  (is (= test-data (roundtrip-defaults  test-data))))
 (deftest test-roundtrip-encrypted (is (= test-data (roundtrip-encrypted test-data))))
 

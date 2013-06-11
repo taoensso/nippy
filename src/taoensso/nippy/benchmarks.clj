@@ -13,11 +13,9 @@
 (defn reader-thaw   [x] (binding [*read-eval* false] (read-string x)))
 (def  reader-roundtrip (comp reader-thaw reader-freeze))
 
-(def crypto-opts [:password "secret" :crypto crypto/crypto-default-cached])
-
 (def roundtrip-defaults  (comp nippy/thaw-from-bytes nippy/freeze-to-bytes))
-(def roundtrip-encrypted (comp #(apply nippy/thaw-from-bytes % crypto-opts)
-                               #(apply nippy/freeze-to-bytes % crypto-opts)))
+(def roundtrip-encrypted (comp #(nippy/thaw-from-bytes % :password [:cached "p"])
+                               #(nippy/freeze-to-bytes % :password [:cached "p"])))
 (def roundtrip-fast      (comp #(nippy/thaw-from-bytes % :compressed? false)
                                #(nippy/freeze-to-bytes % :compress?   false)))
 
@@ -48,11 +46,11 @@
 
     (println
      {:encrypted
-      {:freeze (bench (apply freeze-to-bytes data crypto-opts))
-       :thaw   (let [frozen (apply freeze-to-bytes data crypto-opts)]
-                 (bench (apply thaw-from-bytes frozen crypto-opts)))
+      {:freeze (bench (freeze-to-bytes data :password [:cached "p"]))
+       :thaw   (let [frozen (freeze-to-bytes data :password [:cached "p"])]
+                 (bench (thaw-from-bytes frozen :password [:cached "p"])))
        :round  (bench (roundtrip-encrypted data))
-       :data-size (count (apply freeze-to-bytes data crypto-opts))}})
+       :data-size (count (freeze-to-bytes data :password [:cached "p"]))}})
 
     (println
      {:fast
@@ -66,9 +64,9 @@
 
   ;;; 11 June 2013: Clojure 1.5.1, Nippy 1.3.0-alpha1
   ;; {:reader    {:freeze 17042, :thaw 31579, :round 48379, :data-size 22954}}
+  ;; {:fast      {:freeze 3078,  :thaw 4684,  :round 8117,  :data-size 13274}}
   ;; {:defaults  {:freeze 3810,  :thaw 5295,  :round 9052,  :data-size 12394}}
   ;; {:encrypted {:freeze 5800,  :thaw 6862,  :round 12317, :data-size 12416}}
-  ;; {:fast      {:freeze 3078,  :thaw 4684,  :round 8117,  :data-size 13274}}
 
   ;;; Clojure 1.5.1, Nippy 1.2.1 (+ sorted-set, sorted-map)
   ;; (def data (dissoc data :sorted-set :sorted-map))

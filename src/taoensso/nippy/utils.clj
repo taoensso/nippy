@@ -61,9 +61,9 @@
 (defn compress-bytes   [^bytes ba] (Snappy/compress   ba))
 (defn uncompress-bytes [^bytes ba] (Snappy/uncompress ba 0 (alength ba)))
 
-(defn apply-memoized
-  "A cross between `memoize` and `apply`. Operates like `apply` but accepts an
-  optional {<args> <value> ...} cache atom."
+(defn memoized
+  "Like `memoize` but takes an explicit cache atom (possibly nil) and
+  immediately applies memoized f to given arguments."
   [cache f & args]
   (if-not cache
     (apply f args)
@@ -72,6 +72,9 @@
       (let [dv (delay (apply f args))]
         (swap! cache assoc args dv)
         @dv))))
+
+(comment (memoized nil +)
+         (memoized nil + 5 12))
 
 (defn ba-concat ^bytes [^bytes ba1 ^bytes ba2]
   (let [s1  (alength ba1)
