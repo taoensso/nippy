@@ -18,7 +18,7 @@ Nippy is an attempt to provide a drop-in, high-performance alternative to the re
   * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
   * **Full test coverage** for every supported type.
   * [Snappy](http://code.google.com/p/snappy/) **integrated de/compression** for efficient storage and network transfer.
-  * Enable **high-strength encryption** with a single option. (1.3.0+)
+  * Enable **high-strength encryption** with a single `:password "my-password"` option. (1.3.0+)
 
 ## Getting started
 
