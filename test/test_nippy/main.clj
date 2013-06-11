@@ -6,9 +6,12 @@
 ;; Remove stuff from stress-data that breaks roundtrip equality
 (def test-data (dissoc nippy/stress-data :bytes))
 
-(def roundtrip (comp nippy/thaw-from-bytes nippy/freeze-to-bytes))
+(def roundtrip-defaults  (comp nippy/thaw-from-bytes nippy/freeze-to-bytes))
+(def roundtrip-encrypted (comp #(nippy/thaw-from-bytes % :password "secret")
+                               #(nippy/freeze-to-bytes % :password "secret")))
 
-(deftest test-roundtrip (is (= test-data (roundtrip test-data))))
+(deftest test-roundtrip-defaults  (is (= test-data (roundtrip-defaults  test-data))))
+(deftest test-roundtrip-encrypted (is (= test-data (roundtrip-encrypted test-data))))
 
 (println "Benchmarking roundtrips (x3)")
 (println "----------------------------")

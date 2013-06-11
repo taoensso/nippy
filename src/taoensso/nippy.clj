@@ -2,7 +2,8 @@
   "Simple, high-performance Clojure serialization library. Adapted from
   Deep-Freeze."
   {:author "Peter Taoussanis"}
-  (:require [taoensso.nippy.utils :as utils])
+  (:require [taoensso.nippy.utils  :as utils]
+            [taoensso.nippy.crypto :as crypto])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
@@ -166,14 +167,17 @@
 
 (defn freeze-to-bytes
   "Serializes x to a byte array and returns the array."
-  ^bytes [x & {:keys [compress?  print-dup?]
-               :or   {compress?  true
+  ^bytes [x & {:keys [crypto compress? print-dup? salt password]
+               :or   {crypto     crypto/crypto-default
+                      compress?  true
                       print-dup? true}}]
   (let [ba     (ByteArrayOutputStream.)
         stream (DataOutputStream. ba)]
     (freeze-to-stream! stream x print-dup?)
-    (let [ba (.toByteArray ba)]
-      (if compress? (utils/compress-bytes ba) ba))))
+    (let [ba (.toByteArray ba)
+          ba (if compress? (utils/compress-bytes ba) ba)
+          ba (if password  (crypto/encrypt crypto salt password ba) ba)]
+      ba)))
 
 ;;;; Thawing
 
@@ -251,10 +255,13 @@
 
 (defn thaw-from-bytes
   "Deserializes an object from given byte array."
-  [ba & {:keys [read-eval? compressed?]
-         :or   {read-eval?  false ; For `read-string` injection safety - NB!!!
+  [ba & {:keys [crypto compressed? read-eval? salt password]
+         :or   {crypto      crypto/crypto-default
+                read-eval?  false ; For `read-string` injection safety - NB!!!
                 compressed? true}}]
-  (-> (if compressed? (utils/uncompress-bytes ba) ba)
+  (-> (let [ba (if password    (crypto/decrypt crypto salt password ba) ba)
+            ba (if compressed? (utils/uncompress-bytes ba) ba)]
+        ba)
       (ByteArrayInputStream.)
       (DataInputStream.)
       (thaw-from-stream! read-eval?)))

@@ -1,7 +1,8 @@
 Current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "1.2.1"]
+[com.taoensso/nippy "1.2.1"]        ; Stable
+[com.taoensso/nippy "1.3.0-alpha1"] ; Development (adds crypto support)
 ```
 
 # Nippy, a Clojure serialization library
@@ -17,6 +18,7 @@ Nippy is an attempt to provide a drop-in, high-performance alternative to the re
   * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
   * **Full test coverage** for every supported type.
   * [Snappy](http://code.google.com/p/snappy/) **integrated de/compression** for efficient storage and network transfer.
+  * Enable **high-strength encryption** with a single option. (1.3.0+)
 
 ## Getting started
 
@@ -102,9 +104,7 @@ Couldn't be simpler!
 
 ## Performance
 
-![Performance comparison chart](https://github.com/ptaoussanis/nippy/raw/master/benchmarks/chart1.png)
-
-![Data size chart](https://github.com/ptaoussanis/nippy/raw/master/benchmarks/chart2.png)
+![Comparison chart](https://github.com/ptaoussanis/nippy/raw/master/benchmarks/chart.png)
 
 [Detailed benchmark information](https://docs.google.com/spreadsheet/ccc?key=0AuSXb68FH4uhdE5kTTlocGZKSXppWG9sRzA5Y2pMVkE&pli=1#gid=0) is available on Google Docs.
 

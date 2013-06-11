@@ -60,3 +60,31 @@
 
 (defn compress-bytes   [^bytes ba] (Snappy/compress   ba))
 (defn uncompress-bytes [^bytes ba] (Snappy/uncompress ba 0 (alength ba)))
+
+(defn apply-memoized
+  "A cross between `memoize` and `apply`. Operates like `apply` but accepts an
+  optional {<args> <value> ...} cache atom."
+  [cache f & args]
+  (if-not cache
+    (apply f args)
+    (if-let [dv (@cache args)]
+      @dv
+      (let [dv (delay (apply f args))]
+        (swap! cache assoc args dv)
+        @dv))))
+
+(defn ba-concat ^bytes [^bytes ba1 ^bytes ba2]
+  (let [s1  (alength ba1)
+        s2  (alength ba2)
+        out (byte-array (+ s1 s2))]
+    (System/arraycopy ba1 0 out 0  s1)
+    (System/arraycopy ba2 0 out s1 s2)
+    out))
+
+(defn ba-split [^bytes ba ^Integer idx]
+  [(java.util.Arrays/copyOfRange ba 0 idx)
+   (java.util.Arrays/copyOfRange ba idx (alength ba))])
+
+(comment (String. (ba-concat (.getBytes "foo") (.getBytes "bar")))
+         (let [[x y] (ba-split (.getBytes "foobar") 3)]
+           [(String. x) (String. y)]))
