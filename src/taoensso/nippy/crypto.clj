@@ -113,19 +113,3 @@
              (decrypt crypto-default "s" "p")
              (decrypt crypto-default "s" "p")
              (String.))))
-
-;; TODO Nippy: Compress _then_ encode.  Decode _then_ decompress.
-;; TODO Move tests to actual unit tests ns.
-;; TODO Update benchmarks with crypto (so 3 bars).
-;; TODO Add tests for bad decryption (e.g. wrong key)
-;; ;; (comment
-;; ;;   (let [data (dissoc nippy/stress-data :bytes)]
-;; ;;     (= data (->> data
-;; ;;                  (nippy/freeze-to-bytes)
-;; ;;                  (encrypt-aes "my-password")
-;; ;;                  (decrypt-aes "my-password")
-;; ;;                  (nippy/thaw-from-bytes))))
-
-;; ;;   (let [ba (nippy/freeze-to-bytes nippy/stress-data)]
-;; ;;     (time (dotimes [_ 10000] (->> ba (encrypt-aes "my-password")
-;; ;;                                      (decrypt-aes "my-password"))))))
