@@ -2,7 +2,7 @@ Current [semantic](http://semver.org/) version:
 
 ```clojure
 [com.taoensso/nippy "1.2.1"]        ; Stable
-[com.taoensso/nippy "1.3.0-alpha2"] ; Development (adds crypto support)
+[com.taoensso/nippy "1.3.0-alpha3"] ; Development (adds crypto support!)
 ```
 
 # Nippy, a Clojure serialization library

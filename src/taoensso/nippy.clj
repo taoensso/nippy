@@ -258,12 +258,25 @@
          :or   {compressed? true
                 read-eval?  false ; For `read-string` injection safety - NB!!!
                 }}]
-  (-> (let [ba (if password    (crypto/decrypt-aes128 password ba) ba)
-            ba (if compressed? (utils/uncompress-bytes ba) ba)]
-        ba)
-      (ByteArrayInputStream.)
-      (DataInputStream.)
-      (thaw-from-stream! read-eval?)))
+  (try
+    (-> (let [ba (if password    (crypto/decrypt-aes128 password ba) ba)
+              ba (if compressed? (utils/uncompress-bytes ba) ba)]
+          ba)
+        (ByteArrayInputStream.)
+        (DataInputStream.)
+        (thaw-from-stream! read-eval?))
+    (catch Exception e
+      (throw (Exception.
+              (cond password    "Thaw failed. Unencrypted data or bad password?"
+                    compressed? "Thaw failed. Encrypted or uncompressed data?"
+                    :else       "Thaw failed. Encrypted and/or compressed data?")
+              e)))))
+
+(comment
+  (-> (freeze-to-bytes "my data" :password [:salted "password"])
+      (thaw-from-bytes))
+  (-> (freeze-to-bytes "my data" :compress? true)
+      (thaw-from-bytes :compressed? false)))
 
 (def stress-data
   "Reference data used for tests & benchmarks."
