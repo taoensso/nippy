@@ -13,12 +13,18 @@
                       clauses)
        ~(when default default))))
 
-(defn repeatedly* "Like `repeatedly` but faster and returns a vector."
-  [n f]
-  (loop [v (transient []) idx 0]
-    (if (>= idx n)
-      (persistent! v)
-      (recur (conj! v (f)) (inc idx)))))
+(defn repeatedly*
+  "Like `repeatedly` but faster and returns given collection type."
+  [coll n f]
+  (if-not (instance? clojure.lang.IEditableCollection coll)
+    (loop [v coll idx 0]
+      (if (>= idx n)
+        v
+        (recur (conj v (f)) (inc idx))))
+    (loop [v (transient coll) idx 0]
+      (if (>= idx n)
+        (persistent! v)
+        (recur (conj! v (f)) (inc idx))))))
 
 (defmacro time-ns "Returns number of nanoseconds it takes to execute body."
   [& body] `(let [t0# (System/nanoTime)] ~@body (- (System/nanoTime) t0#)))
