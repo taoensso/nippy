@@ -1,7 +1,6 @@
 (ns taoensso.nippy.utils
   {:author "Peter Taoussanis"}
-  (:require [clojure.string :as str])
-  (:import  org.iq80.snappy.Snappy))
+  (:require [clojure.string :as str]))
 
 (defmacro case-eval
   "Like `case` but evaluates test constants for their compile-time value."
@@ -14,25 +13,12 @@
                       clauses)
        ~(when default default))))
 
-(defn pairs
-  "Like (partition 2 coll) but faster and returns lazy seq of vector pairs."
-  [coll]
-  (lazy-seq
-   (when-let [s (seq coll)]
-     (let [n (next s)]
-       (cons [(first s) (first n)] (pairs (next n)))))))
-
-(defmacro time-ns
-  "Returns number of nanoseconds it takes to execute body."
-  [& body]
-  `(let [t0# (System/nanoTime)]
-     ~@body
-     (- (System/nanoTime) t0#)))
+(defmacro time-ns "Returns number of nanoseconds it takes to execute body."
+  [& body] `(let [t0# (System/nanoTime)] ~@body (- (System/nanoTime) t0#)))
 
 (defmacro bench
   "Repeatedly executes form and returns time taken to complete execution."
-  [num-laps form & {:keys [warmup-laps num-threads as-ms?]
-                :or   {as-ms? true}}]
+  [num-laps form & {:keys [warmup-laps num-threads as-ns?]}]
   `(try (when ~warmup-laps (dotimes [_# ~warmup-laps] ~form))
         (let [nanosecs#
               (if-not ~num-threads
@@ -44,22 +30,16 @@
                         doall
                         (map deref)
                         dorun))))]
-          (if ~as-ms? (Math/round (/ nanosecs# 1000000.0)) nanosecs#))
+          (if ~as-ns? nanosecs# (Math/round (/ nanosecs# 1000000.0))))
         (catch Exception e# (str "DNF: " (.getMessage e#)))))
 
-(defn version-compare
-  "Comparator for version strings like x.y.z, etc."
-  [x y]
-  (let [vals (fn [s] (vec (map #(Integer/parseInt %) (str/split s #"\."))))]
-    (compare (vals x) (vals y))))
+(defn version-compare "Comparator for version strings like x.y.z, etc."
+  [x y] (let [vals (fn [s] (vec (map #(Integer/parseInt %) (str/split s #"\."))))]
+          (compare (vals x) (vals y))))
 
-(defn version-sufficient?
-  [version-str min-version-str]
+(defn version-sufficient? [version-str min-version-str]
   (try (>= (version-compare version-str min-version-str) 0)
        (catch Exception _ false)))
-
-(defn compress-bytes   [^bytes ba] (Snappy/compress   ba))
-(defn uncompress-bytes [^bytes ba] (Snappy/uncompress ba 0 (alength ba)))
 
 (defn memoized
   "Like `memoize` but takes an explicit cache atom (possibly nil) and
@@ -75,6 +55,10 @@
 
 (comment (memoized nil +)
          (memoized nil + 5 12))
+
+(defn compress-snappy   ^bytes [^bytes ba] (org.iq80.snappy.Snappy/compress   ba))
+(defn uncompress-snappy ^bytes [^bytes ba] (org.iq80.snappy.Snappy/uncompress ba
+                                             0 (alength ba)))
 
 (defn ba-concat ^bytes [^bytes ba1 ^bytes ba2]
   (let [s1  (alength ba1)

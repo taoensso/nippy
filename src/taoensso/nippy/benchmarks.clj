@@ -1,8 +1,7 @@
 (ns taoensso.nippy.benchmarks
   {:author "Peter Taoussanis"}
   (:use     [taoensso.nippy :as nippy :only (freeze-to-bytes thaw-from-bytes)])
-  (:require [taoensso.nippy.utils  :as utils]
-            [taoensso.nippy.crypto :as crypto]))
+  (:require [taoensso.nippy.utils :as utils]))
 
 ;; Remove stuff from stress-data that breaks reader
 (def data (dissoc nippy/stress-data :queue :queue-empty :bytes))
@@ -19,8 +18,8 @@
 (def roundtrip-fast      (comp #(nippy/thaw-from-bytes % :compressed? false)
                                #(nippy/freeze-to-bytes % :compress?   false)))
 
-(defn autobench [] (bench (roundtrip-defaults  data)
-                          (roundtrip-encrypted data)))
+(defn autobench [] {:defaults  (bench (roundtrip-defaults  data))
+                    :encrypted (bench (roundtrip-encrypted data))})
 
 (comment
 

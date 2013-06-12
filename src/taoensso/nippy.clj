@@ -174,7 +174,7 @@
         stream (DataOutputStream. ba)]
     (freeze-to-stream! stream x print-dup?)
     (let [ba (.toByteArray ba)
-          ba (if compress? (utils/compress-bytes ba) ba)
+          ba (if compress? (utils/compress-snappy ba) ba)
           ba (if password  (crypto/encrypt-aes128 password ba) ba)]
       ba)))
 
@@ -260,7 +260,7 @@
                 }}]
   (try
     (-> (let [ba (if password    (crypto/decrypt-aes128 password ba) ba)
-              ba (if compressed? (utils/uncompress-bytes ba) ba)]
+              ba (if compressed? (utils/uncompress-snappy ba) ba)]
           ba)
         (ByteArrayInputStream.)
         (DataInputStream.)
