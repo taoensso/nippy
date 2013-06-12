@@ -1,7 +1,7 @@
 (ns taoensso.nippy.benchmarks
   {:author "Peter Taoussanis"}
-  (:use     [taoensso.nippy :as nippy :only (freeze-to-bytes thaw-from-bytes)])
-  (:require [taoensso.nippy.utils :as utils]))
+  (:require [taoensso.nippy :as nippy :refer (freeze-to-bytes thaw-from-bytes)]
+            [taoensso.nippy.utils :as utils]))
 
 ;; Remove stuff from stress-data that breaks reader
 (def data (dissoc nippy/stress-data :queue :queue-empty :bytes))

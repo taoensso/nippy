@@ -1,6 +1,6 @@
 (ns taoensso.nippy.tests.main
-  (:use     [expectations   :as test])
-  (:require [taoensso.nippy :as nippy]
+  (:require [expectations   :as test :refer :all]
+            [taoensso.nippy :as nippy]
             [taoensso.nippy.benchmarks :as benchmarks]))
 
 ;; Remove stuff from stress-data that breaks roundtrip equality

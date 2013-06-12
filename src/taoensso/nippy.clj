@@ -278,11 +278,8 @@
   (-> (freeze-to-bytes "my data" :compress? true)
       (thaw-from-bytes :compressed? false)))
 
-(def stress-data
-  "Reference data used for tests & benchmarks."
-  (let [support-tagged-literals?
-        (utils/version-sufficient? (clojure-version) "1.4.0")]
-
+(def stress-data "Reference data used for tests & benchmarks."
+  (let []
     {:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
      :nil          nil
      :boolean      true
@@ -323,6 +320,6 @@
 
      :ratio        22/7
 
-     ;; Clojure 1.4+
-     :tagged-uuid  (when support-tagged-literals? (java.util.UUID/randomUUID))
-     :tagged-date  (when support-tagged-literals? (java.util.Date.))}))
+     ;; Clojure 1.4+ tagged literals
+     :tagged-uuid  (java.util.UUID/randomUUID)
+     :tagged-date  (java.util.Date.)}))
