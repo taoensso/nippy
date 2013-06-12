@@ -104,7 +104,7 @@ Couldn't be simpler!
 
 ### Encryption (currently in **ALPHA**)
 
-As of 1.3.0, Nippy also gives you **dead simple data encryption**. Add a single flag to your usual freeze/thaw calls like so:
+As of 1.3.0, Nippy also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
 
 ```clojure
 (nippy/freeze-to-bytes nippy/stress-data :password [:salted "my-password"]) ; Encrypt

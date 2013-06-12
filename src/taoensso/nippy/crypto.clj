@@ -93,7 +93,8 @@
         encryption/decryption speed and the difficulty of attacking any
         particular key.
 
-  Slower than `aes128-cached`, and easier to attack any particular key."
+  Slower than `aes128-cached`, and easier to attack any particular key - but
+  keys are independent."
   (AES128Encrypter. 5 nil))
 
 (def aes128-cached
