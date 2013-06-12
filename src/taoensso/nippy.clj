@@ -157,7 +157,7 @@
         (freeze-to-stream!* s m)))
   (freeze x s))
 
-(defn freeze-to-stream!
+(defn- freeze-to-stream!
   "Serializes x to given output stream."
   ([data-output-stream x] ; For <= 1.0.1 compatibility
      (freeze-to-stream! data-output-stream x true))
@@ -241,7 +241,7 @@
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
 
-(defn thaw-from-stream!
+(defn- thaw-from-stream!
   "Deserializes an object from given input stream."
   [data-input-stream read-eval?]
   (binding [*read-eval* read-eval?]
