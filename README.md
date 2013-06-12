@@ -102,6 +102,17 @@ Deserialize it:
 
 Couldn't be simpler!
 
+### Encryption (currently in **ALPHA**)
+
+As of 1.3.0, Nippy also gives you **dead simple data encryption**. Add a single flag to your usual freeze/thaw calls like so:
+
+```clojure
+(nippy/freeze-to-bytes nippy/stress-data :password [:salted "my-password"]) ; Encrypt
+(nippy/thaw-from-bytes <encrypted-data>  :password [:salted "my-password"]) ; Decrypt
+```
+
+There's two forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-salted` and `aes128-cached` [docstrings](http://ptaoussanis.github.io/nippy/taoensso.nippy.crypto.html) for a detailed explanation of why/when you'd want one or the other.
+
 ## Performance
 
 ![Comparison chart](https://github.com/ptaoussanis/nippy/raw/master/benchmarks/chart.png)
