@@ -10,7 +10,9 @@
              PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
              IPersistentSet IPersistentCollection]))
 
-;;;; Define type IDs
+;;;; Header IDs ; TODO
+
+;;;; Data type IDs
 
 ;;                              1
 (def ^:const id-bytes      (int 2))
@@ -53,73 +55,79 @@
 
 ;;;; Shared low-level stream stuff
 
-(defn- write-id! [^DataOutputStream stream ^Integer id] (.writeByte stream id))
+(defn- write-id [^DataOutputStream stream ^Integer id] (.writeByte stream id))
 
-(defn- write-bytes!
+(defn- write-bytes
   "Writes arbitrary byte data, preceded by its length."
   [^DataOutputStream stream ^bytes ba]
   (let [size (alength ba)]
     (.writeInt stream size) ; Encode size of byte array
     (.write stream ba 0 size)))
 
-(defn- write-biginteger!
-  "Wrapper around `write-bytes!` for common case of writing a BigInteger."
+(defn- write-biginteger
+  "Wrapper around `write-bytes` for common case of writing a BigInteger."
   [^DataOutputStream stream ^BigInteger x]
-  (write-bytes! stream (.toByteArray x)))
+  (write-bytes stream (.toByteArray x)))
 
-(defn- read-bytes!
+(defn- read-bytes
   "Reads arbitrary byte data, preceded by its length."
   ^bytes [^DataInputStream stream]
   (let [size (.readInt stream)
         ba   (byte-array size)]
     (.read stream ba 0 size) ba))
 
-(defn- read-biginteger!
-  "Wrapper around `read-bytes!` for common case of reading a BigInteger.
+(defn- read-biginteger
+  "Wrapper around `read-bytes` for common case of reading a BigInteger.
   Note that as of Clojure 1.3, java.math.BigInteger ≠ clojure.lang.BigInt."
   ^BigInteger [^DataInputStream stream]
-  (BigInteger. (read-bytes! stream)))
+  (BigInteger. (read-bytes stream)))
 
 ;;;; Freezing
 
-(defprotocol Freezable (freeze [this stream]))
+(defprotocol Freezable (freeze-to-stream* [this stream]))
 
-(defmacro freezer
+(defn- freeze-to-stream
+  "Like `freeze-to-stream*` but with metadata support."
+  [x ^DataOutputStream s]
+  (if-let [m (meta x)]
+    (do (write-id s id-meta)
+        (freeze-to-stream m s)))
+  (freeze-to-stream* x s))
+
+(defmacro ^:private freezer
   "Helper to extend Freezable protocol."
   [type id & body]
   `(extend-type ~type
      ~'Freezable
-     (~'freeze [~'x ~(with-meta 's {:tag 'DataOutputStream})]
-       (write-id! ~'s ~id)
+     (~'freeze-to-stream* [~'x ~(with-meta 's {:tag 'DataOutputStream})]
+       (write-id ~'s ~id)
        ~@body)))
 
-(defmacro coll-freezer
+(defmacro ^:private coll-freezer
   "Extends Freezable to simple collection types."
   [type id & body]
   `(freezer ~type ~id
-    (.writeInt ~'s (count ~'x)) ; Encode collection length
-    (doseq [i# ~'x] (freeze-to-stream!* ~'s i#))))
+    (.writeInt ~'s (count ~'x))
+    (doseq [i# ~'x] (freeze-to-stream i# ~'s))))
 
-(defmacro kv-freezer
+(defmacro ^:private kv-freezer
   "Extends Freezable to key-value collection types."
   [type id & body]
   `(freezer ~type ~id
-    (.writeInt ~'s (* 2 (count ~'x))) ; Encode num kvs
+    (.writeInt ~'s (* 2 (count ~'x)))
     (doseq [[k# v#] ~'x]
-      (freeze-to-stream!* ~'s k#)
-      (freeze-to-stream!* ~'s v#))))
+      (freeze-to-stream k# ~'s)
+      (freeze-to-stream v# ~'s))))
 
-(freezer (Class/forName "[B") id-bytes   (write-bytes! s x))
+(freezer (Class/forName "[B") id-bytes   (write-bytes s x))
 (freezer nil                  id-nil)
 (freezer Boolean              id-boolean (.writeBoolean s x))
 
 (freezer Character id-char    (.writeChar s (int x)))
-(freezer String    id-string  (write-bytes! s (.getBytes x "UTF-8")))
+(freezer String    id-string  (write-bytes s (.getBytes x "UTF-8")))
 (freezer Keyword   id-keyword (.writeUTF s (if-let [ns (namespace x)]
                                              (str ns "/" (name x))
                                              (name x))))
-
-(declare freeze-to-stream!*)
 
 (coll-freezer PersistentQueue       id-queue)
 (coll-freezer PersistentTreeSet     id-sorted-set)
@@ -135,148 +143,90 @@
 (freezer Short      id-short   (.writeShort s x))
 (freezer Integer    id-integer (.writeInt s x))
 (freezer Long       id-long    (.writeLong s x))
-(freezer BigInt     id-bigint  (write-biginteger! s (.toBigInteger x)))
-(freezer BigInteger id-bigint  (write-biginteger! s x))
+(freezer BigInt     id-bigint  (write-biginteger s (.toBigInteger x)))
+(freezer BigInteger id-bigint  (write-biginteger s x))
 
 (freezer Float      id-float   (.writeFloat s x))
 (freezer Double     id-double  (.writeDouble s x))
 (freezer BigDecimal id-bigdec
-         (write-biginteger! s (.unscaledValue x))
+         (write-biginteger s (.unscaledValue x))
          (.writeInt s (.scale x)))
 
 (freezer Ratio id-ratio
-         (write-biginteger! s (.numerator   x))
-         (write-biginteger! s (.denominator x)))
+         (write-biginteger s (.numerator   x))
+         (write-biginteger s (.denominator x)))
 
 ;; Use Clojure's own reader as final fallback
-(freezer Object id-reader (write-bytes! s (.getBytes (pr-str x) "UTF-8")))
+(freezer Object id-reader (write-bytes s (.getBytes (pr-str x) "UTF-8")))
 
-(defn- freeze-to-stream!* [^DataOutputStream s x]
-  (if-let [m (meta x)]
-    (do (write-id! s id-meta)
-        (freeze-to-stream!* s m)))
-  (freeze x s))
-
-(defn- freeze-to-stream!
-  "Serializes x to given output stream."
-  ([data-output-stream x] ; For <= 1.0.1 compatibility
-     (freeze-to-stream! data-output-stream x true))
-  ([data-output-stream x print-dup?]
-     (binding [*print-dup* print-dup?] ; For `pr-str`
-       (freeze-to-stream!* data-output-stream x))))
-
-(defn freeze-to-bytes
-  "Serializes x to a byte array and returns the array."
-  ^bytes [x & {:keys [compress? print-dup? password]
-               :or   {compress?  true
-                      print-dup? true}}]
-  (let [ba     (ByteArrayOutputStream.)
-        stream (DataOutputStream. ba)]
-    (freeze-to-stream! stream x print-dup?)
-    (let [ba (.toByteArray ba)
-          ba (if compress? (utils/compress-snappy ba) ba)
-          ba (if password  (crypto/encrypt-aes128 password ba) ba)]
-      ba)))
+;; TODO New `freeze` API
 
 ;;;; Thawing
 
-(declare thaw-from-stream!*)
+(declare thaw-from-stream)
 
-(defn coll-thaw!
+(defn coll-thaw
   "Thaws simple collection types."
   [^DataInputStream s]
-  (repeatedly (.readInt s) #(thaw-from-stream!* s)))
+  (repeatedly (.readInt s) #(thaw-from-stream s)))
 
-(defn coll-thaw-kvs!
+(defn coll-thaw-kvs
   "Thaws key-value collection types."
   [^DataInputStream s]
   (repeatedly (/ (.readInt s) 2)
-              (fn [] [(thaw-from-stream!* s) (thaw-from-stream!* s)])))
+              (fn [] [(thaw-from-stream s) (thaw-from-stream s)])))
 
-(defn- thaw-from-stream!*
+(defn- thaw-from-stream
   [^DataInputStream s]
   (let [type-id (.readByte s)]
     (utils/case-eval
      type-id
 
-     id-reader  (read-string (String. (read-bytes! s) "UTF-8"))
-     id-bytes   (read-bytes! s)
+     id-reader  (read-string (String. (read-bytes s) "UTF-8"))
+     id-bytes   (read-bytes s)
      id-nil     nil
      id-boolean (.readBoolean s)
 
      id-char    (.readChar s)
-     id-string  (String. (read-bytes! s) "UTF-8")
+     id-string  (String. (read-bytes s) "UTF-8")
      id-keyword (keyword (.readUTF s))
 
-     id-queue      (into (PersistentQueue/EMPTY) (coll-thaw! s))
-     id-sorted-set (into (sorted-set) (coll-thaw! s))
-     id-sorted-map (into (sorted-map) (coll-thaw-kvs! s))
+     id-queue      (into (PersistentQueue/EMPTY) (coll-thaw s))
+     id-sorted-set (into (sorted-set) (coll-thaw s))
+     id-sorted-map (into (sorted-map) (coll-thaw-kvs s))
 
-     id-list    (into '() (reverse (coll-thaw! s)))
-     id-vector  (into  [] (coll-thaw! s))
-     id-set     (into #{} (coll-thaw! s))
-     id-map     (into  {} (coll-thaw-kvs! s))
-     id-coll    (doall (coll-thaw! s))
+     id-list    (into '() (reverse (coll-thaw s)))
+     id-vector  (into  [] (coll-thaw s))
+     id-set     (into #{} (coll-thaw s))
+     id-map     (into  {} (coll-thaw-kvs s))
+     id-coll    (doall (coll-thaw s))
 
-     id-meta (let [m (thaw-from-stream!* s)] (with-meta (thaw-from-stream!* s) m))
+     id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
 
      id-byte    (.readByte s)
      id-short   (.readShort s)
      id-integer (.readInt s)
      id-long    (.readLong s)
-     id-bigint  (bigint (read-biginteger! s))
+     id-bigint  (bigint (read-biginteger s))
 
      id-float  (.readFloat s)
      id-double (.readDouble s)
-     id-bigdec (BigDecimal. (read-biginteger! s) (.readInt s))
+     id-bigdec (BigDecimal. (read-biginteger s) (.readInt s))
 
-     id-ratio (/ (bigint (read-biginteger! s))
-                 (bigint (read-biginteger! s)))
+     id-ratio (/ (bigint (read-biginteger s))
+                 (bigint (read-biginteger s)))
 
      ;;; DEPRECATED
      id-old-reader (read-string (.readUTF s))
      id-old-string (.readUTF s)
      id-old-map    (apply hash-map (repeatedly (* 2 (.readInt s))
-                                               #(thaw-from-stream!* s)))
+                                               #(thaw-from-stream s)))
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
 
-(defn- thaw-from-stream!
-  "Deserializes an object from given input stream."
-  [data-input-stream read-eval?]
-  (binding [*read-eval* read-eval?]
-    (let [;; Support older versions of Nippy that wrote a version header
-          maybe-schema-header (thaw-from-stream!* data-input-stream)]
-      (if (and (string? maybe-schema-header)
-               (.startsWith ^String maybe-schema-header "\u0000~"))
-        (thaw-from-stream!* data-input-stream)
-        maybe-schema-header))))
+;; TODO New `thaw` API
 
-(defn thaw-from-bytes
-  "Deserializes an object from given byte array."
-  [ba & {:keys [compressed? read-eval? password]
-         :or   {compressed? true
-                read-eval?  false ; For `read-string` injection safety - NB!!!
-                }}]
-  (try
-    (-> (let [ba (if password    (crypto/decrypt-aes128 password ba) ba)
-              ba (if compressed? (utils/uncompress-snappy ba) ba)]
-          ba)
-        (ByteArrayInputStream.)
-        (DataInputStream.)
-        (thaw-from-stream! read-eval?))
-    (catch Exception e
-      (throw (Exception.
-              (cond password    "Thaw failed. Unencrypted data or bad password?"
-                    compressed? "Thaw failed. Encrypted or uncompressed data?"
-                    :else       "Thaw failed. Encrypted and/or compressed data?")
-              e)))))
-
-(comment
-  (-> (freeze-to-bytes "my data" :password [:salted "password"])
-      (thaw-from-bytes))
-  (-> (freeze-to-bytes "my data" :compress? true)
-      (thaw-from-bytes :compressed? false)))
+;;;; Stress data
 
 (def stress-data "Reference data used for tests & benchmarks."
   (let []
@@ -323,3 +273,63 @@
      ;; Clojure 1.4+ tagged literals
      :tagged-uuid  (java.util.UUID/randomUUID)
      :tagged-date  (java.util.Date.)}))
+
+;;;; Deprecated API
+
+(defn- freeze-to-stream-outer
+  "Serializes x to given output stream."
+  ([data-output-stream x] ; For <= 1.0.1 compatibility
+     (freeze-to-stream-outer data-output-stream x true))
+  ([data-output-stream x print-dup?]
+     (binding [*print-dup* print-dup?] ; For `pr-str`
+       (freeze-to-stream x data-output-stream))))
+
+(defn freeze-to-bytes
+  "Serializes x to a byte array and returns the array."
+  ^bytes [x & {:keys [compress? print-dup? password]
+               :or   {compress?  true
+                      print-dup? true}}]
+  (let [ba     (ByteArrayOutputStream.)
+        stream (DataOutputStream. ba)]
+    (freeze-to-stream-outer stream x print-dup?)
+    (let [ba (.toByteArray ba)
+          ba (if compress? (utils/compress-snappy ba) ba)
+          ba (if password  (crypto/encrypt-aes128 password ba) ba)]
+      ba)))
+
+(defn- thaw-from-stream-outer
+  "Deserializes an object from given input stream."
+  [data-input-stream read-eval?]
+  (binding [*read-eval* read-eval?]
+    (let [;; Support older versions of Nippy that wrote a version header
+          maybe-schema-header (thaw-from-stream data-input-stream)]
+      (if (and (string? maybe-schema-header)
+               (.startsWith ^String maybe-schema-header "\u0000~"))
+        (thaw-from-stream data-input-stream)
+        maybe-schema-header))))
+
+(defn thaw-from-bytes
+  "Deserializes an object from given byte array."
+  [ba & {:keys [compressed? read-eval? password]
+         :or   {compressed? true
+                read-eval?  false ; For `read-string` injection safety - NB!!!
+                }}]
+  (try
+    (-> (let [ba (if password    (crypto/decrypt-aes128 password ba) ba)
+              ba (if compressed? (utils/uncompress-snappy ba) ba)]
+          ba)
+        (ByteArrayInputStream.)
+        (DataInputStream.)
+        (thaw-from-stream-outer read-eval?))
+    (catch Exception e
+      (throw (Exception.
+              (cond password    "Thaw failed. Unencrypted data or bad password?"
+                    compressed? "Thaw failed. Encrypted or uncompressed data?"
+                    :else       "Thaw failed. Encrypted and/or compressed data?")
+              e)))))
+
+(comment
+  (-> (freeze-to-bytes "my data" :password [:salted "password"])
+      (thaw-from-bytes))
+  (-> (freeze-to-bytes "my data" :compress? true)
+      (thaw-from-bytes :compressed? false)))
