@@ -6,7 +6,7 @@
 ;; Remove stuff from stress-data that breaks reader
 (def data (dissoc nippy/stress-data :queue :queue-empty :bytes))
 
-(defmacro bench [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 1000))
+(defmacro bench [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 2000))
 
 (defn reader-freeze [x] (binding [*print-dup* false] (pr-str x)))
 (defn reader-thaw   [x] (binding [*read-eval* false] (read-string x)))
@@ -18,8 +18,14 @@
 (def roundtrip-fast      (comp #(nippy/thaw-from-bytes % :compressed? false)
                                #(nippy/freeze-to-bytes % :compress?   false)))
 
-(defn autobench [] {:defaults  (bench (roundtrip-defaults  data))
-                    :encrypted (bench (roundtrip-encrypted data))})
+(defn autobench []
+  (println "Benchmarking roundtrips")
+  (println "-----------------------")
+  (let [results {:defaults  (bench (roundtrip-defaults  data))
+                 :encrypted (bench (roundtrip-encrypted data))
+                 :fast      (bench (roundtrip-fast      data))}]
+    (println results)
+    results))
 
 (comment
 
