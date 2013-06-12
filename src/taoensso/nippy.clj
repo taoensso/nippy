@@ -278,51 +278,29 @@
 
 ;;;; Deprecated API
 
-(defn- freeze-to-stream-outer
-  "Serializes x to given output stream."
-  ([data-output-stream x] ; For <= 1.0.1 compatibility
-     (freeze-to-stream-outer data-output-stream x true))
-  ([data-output-stream x print-dup?]
-     (binding [*print-dup* print-dup?] ; For `pr-str`
-       (freeze-to-stream x data-output-stream))))
-
-(defn freeze-to-bytes
-  "Serializes x to a byte array and returns the array."
+;; TODO Rewrite in :legacy terms
+(defn freeze-to-bytes "DEPRECATED: Use `freeze` instead."
   ^bytes [x & {:keys [compress? print-dup? password]
                :or   {compress?  true
                       print-dup? true}}]
   (let [ba     (ByteArrayOutputStream.)
         stream (DataOutputStream. ba)]
-    (freeze-to-stream-outer stream x print-dup?)
+    (binding [*print-dup* print-dup?] (freeze-to-stream x stream))
     (let [ba (.toByteArray ba)
           ba (if compress? (utils/compress-snappy ba) ba)
           ba (if password  (crypto/encrypt-aes128 password ba) ba)]
       ba)))
 
-(defn- thaw-from-stream-outer
-  "Deserializes an object from given input stream."
-  [data-input-stream read-eval?]
-  (binding [*read-eval* read-eval?]
-    (let [;; Support older versions of Nippy that wrote a version header
-          maybe-schema-header (thaw-from-stream data-input-stream)]
-      (if (and (string? maybe-schema-header)
-               (.startsWith ^String maybe-schema-header "\u0000~"))
-        (thaw-from-stream data-input-stream)
-        maybe-schema-header))))
-
-(defn thaw-from-bytes
-  "Deserializes an object from given byte array."
+;; TODO Rewrite in :legacy terms
+(defn thaw-from-bytes "DEPRECATED: Use `thaw` instead."
   [ba & {:keys [compressed? read-eval? password]
-         :or   {compressed? true
-                read-eval?  false ; For `read-string` injection safety - NB!!!
-                }}]
+         :or   {read-eval?  false ; For `read-string` injection safety - NB!!!
+                compressed? true}}]
   (try
-    (-> (let [ba (if password    (crypto/decrypt-aes128 password ba) ba)
-              ba (if compressed? (utils/uncompress-snappy ba) ba)]
-          ba)
-        (ByteArrayInputStream.)
-        (DataInputStream.)
-        (thaw-from-stream-outer read-eval?))
+    (let [ba (if password    (crypto/decrypt-aes128 password ba) ba)
+          ba (if compressed? (utils/uncompress-snappy ba) ba)
+          stream (DataInputStream. (ByteArrayInputStream. ba))]
+      (binding [*read-eval* read-eval?] (thaw-from-stream stream)))
     (catch Exception e
       (throw (Exception.
               (cond password    "Thaw failed. Unencrypted data or bad password?"
@@ -331,6 +309,7 @@
               e)))))
 
 (comment
+  ;; Errors
   (-> (freeze-to-bytes "my data" :password [:salted "password"])
       (thaw-from-bytes))
   (-> (freeze-to-bytes "my data" :compress? true)
