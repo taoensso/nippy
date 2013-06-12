@@ -167,16 +167,15 @@
 
 (defn freeze-to-bytes
   "Serializes x to a byte array and returns the array."
-  ^bytes [x & {:keys [crypto compress? print-dup? salt password]
-               :or   {crypto     crypto/crypto-default
-                      compress?  true
+  ^bytes [x & {:keys [compress? print-dup? password]
+               :or   {compress?  true
                       print-dup? true}}]
   (let [ba     (ByteArrayOutputStream.)
         stream (DataOutputStream. ba)]
     (freeze-to-stream! stream x print-dup?)
     (let [ba (.toByteArray ba)
           ba (if compress? (utils/compress-bytes ba) ba)
-          ba (if password  (crypto/encrypt crypto salt password ba) ba)]
+          ba (if password  (crypto/encrypt-aes128 password ba) ba)]
       ba)))
 
 ;;;; Thawing
@@ -255,11 +254,11 @@
 
 (defn thaw-from-bytes
   "Deserializes an object from given byte array."
-  [ba & {:keys [crypto compressed? read-eval? salt password]
-         :or   {crypto      crypto/crypto-default
+  [ba & {:keys [compressed? read-eval? password]
+         :or   {compressed? true
                 read-eval?  false ; For `read-string` injection safety - NB!!!
-                compressed? true}}]
-  (-> (let [ba (if password    (crypto/decrypt crypto salt password ba) ba)
+                }}]
+  (-> (let [ba (if password    (crypto/decrypt-aes128 password ba) ba)
             ba (if compressed? (utils/uncompress-bytes ba) ba)]
         ba)
       (ByteArrayInputStream.)
