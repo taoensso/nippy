@@ -13,6 +13,13 @@
                       clauses)
        ~(when default default))))
 
+(defn repeatedly* "Like `repeatedly` but faster and returns a vector."
+  [n f]
+  (loop [v (transient []) idx 0]
+    (if (>= idx n)
+      (persistent! v)
+      (recur (conj! v (f)) (inc idx)))))
+
 (defmacro time-ns "Returns number of nanoseconds it takes to execute body."
   [& body] `(let [t0# (System/nanoTime)] ~@body (- (System/nanoTime) t0#)))
 

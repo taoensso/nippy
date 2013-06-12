@@ -10,9 +10,9 @@
 (def roundtrip-encrypted (comp #(nippy/thaw-from-bytes % :password [:cached "secret"])
                                #(nippy/freeze-to-bytes % :password [:cached "secret"])))
 
-(expect test-data (roundtrip-defaults  test-data))
+(expect-focused test-data (roundtrip-defaults  test-data)) ; TODO
 (expect test-data (roundtrip-encrypted test-data))
-(expect ; Snappy lib compatibility
+#_(expect ; Snappy lib compatibility ; TODO
   (let [thaw             #(nippy/thaw-from-bytes % :compressed? false)
         ^bytes raw-ba    (nippy/freeze-to-bytes test-data :compress? false)
         ^bytes xerial-ba (org.xerial.snappy.Snappy/compress raw-ba)

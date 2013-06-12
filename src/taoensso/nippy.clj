@@ -168,13 +168,13 @@
 (defn coll-thaw
   "Thaws simple collection types."
   [^DataInputStream s]
-  (repeatedly (.readInt s) #(thaw-from-stream s)))
+  (utils/repeatedly* (.readInt s) #(thaw-from-stream s)))
 
 (defn coll-thaw-kvs
   "Thaws key-value collection types."
   [^DataInputStream s]
-  (repeatedly (/ (.readInt s) 2)
-              (fn [] [(thaw-from-stream s) (thaw-from-stream s)])))
+  (utils/repeatedly* (/ (.readInt s) 2)
+    (fn [] [(thaw-from-stream s) (thaw-from-stream s)])))
 
 (defn- thaw-from-stream
   [^DataInputStream s]
@@ -195,7 +195,9 @@
      id-sorted-set (into (sorted-set) (coll-thaw s))
      id-sorted-map (into (sorted-map) (coll-thaw-kvs s))
 
-     id-list    (into '() (reverse (coll-thaw s)))
+     ;;id-list    (into '() (reverse (coll-thaw s)))
+     ;;id-vector  (into  [] (coll-thaw s))
+     id-list    (into '() (rseq (coll-thaw s)))
      id-vector  (into  [] (coll-thaw s))
      id-set     (into #{} (coll-thaw s))
      id-map     (into  {} (coll-thaw-kvs s))
@@ -219,7 +221,7 @@
      ;;; DEPRECATED
      id-old-reader (read-string (.readUTF s))
      id-old-string (.readUTF s)
-     id-old-map    (apply hash-map (repeatedly (* 2 (.readInt s))
+     id-old-map    (apply hash-map (utils/repeatedly* (* 2 (.readInt s))
                                                #(thaw-from-stream s)))
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
