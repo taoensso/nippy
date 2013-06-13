@@ -10,7 +10,7 @@
 
 (defn freeze-reader [x] (binding [*print-dup* false] (pr-str x)))
 (defn thaw-reader   [x] (binding [*read-eval* false] (read-string x)))
-(def  roundtrip-reader (comp freeze-reader thaw-reader))
+(def  roundtrip-reader (comp thaw-reader freeze-reader))
 
 (def roundtrip-defaults  (comp thaw freeze))
 (def roundtrip-encrypted (comp #(thaw   % {:password [:cached "p"]})
@@ -64,6 +64,12 @@
        :data-size (count (freeze data {:compressor nil}))}})
 
     (println "Done! (Time for cake?)"))
+
+  ;;; 13 June 2013: Clojure 1.5.1, Nippy 2.0.0-alpha1
+  ;; {:reader    {:freeze 23124, :thaw 26469, :round 47674, :data-size 22923}}
+  ;; {:defaults  {:freeze 4007,  :thaw 2520,  :round 6038,  :data-size 12387}}
+  ;; {:encrypted {:freeze 5560,  :thaw 3867,  :round 9157,  :data-size 12405}}
+  ;; {:fast      {:freeze 3429,  :thaw 2078,  :round 5577,  :data-size 13237}}
 
   ;;; 11 June 2013: Clojure 1.5.1, Nippy 1.3.0-alpha1
   ;; {:reader    {:freeze 17042, :thaw 31579, :round 48379, :data-size 22954}}
