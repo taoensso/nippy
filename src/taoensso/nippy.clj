@@ -96,17 +96,17 @@
 
 (defn- read-utf8
   "Reads arbitrary byte data to an utf-8 string"
-  ^String [^ByteBuffer stream]
-  (let [size (.getInt stream)
+  ^String [^ByteBuffer bb]
+  (let [size (.getInt bb)
         ba   (byte-array size)]
-    (.get stream ba 0 size)
+    (.get bb ba 0 size)
     (String. ba "UTF-8")))
 
 (defn- read-biginteger
   "Wrapper around `read-bytes` for common case of reading a BigInteger.
   Note that as of Clojure 1.3, java.math.BigInteger ≠ clojure.lang.BigInt."
-  ^BigInteger [^ByteBuffer stream]
-  (BigInteger. (read-bytes stream)))
+  ^BigInteger [^ByteBuffer bb]
+  (BigInteger. (read-bytes bb)))
 
 ;;;; Freezing
 
@@ -215,14 +215,14 @@
 
 (defn coll-thaw
   "Thaws simple collection types."
-  [coll ^ByteBuffer s]
-  (utils/repeatedly-into coll (.getInt s) #(thaw-from-buffer s)))
+  [coll ^ByteBuffer bb]
+  (utils/repeatedly-into coll (.getInt bb) #(thaw-from-buffer bb)))
 
 (defn coll-thaw-kvs
   "Thaws key-value collection types."
-  [coll ^ByteBuffer s]
-  (utils/repeatedly-into coll (/ (.getInt s) 2)
-    (fn [] [(thaw-from-buffer s) (thaw-from-buffer s)])))
+  [coll ^ByteBuffer bb]
+  (utils/repeatedly-into coll (/ (.getInt bb) 2)
+    (fn [] [(thaw-from-buffer bb) (thaw-from-buffer bb)])))
 
 (defn- thaw-from-buffer
   [^ByteBuffer bb]
