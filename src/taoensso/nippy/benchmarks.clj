@@ -1,26 +1,31 @@
 (ns taoensso.nippy.benchmarks
   {:author "Peter Taoussanis"}
-  (:use     [taoensso.nippy :as nippy :only (freeze-to-bytes thaw-from-bytes)])
-  (:require [taoensso.nippy.utils  :as utils]
-            [taoensso.nippy.crypto :as crypto]))
+  (:require [taoensso.nippy :as nippy :refer (freeze thaw)]
+            [taoensso.nippy.utils :as utils]))
 
 ;; Remove stuff from stress-data that breaks reader
 (def data (dissoc nippy/stress-data :queue :queue-empty :bytes))
 
-(defmacro bench [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 1000))
+(defmacro bench [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 2000))
 
-(defn reader-freeze [x] (binding [*print-dup* false] (pr-str x)))
-(defn reader-thaw   [x] (binding [*read-eval* false] (read-string x)))
-(def  reader-roundtrip (comp reader-thaw reader-freeze))
+(defn freeze-reader [x] (binding [*print-dup* false] (pr-str x)))
+(defn thaw-reader   [x] (binding [*read-eval* false] (read-string x)))
+(def  roundtrip-reader (comp thaw-reader freeze-reader))
 
-(def roundtrip-defaults  (comp nippy/thaw-from-bytes nippy/freeze-to-bytes))
-(def roundtrip-encrypted (comp #(nippy/thaw-from-bytes % :password [:cached "p"])
-                               #(nippy/freeze-to-bytes % :password [:cached "p"])))
-(def roundtrip-fast      (comp #(nippy/thaw-from-bytes % :compressed? false)
-                               #(nippy/freeze-to-bytes % :compress?   false)))
+(def roundtrip-defaults  (comp thaw freeze))
+(def roundtrip-encrypted (comp #(thaw   % {:password [:cached "p"]})
+                               #(freeze % {:password [:cached "p"]})))
+(def roundtrip-fast      (comp #(thaw   % {})
+                               #(freeze % {:compressor nil})))
 
-(defn autobench [] (bench (roundtrip-defaults  data)
-                          (roundtrip-encrypted data)))
+(defn autobench []
+  (println "Benchmarking roundtrips")
+  (println "-----------------------")
+  (let [results {:defaults  (bench (roundtrip-defaults  data))
+                 :encrypted (bench (roundtrip-encrypted data))
+                 :fast      (bench (roundtrip-fast      data))}]
+    (println results)
+    results))
 
 (comment
 
@@ -30,37 +35,41 @@
 
     (println
      {:reader
-      {:freeze (bench (reader-freeze data))
-       :thaw   (let [frozen (reader-freeze data)]
-                 (bench (reader-thaw frozen)))
-       :round  (bench (reader-roundtrip data))
-       :data-size (count (.getBytes ^String (reader-freeze data) "UTF-8"))}})
+      {:freeze    (bench (freeze-reader data))
+       :thaw      (let [frozen (freeze-reader data)] (bench (thaw-reader frozen)))
+       :round     (bench (roundtrip-reader data))
+       :data-size (count (.getBytes ^String (freeze-reader data) "UTF-8"))}})
 
     (println
      {:defaults
-      {:freeze (bench (freeze-to-bytes data))
-       :thaw   (let [frozen (freeze-to-bytes data)]
-                 (bench (thaw-from-bytes frozen)))
-       :round  (bench (roundtrip-defaults data))
-       :data-size (count (freeze-to-bytes data))}})
+      {:freeze    (bench (freeze data))
+       :thaw      (let [frozen (freeze data)] (bench (thaw frozen)))
+       :round     (bench (roundtrip-defaults data))
+       :data-size (count (freeze data))}})
 
     (println
      {:encrypted
-      {:freeze (bench (freeze-to-bytes data :password [:cached "p"]))
-       :thaw   (let [frozen (freeze-to-bytes data :password [:cached "p"])]
-                 (bench (thaw-from-bytes frozen :password [:cached "p"])))
-       :round  (bench (roundtrip-encrypted data))
-       :data-size (count (freeze-to-bytes data :password [:cached "p"]))}})
+      {:freeze    (bench (freeze data {:password [:cached "p"]}))
+       :thaw      (let [frozen (freeze data {:password [:cached "p"]})]
+                    (bench (thaw frozen {:password [:cached "p"]})))
+       :round     (bench (roundtrip-encrypted data))
+       :data-size (count (freeze data {:password [:cached "p"]}))}})
 
     (println
      {:fast
-      {:freeze (bench (freeze-to-bytes data :compress? false))
-       :thaw   (let [frozen (freeze-to-bytes data :compress? false)]
-                 (bench (thaw-from-bytes frozen :compressed? false)))
-       :round  (bench (roundtrip-fast data))
-       :data-size (count (freeze-to-bytes data :compress? false))}})
+      {:freeze    (bench (freeze data {:compressor nil}))
+       :thaw      (let [frozen (freeze data {:compressor nil})]
+                    (bench (thaw frozen)))
+       :round     (bench (roundtrip-fast data))
+       :data-size (count (freeze data {:compressor nil}))}})
 
     (println "Done! (Time for cake?)"))
+
+  ;;; 13 June 2013: Clojure 1.5.1, Nippy 2.0.0-alpha1
+  ;; {:reader    {:freeze 23124, :thaw 26469, :round 47674, :data-size 22923}}
+  ;; {:defaults  {:freeze 4007,  :thaw 2520,  :round 6038,  :data-size 12387}}
+  ;; {:encrypted {:freeze 5560,  :thaw 3867,  :round 9157,  :data-size 12405}}
+  ;; {:fast      {:freeze 3429,  :thaw 2078,  :round 5577,  :data-size 13237}}
 
   ;;; 11 June 2013: Clojure 1.5.1, Nippy 1.3.0-alpha1
   ;; {:reader    {:freeze 17042, :thaw 31579, :round 48379, :data-size 22954}}
