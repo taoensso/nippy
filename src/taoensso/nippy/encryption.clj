@@ -1,24 +1,19 @@
-(ns taoensso.nippy.crypto
+(ns taoensso.nippy.encryption
   "Alpha - subject to change.
   Simple no-nonsense crypto with reasonable defaults. Because your Clojure data
   deserves some privacy."
   {:author "Peter Taoussanis"}
-  (:require [clojure.string       :as str]
-            [taoensso.nippy.utils :as utils]))
+  (:require [taoensso.nippy.utils :as utils]))
 
 ;;;; Interface
 
-(defprotocol IEncrypter
-  (gen-key ^javax.crypto.spec.SecretKeySpec [encrypter salt-ba pwd])
-  (encrypt ^bytes [encrypter pwd ba])
-  (decrypt ^bytes [encrypter pwd ba]))
+(defprotocol IEncryptor
+  (header-id [encryptor]) ; Unique, >0, <= 128
+  (encrypt   ^bytes   [encryptor pwd ba])
+  (decrypt   ^bytes   [encryptor pwd ba]))
 
-(defrecord AES128Encrypter [key-work-factor key-cache])
+;;;; Default digests, ciphers, etc.
 
-;;;; Digests, ciphers, etc.
-
-;; 128bit keys have good JVM availability and are
-;; entirely sufficient, Ref. http://goo.gl/2YRQG
 (def ^:private ^:const aes128-block-size (int 16))
 (def ^:private ^:const salt-size         (int 16))
 
@@ -36,10 +31,10 @@
 (defn- sha512-key
   "SHA512-based key generator. Good JVM availability without extra dependencies
   (PBKDF2, bcrypt, scrypt, etc.). Decent security with multiple rounds."
-  [salt-ba ^String pwd key-work-factor]
+  ^javax.crypto.spec.SecretKeySpec [salt-ba ^String pwd]
   (loop [^bytes ba (let [pwd-ba (.getBytes pwd "UTF-8")]
                      (if salt-ba (utils/ba-concat salt-ba pwd-ba) pwd-ba))
-         n (* (int Short/MAX_VALUE) key-work-factor)]
+         n (* (int Short/MAX_VALUE) (if salt-ba 5 64))]
     (if-not (zero? n)
       (recur (.digest sha512-md ba) (dec n))
       (-> ba (java.util.Arrays/copyOf aes128-block-size)
@@ -52,37 +47,60 @@
   (time (sha512-key nil "hi" 128)) ; ~4500ms (paranoid)
   )
 
-;;;; Default implementation
+;;;; Default implementations
 
-(extend-type AES128Encrypter
-  IEncrypter
-  (gen-key [{:keys [key-work-factor key-cache]} salt-ba pwd]
-    ;; Trade-off: salt-ba and key-cache mutually exclusive
-    (utils/memoized key-cache sha512-key salt-ba pwd key-work-factor))
+(defn- destructure-typed-pwd
+  [typed-password]
+  (letfn [(throw-ex []
+            (throw (Exception.
+              (str "Expected password form: "
+                   "[<#{:salted :cached}> <password-string>].\n "
+                   "See `default-aes128-encryptor` docstring for details!"))))]
+    (if-not (vector? typed-password)
+      (throw-ex)
+      (let [[type password] typed-password]
+        (if-not (#{:salted :cached} type)
+          (throw-ex)
+          [type password])))))
 
-  (encrypt [{:keys [key-cache] :as this} pwd data-ba]
-    (let [salt?     (not key-cache)
-          iv-ba     (rand-bytes aes128-block-size)
-          salt-ba   (when salt? (rand-bytes salt-size))
-          prefix-ba (if-not salt? iv-ba (utils/ba-concat iv-ba salt-ba))
-          key       (gen-key this salt-ba pwd)
-          iv        (javax.crypto.spec.IvParameterSpec. iv-ba)]
+(comment (destructure-typed-pwd [:salted "foo"]))
+
+(defrecord DefaultAES128Encryptor [key-cache]
+  IEncryptor
+  (header-id [_] 1)
+
+  (encrypt [this typed-pwd data-ba]
+    (let [[type pwd] (destructure-typed-pwd typed-pwd)
+          salt?      (= type :salted)
+          iv-ba      (rand-bytes aes128-block-size)
+          salt-ba    (when salt? (rand-bytes salt-size))
+          prefix-ba  (if-not salt? iv-ba (utils/ba-concat iv-ba salt-ba))
+          key        (utils/memoized (when-not salt? (:key-cache this))
+                       sha512-key salt-ba pwd)
+          iv         (javax.crypto.spec.IvParameterSpec. iv-ba)]
       (.init aes128-cipher javax.crypto.Cipher/ENCRYPT_MODE key iv)
       (utils/ba-concat prefix-ba (.doFinal aes128-cipher data-ba))))
 
-  (decrypt [{:keys [key-cache] :as this} pwd ba]
-    (let [salt?       (not key-cache)
+  (decrypt [this typed-pwd ba]
+    (let [[type pwd] (destructure-typed-pwd typed-pwd)
+          salt?      (= type :salted)
           prefix-size (+ aes128-block-size (if salt? salt-size 0))
           [prefix-ba data-ba] (utils/ba-split ba prefix-size)
           [iv-ba salt-ba]     (if-not salt? [prefix-ba nil]
                                 (utils/ba-split prefix-ba aes128-block-size))
-          key (gen-key this salt-ba pwd)
+          key (utils/memoized (when-not salt? (:key-cache this))
+                sha512-key salt-ba pwd)
           iv  (javax.crypto.spec.IvParameterSpec. iv-ba)]
       (.init    aes128-cipher javax.crypto.Cipher/DECRYPT_MODE key iv)
       (.doFinal aes128-cipher data-ba))))
 
-(def aes128-salted
-  "USE CASE: You want more than a small, finite number of passwords (e.g. each
+(def default-aes128-encryptor
+  "Alpha - subject to change.
+  Default 128bit AES encryptor with multi-round SHA-512 keygen.
+
+  Password form [:salted \"my-password\"]
+  ---------------------------------------
+  USE CASE: You want more than a small, finite number of passwords (e.g. each
              item encrypted will use a unique user-provided password).
 
   IMPLEMENTATION: Uses a relatively cheap key hash, but automatically salts
@@ -94,13 +112,13 @@
         particular key.
 
   Slower than `aes128-cached`, and easier to attack any particular key - but
-  keys are independent."
-  (AES128Encrypter. 5 nil))
+  keys are independent.
 
-(def aes128-cached
-  "USE CASE: You want only a small, finite number of passwords (e.g. a limited
-             number of staff/admins, or you'll be using a single password to
-             encrypt many items).
+  Password form [:cached \"my-password\"]
+  ---------------------------------------
+  USE CASE: You want only a small, finite number of passwords (e.g. a limited
+            number of staff/admins, or you'll be using a single password to
+            encrypt many items).
 
   IMPLEMENTATION: Uses a _very_ expensive (but cached) key hash, and no salt.
 
@@ -112,37 +130,19 @@
 
   Faster than `aes128-salted`, and harder to attack any particular key - but
   increased danger if a key is somehow compromised."
-  (AES128Encrypter. 64 (atom {})))
+  (DefaultAES128Encryptor. (atom {})))
 
-(defn- destructure-typed-password
-  "[<type> <password>] -> [Encrypter <password>]"
-  [typed-password]
-  (letfn [(throw-ex []
-            (throw (Exception.
-              (str "Expected password form: "
-                   "[<#{:salted :cached}> <password-string>].\n "
-                   "See `aes128-salted`, `aes128-cached` for details."))))]
-    (if-not (vector? typed-password)
-      (throw-ex)
-      (let [[type password] typed-password]
-        [(case type :salted aes128-salted :cached aes128-cached (throw-ex))
-         password]))))
-
-(defn encrypt-aes128 [typed-password ba]
-  (let [[encrypter password] (destructure-typed-password typed-password)]
-    (encrypt encrypter password ba)))
-
-(defn decrypt-aes128 [typed-password ba]
-  (let [[encrypter password] (destructure-typed-password typed-password)]
-    (decrypt encrypter password ba)))
+;;;; Default implementation
 
 (comment
-  (encrypt-aes128 "my-password" (.getBytes "Secret message")) ; Malformed
-  (time (gen-key aes128-salted nil "my-password"))
-  (time (gen-key aes128-cached nil "my-password"))
-  (time (->> (.getBytes "Secret message" "UTF-8")
-             (encrypt-aes128 [:salted "p"])
-             (encrypt-aes128 [:cached "p"])
-             (decrypt-aes128 [:cached "p"])
-             (decrypt-aes128 [:salted "p"])
+  (def dae default-aes128-encryptor)
+  (def secret-ba (.getBytes "Secret message" "UTF-8"))
+  (encrypt dae "p" secret-ba) ; Malformed
+  (time (encrypt dae [:salted "p"] secret-ba))
+  (time (encrypt dae [:cached "p"] secret-ba))
+  (time (->> secret-ba
+             (encrypt dae [:salted "p"])
+             (encrypt dae [:cached "p"])
+             (decrypt dae [:cached "p"])
+             (decrypt dae [:salted "p"])
              (String.))))

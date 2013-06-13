@@ -69,10 +69,6 @@
 (comment (memoized nil +)
          (memoized nil + 5 12))
 
-(defn compress-snappy   ^bytes [^bytes ba] (org.iq80.snappy.Snappy/compress   ba))
-(defn uncompress-snappy ^bytes [^bytes ba] (org.iq80.snappy.Snappy/uncompress ba
-                                             0 (alength ba)))
-
 (defn ba-concat ^bytes [^bytes ba1 ^bytes ba2]
   (let [s1  (alength ba1)
         s2  (alength ba2)
