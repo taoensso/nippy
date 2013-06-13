@@ -2,14 +2,16 @@ Current [semantic](http://semver.org/) version:
 
 ```clojure
 [com.taoensso/nippy "1.2.1"]        ; Stable
-[com.taoensso/nippy "1.3.0-alpha3"] ; Development (adds crypto support!)
+[com.taoensso/nippy "2.0.0-alpha1"] ; Development (see notes below)
 ```
+
+2.x adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), and hugely improved performance. It **is backwards compatible**, but please note that the `freeze-to-bytes`/`thaw-from-bytes` API has been **deprecated** in favor of `freeze`/`thaw`.
 
 # Nippy, a Clojure serialization library
 
 Clojure's [rich data types](http://clojure.org/datatypes) are *awesome*. And its [reader](http://clojure.org/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
-Nippy is an attempt to provide a drop-in, high-performance alternative to the reader. It's a fork of [Deep-Freeze](https://github.com/halgari/deep-freeze) and is used as the [Carmine Redis client](https://github.com/ptaoussanis/carmine) serializer.
+Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**. It's used, among others, as the [Carmine Redis client](https://github.com/ptaoussanis/carmine) and [Faraday DynamoDB client]https://github.com/ptaoussanis/faraday) serializer.
 
 ## What's in the box™?
   * Small, uncomplicated **all-Clojure** library.
@@ -17,8 +19,8 @@ Nippy is an attempt to provide a drop-in, high-performance alternative to the re
   * Comprehesive, extensible **support for all major data types**.
   * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
   * **Full test coverage** for every supported type.
-  * [Snappy](http://code.google.com/p/snappy/) **integrated de/compression** for efficient storage and network transfer.
-  * Enable **high-strength encryption** with a single `:password [:salted "my-password"]` option. (1.3.0+)
+  * Fully pluggable **compression**, including built-in high-performance [Snappy](http://code.google.com/p/snappy/) compressor.
+  * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option. (2.0.0+)
 
 ## Getting started
 
@@ -83,14 +85,14 @@ nippy/stress-data
 Serialize it:
 
 ```clojure
-(def frozen-stress-data (nippy/freeze-to-bytes nippy/stress-data))
+(def frozen-stress-data (nippy/freeze nippy/stress-data))
 => #<byte[] [B@3253bcf3>
 ```
 
 Deserialize it:
 
 ```clojure
-(nippy/thaw-from-bytes frozen-stress-data)
+(nippy/thaw frozen-stress-data)
 => {:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
     :nil          nil
     :boolean      true
@@ -101,14 +103,14 @@ Couldn't be simpler!
 
 ### Encryption (currently in **ALPHA**)
 
-As of 1.3.0, Nippy also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
+As of 2.0.0, Nippy also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
 
 ```clojure
-(nippy/freeze-to-bytes nippy/stress-data :password [:salted "my-password"]) ; Encrypt
-(nippy/thaw-from-bytes <encrypted-data>  :password [:salted "my-password"]) ; Decrypt
+(nippy/freeze nippy/stress-data {:password [:salted "my-password"]}) ; Encrypt
+(nippy/thaw   <encrypted-data>  {:password [:salted "my-password"]}) ; Decrypt
 ```
 
-There's two forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-salted` and `aes128-cached` [docstrings](http://ptaoussanis.github.io/nippy/taoensso.nippy.crypto.html) for a detailed explanation of why/when you'd want one or the other.
+There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `default-aes128-encryptor` [docstring](http://ptaoussanis.github.io/nippy/taoensso.nippy.encryption.html) for a detailed explanation of why/when you'd want one or the other.
 
 ## Performance
 
