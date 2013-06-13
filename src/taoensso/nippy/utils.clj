@@ -69,6 +69,8 @@
 (comment (memoized nil +)
          (memoized nil + 5 12))
 
+(defn ba= [^bytes x ^bytes y] (java.util.Arrays/equals x y))
+
 (defn ba-concat ^bytes [^bytes ba1 ^bytes ba2]
   (let [s1  (alength ba1)
         s2  (alength ba2)

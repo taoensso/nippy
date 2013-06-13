@@ -8,9 +8,8 @@
 ;;;; Interface
 
 (defprotocol IEncryptor
-  (header-id [encryptor]) ; Unique, >0, <= 128
-  (encrypt   ^bytes   [encryptor pwd ba])
-  (decrypt   ^bytes   [encryptor pwd ba]))
+  (encrypt ^bytes [encryptor pwd ba])
+  (decrypt ^bytes [encryptor pwd ba]))
 
 ;;;; Default digests, ciphers, etc.
 
@@ -67,8 +66,6 @@
 
 (defrecord DefaultAES128Encryptor [key-cache]
   IEncryptor
-  (header-id [_] 1)
-
   (encrypt [this typed-pwd data-ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
           salt?      (= type :salted)

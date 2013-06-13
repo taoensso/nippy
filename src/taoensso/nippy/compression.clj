@@ -6,7 +6,6 @@
 ;;;; Interface
 
 (defprotocol ICompressor
-  (header-id [compressor]) ; Unique, >0, <= 128
   (compress   ^bytes [compressor ba])
   (decompress ^bytes [compressor ba]))
 
@@ -14,7 +13,6 @@
 
 (deftype DefaultSnappyCompressor []
   ICompressor
-  (header-id  [_] 1)
   (compress   [_ ba] (org.iq80.snappy.Snappy/compress   ba))
   (decompress [_ ba] (org.iq80.snappy.Snappy/uncompress ba 0 (alength ^bytes ba))))
 

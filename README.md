@@ -2,10 +2,10 @@ Current [semantic](http://semver.org/) version:
 
 ```clojure
 [com.taoensso/nippy "1.2.1"]        ; Stable
-[com.taoensso/nippy "2.0.0-alpha4"] ; EXPERIMENTAL! (see notes below)
+[com.taoensso/nippy "2.0.0-alpha5"] ; Development (testers only!)
 ```
 
-2.x adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), and hugely improved performance. It **is backwards compatible**, but please note that the `freeze-to-bytes`/`thaw-from-bytes` API has been **deprecated** in favor of `freeze`/`thaw`. **CURRENTLY EXPERIMENTAL** - don't use 2.x yet for anything besides testing.
+2.x adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), and hugely improved performance. It **is backwards compatible**, but please note that the old `freeze-to-bytes`/`thaw-from-bytes` API has been **deprecated** in favor of `freeze`/`thaw`.
 
 # Nippy, a Clojure serialization library
 
