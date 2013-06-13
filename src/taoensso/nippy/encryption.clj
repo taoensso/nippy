@@ -31,7 +31,7 @@
 (defn- sha512-key
   "SHA512-based key generator. Good JVM availability without extra dependencies
   (PBKDF2, bcrypt, scrypt, etc.). Decent security with multiple rounds."
-  ^javax.crypto.spec.SecretKeySpec [salt-ba ^String pwd]
+  [salt-ba ^String pwd]
   (loop [^bytes ba (let [pwd-ba (.getBytes pwd "UTF-8")]
                      (if salt-ba (utils/ba-concat salt-ba pwd-ba) pwd-ba))
          n (* (int Short/MAX_VALUE) (if salt-ba 5 64))]
@@ -78,7 +78,8 @@
           key        (utils/memoized (when-not salt? (:key-cache this))
                        sha512-key salt-ba pwd)
           iv         (javax.crypto.spec.IvParameterSpec. iv-ba)]
-      (.init aes128-cipher javax.crypto.Cipher/ENCRYPT_MODE key iv)
+      (.init aes128-cipher javax.crypto.Cipher/ENCRYPT_MODE
+             ^javax.crypto.spec.SecretKeySpec key iv)
       (utils/ba-concat prefix-ba (.doFinal aes128-cipher data-ba))))
 
   (decrypt [this typed-pwd ba]
@@ -91,7 +92,8 @@
           key (utils/memoized (when-not salt? (:key-cache this))
                 sha512-key salt-ba pwd)
           iv  (javax.crypto.spec.IvParameterSpec. iv-ba)]
-      (.init    aes128-cipher javax.crypto.Cipher/DECRYPT_MODE key iv)
+      (.init aes128-cipher javax.crypto.Cipher/DECRYPT_MODE
+             ^javax.crypto.spec.SecretKeySpec key iv)
       (.doFinal aes128-cipher data-ba))))
 
 (def default-aes128-encryptor

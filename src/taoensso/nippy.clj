@@ -1,16 +1,28 @@
 (ns taoensso.nippy
-  "Simple, high-performance Clojure serialization library. Adapted from
-  Deep-Freeze."
+  "Simple, high-performance Clojure serialization library. Originally adapted
+  from Deep-Freeze."
   {:author "Peter Taoussanis"}
-  (:require [taoensso.nippy.utils  :as utils]
-            [taoensso.nippy.crypto :as crypto])
+  (:require [taoensso.nippy
+             (utils       :as utils)
+             (compression :as compression)
+             (encryption  :as encryption)])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
              PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
              IPersistentSet IPersistentCollection]))
 
-;;;; Header IDs ; TODO
+;; TODO Allow ba or wrapped-ba input?
+;; TODO Provide ToFreeze, Frozen, Encrypted, etc. tooling helpers
+
+;;;; Header IDs
+;; Nippy 2.x+ prefixes frozen data with a 5-byte header:
+
+(def ^:const id-nippy-magic-prefix (byte 17))
+(def ^:const id-nippy-header-ver   (byte 0))
+;; * Compressor id (0 if no compressor)
+;; * Encryptor id  (0 if no encryptor)
+(def ^:const id-nippy-reserved     (byte 0))
 
 ;;;; Data type IDs
 
@@ -159,7 +171,29 @@
 ;; Use Clojure's own reader as final fallback
 (freezer Object id-reader (write-bytes s (.getBytes (pr-str x) "UTF-8")))
 
-;; TODO New `freeze` API
+(defn- wrap-nippy-header [data-ba compressor encryptor password]
+  (let [header-ba (byte-array
+                   [id-nippy-magic-prefix
+                    id-nippy-header-ver
+                    (byte (if compressor (compression/header-id compressor) 0))
+                    (byte (if password   (encryption/header-id  encryptor)  0))
+                    id-nippy-reserved])]
+    (utils/ba-concat header-ba data-ba)))
+
+(defn freeze
+  "Serializes arg (any Clojure data type) to a byte array. Enable
+  `:legacy-mode?` flag to produce bytes readable by Nippy < 2.x."
+  ^bytes [x & [{:keys [print-dup? password compressor encryptor legacy-mode?]
+                :or   {print-dup? true
+                       compressor compression/default-snappy-compressor
+                       encryptor  encryption/default-aes128-encryptor}}]]
+  (let [ba     (ByteArrayOutputStream.)
+        stream (DataOutputStream. ba)]
+    (binding [*print-dup* print-dup?] (freeze-to-stream x stream))
+    (let [ba (.toByteArray ba)
+          ba (if compressor (compression/compress compressor ba) ba)
+          ba (if password   (encryption/encrypt encryptor password ba) ba)]
+      (if legacy-mode? ba (wrap-nippy-header ba compressor encryptor password)))))
 
 ;;;; Thawing
 
@@ -224,7 +258,80 @@
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
 
-;; TODO New `thaw` API
+(defn thaw
+  "Deserializes frozen bytes to their original Clojure data type. Enable
+  `:legacy-mode?` to read bytes written by Nippy < 2.x.
+
+  WARNING: Enabling `:read-eval?` can lead to security vulnerabilities unless
+  you are sure you know what you're doing."
+  [^bytes ba & [{:keys [read-eval? password compressor encryptor legacy-mode?
+                        strict?]
+                 :or   {compressor compression/default-snappy-compressor
+                        encryptor  encryption/default-aes128-encryptor}}]]
+
+  (let [ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed. " msg) e)))
+        thaw-data (fn [data-ba compressor password]
+          (let [ba data-ba
+                ba (if password   (encryption/decrypt encryptor password ba) ba)
+                ba (if compressor (compression/decompress compressor ba) ba)
+                stream (DataInputStream. (ByteArrayInputStream. ba))]
+            (binding [*read-eval* read-eval?] (thaw-from-stream stream))))]
+
+    (if legacy-mode? ; Nippy < 2.x
+      (try (thaw-data ba compressor password)
+           (catch Exception e
+             (cond password   (ex "Unencrypted data or wrong password?" e)
+                   compressor (ex "Encrypted or uncompressed data?"   e)
+                   :else      (ex "Encrypted and/or compressed data?" e))))
+
+      ;; Nippy >= 2.x, we have a header!
+      (let [[[id-magic* id-header* id-comp* id-enc* _] data-ba]
+            (utils/ba-split ba 5)
+
+            compressed? (not (zero? id-comp*))
+            encrypted?  (not (zero? id-enc*))]
+
+        (cond
+         (not= id-magic* id-nippy-magic-prefix)
+         (ex (str "Not Nippy data, data frozen with Nippy < 2.x, "
+                  "or data may be corrupt?\n"
+                  "Enable `:legacy-mode?` option for data frozen with Nippy < 2.x."))
+
+         (> id-header* id-nippy-header-ver)
+         (ex "Data frozen with newer Nippy version. Please upgrade.")
+
+         (and strict? (not encrypted?) password)
+         (ex (str "Data is not encrypted. Try again w/o password.\n"
+                  "Disable `:strict?` option to ignore this error. "))
+
+         (and strict? (not compressed?) compressor)
+         (ex (str "Data is not compressed. Try again w/o compressor.\n"
+                  "Disable `:strict?` option to ignore this error."))
+
+         (and encrypted? (not password))
+         (ex "Data is encrypted. Please try again with a password.")
+
+         (and encrypted? password
+              (not= id-enc* (encryption/header-id encryptor)))
+         (ex "Data encrypted with a different Encrypter.")
+
+         (and compressed? compressor
+              (not= id-comp* (compression/header-id compressor)))
+         (ex "Data compressed with a different Compressor.")
+
+         :else
+         (try (thaw-data data-ba (when compressed? compressor)
+                                 (when encrypted?  password))
+              (catch Exception e
+                (if (and encrypted? password)
+                  (ex "Wrong password, or data may be corrupt?" e)
+                  (ex "Data may be corrupt?" e)))))))))
+
+(comment (thaw (freeze "hello"))
+         (thaw (freeze "hello" {:compressor nil}))
+         (thaw (freeze "hello" {:compressor nil}) {:strict? true}) ; ex
+         (thaw (freeze "hello" {:password [:salted "p"]})) ; ex
+         (thaw (freeze "hello") {:password [:salted "p"]}))
 
 ;;;; Stress data
 
@@ -276,39 +383,19 @@
 
 ;;;; Deprecated API
 
-;; TODO Rewrite in :legacy terms
 (defn freeze-to-bytes "DEPRECATED: Use `freeze` instead."
-  ^bytes [x & {:keys [compress? print-dup? password]
-               :or   {compress?  true
-                      print-dup? true}}]
-  (let [ba     (ByteArrayOutputStream.)
-        stream (DataOutputStream. ba)]
-    (binding [*print-dup* print-dup?] (freeze-to-stream x stream))
-    (let [ba (.toByteArray ba)
-          ba (if compress? (utils/compress-snappy ba) ba)
-          ba (if password  (crypto/encrypt-aes128 password ba) ba)]
-      ba)))
+  ^bytes [x & {:keys [print-dup? compress? password]
+               :or   {print-dup? true
+                      compress?  true}}]
+  (freeze x {:print-dup?   print-dup?
+             :compressor   (when compress? compression/default-snappy-compressor)
+             :password     password
+             :legacy-mode? true}))
 
-;; TODO Rewrite in :legacy terms
 (defn thaw-from-bytes "DEPRECATED: Use `thaw` instead."
-  [ba & {:keys [compressed? read-eval? password]
-         :or   {read-eval?  false ; For `read-string` injection safety - NB!!!
-                compressed? true}}]
-  (try
-    (let [ba (if password    (crypto/decrypt-aes128 password ba) ba)
-          ba (if compressed? (utils/uncompress-snappy ba) ba)
-          stream (DataInputStream. (ByteArrayInputStream. ba))]
-      (binding [*read-eval* read-eval?] (thaw-from-stream stream)))
-    (catch Exception e
-      (throw (Exception.
-              (cond password    "Thaw failed. Unencrypted data or bad password?"
-                    compressed? "Thaw failed. Encrypted or uncompressed data?"
-                    :else       "Thaw failed. Encrypted and/or compressed data?")
-              e)))))
-
-(comment
-  ;; Errors
-  (-> (freeze-to-bytes "my data" :password [:salted "password"])
-      (thaw-from-bytes))
-  (-> (freeze-to-bytes "my data" :compress? true)
-      (thaw-from-bytes :compressed? false)))
+  [ba & {:keys [read-eval? compressed? password]
+         :or   {compressed? true}}]
+  (thaw ba {:read-eval?   read-eval?
+            :compressor   (when compressed? compression/default-snappy-compressor)
+            :password     password
+            :legacy-mode? true}))
