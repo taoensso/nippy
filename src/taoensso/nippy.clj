@@ -89,19 +89,16 @@
 
 (defn- read-bytes
   "Reads arbitrary byte data, preceded by its length."
-  ^bytes [^ByteBuffer stream]
-  (let [size (.getInt stream)
+  ^bytes [^ByteBuffer bb]
+  (let [size (.getInt bb)
         ba   (byte-array size)]
-    (.get stream ba 0 size)
+    (.get bb ba 0 size)
     ba))
 
 (defn- read-utf8
   "Reads arbitrary byte data to an utf-8 string"
   ^String [^ByteBuffer bb]
-  (let [size (.getInt bb)
-        ba   (byte-array size)]
-    (.get bb ba 0 size)
-    (String. ba "UTF-8")))
+  (String. (read-bytes bb) "UTF-8"))
 
 (defn- read-biginteger
   "Wrapper around `read-bytes` for common case of reading a BigInteger.
@@ -184,7 +181,7 @@
          (write-biginteger s (.denominator x)))
 
 ;; Use Clojure's own reader as final fallback
-(freezer Object id-reader (write-bytes s (.getBytes (pr-str x) "UTF-8")))
+(freezer Object id-reader (write-utf8 s (pr-str x)))
 
 (defn- wrap-nippy-header [data-ba compressor encryptor password]
   (let [header-ba (byte-array
