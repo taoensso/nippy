@@ -13,8 +13,8 @@
                       clauses)
        ~(when default default))))
 
-(defn repeatedly*
-  "Like `repeatedly` but faster and returns given collection type."
+(defn repeatedly-into
+  "Like `repeatedly` but faster and `conj`s items into given collection."
   [coll n f]
   (if-not (instance? clojure.lang.IEditableCollection coll)
     (loop [v coll idx 0]
