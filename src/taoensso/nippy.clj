@@ -16,13 +16,14 @@
 ;; TODO Provide ToFreeze, Frozen, Encrypted, etc. tooling helpers
 
 ;;;; Header IDs
-;; Nippy 2.x+ prefixes frozen data with a 5-byte header:
-
-(def ^:const id-nippy-magic-prefix (byte 17))
-(def ^:const id-nippy-header-ver   (byte 0))
+;; Nippy 2.x+ prefixes frozen data with a header:
+(def ^:const header-len 6)
+(def ^:const id-nippy-magic-id1  (byte  17))
+(def ^:const id-nippy-magic-id2  (byte -42))
+(def ^:const id-nippy-header-ver (byte   0))
 ;; * Compressor id (0 if no compressor)
 ;; * Encryptor id  (0 if no encryptor)
-(def ^:const id-nippy-reserved     (byte 0))
+(def ^:const id-nippy-reserved   (byte   0))
 
 ;;;; Data type IDs
 
@@ -173,7 +174,8 @@
 
 (defn- wrap-nippy-header [data-ba compressor encryptor password]
   (let [header-ba (byte-array
-                   [id-nippy-magic-prefix
+                   [id-nippy-magic-id1
+                    id-nippy-magic-id2
                     id-nippy-header-ver
                     (byte (if compressor (compression/header-id compressor) 0))
                     (byte (if password   (encryption/header-id  encryptor)  0))
@@ -181,9 +183,9 @@
     (utils/ba-concat header-ba data-ba)))
 
 (defn freeze
-  "Serializes arg (any Clojure data type) to a byte array. Enable
-  `:legacy-mode?` flag to produce bytes readable by Nippy < 2.x."
-  ^bytes [x & [{:keys [print-dup? password compressor encryptor legacy-mode?]
+  "Serializes arg (any Clojure data type) to a byte array. Set :legacy-mode to
+  true to produce bytes readble by Nippy < 2.x."
+  ^bytes [x & [{:keys [print-dup? password compressor encryptor legacy-mode]
                 :or   {print-dup? true
                        compressor compression/default-snappy-compressor
                        encryptor  encryption/default-aes128-encryptor}}]]
@@ -193,7 +195,7 @@
     (let [ba (.toByteArray ba)
           ba (if compressor (compression/compress compressor ba) ba)
           ba (if password   (encryption/encrypt encryptor password ba) ba)]
-      (if legacy-mode? ba (wrap-nippy-header ba compressor encryptor password)))))
+      (if legacy-mode ba (wrap-nippy-header ba compressor encryptor password)))))
 
 ;;;; Thawing
 
@@ -259,14 +261,24 @@
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
 
 (defn thaw
-  "Deserializes frozen bytes to their original Clojure data type. Enable
-  `:legacy-mode?` to read bytes written by Nippy < 2.x.
+  "Deserializes frozen bytes to their original Clojure data type.
+
+  :legacy-mode can be set to one of the following values:
+    true            - Read bytes as if written by Nippy < 2.x.
+    false           - Read bytes as if written by Nippy >= 2.x.
+    :auto (default) - Try read bytes as if written by Nippy >= 2.x,
+                      fall back to reading bytes as if written by Nippy < 2.x.
+
+  In most cases you'll want :auto if you're using a preexisting data set, and
+  `false` otherwise. Note that error message detail will be limited under the
+  :auto (default) mode.
 
   WARNING: Enabling `:read-eval?` can lead to security vulnerabilities unless
   you are sure you know what you're doing."
-  [^bytes ba & [{:keys [read-eval? password compressor encryptor legacy-mode?
+  [^bytes ba & [{:keys [read-eval? password compressor encryptor legacy-mode
                         strict?]
-                 :or   {compressor compression/default-snappy-compressor
+                 :or   {legacy-mode :auto
+                        compressor compression/default-snappy-compressor
                         encryptor  encryption/default-aes128-encryptor}}]]
 
   (let [ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed. " msg) e)))
@@ -275,57 +287,76 @@
                 ba (if password   (encryption/decrypt encryptor password ba) ba)
                 ba (if compressor (compression/decompress compressor ba) ba)
                 stream (DataInputStream. (ByteArrayInputStream. ba))]
-            (binding [*read-eval* read-eval?] (thaw-from-stream stream))))]
+            (binding [*read-eval* read-eval?] (thaw-from-stream stream))))
 
-    (if legacy-mode? ; Nippy < 2.x
-      (try (thaw-data ba compressor password)
-           (catch Exception e
-             (cond password   (ex "Unencrypted data or wrong password?" e)
-                   compressor (ex "Encrypted or uncompressed data?"   e)
-                   :else      (ex "Encrypted and/or compressed data?" e))))
+        maybe-headers
+        (fn []
+          (when-let [[[id-mag1* id-mag2* & _ :as headers] data-ba]
+                     (utils/ba-split ba header-len)]
+            (when (and (= id-mag1* id-nippy-magic-id1)
+                       (= id-mag2* id-nippy-magic-id2))
+              ;; Not a guarantee of correctness!
+              [headers data-ba])))
 
-      ;; Nippy >= 2.x, we have a header!
-      (let [[[id-magic* id-header* id-comp* id-enc* _] data-ba]
-            (utils/ba-split ba 5)
+        legacy-thaw
+        (fn [data-ba]
+          (try (thaw-data data-ba compressor password)
+               (catch Exception e
+                 (cond password   (ex "Unencrypted data or wrong password?" e)
+                       compressor (ex "Encrypted or uncompressed data?"     e)
+                       :else      (ex "Encrypted and/or compressed data?"   e)))))
 
-            compressed? (not (zero? id-comp*))
-            encrypted?  (not (zero? id-enc*))]
+        modern-thaw
+        (fn [data-ba compressed? encrypted?]
+          (try (thaw-data data-ba (when compressed? compressor)
+                                  (when encrypted?  password))
+               (catch Exception e
+                 (if (and encrypted? password)
+                   (ex "Wrong password, or data may be corrupt?" e)
+                   (ex "Data may be corrupt?" e)))))]
 
-        (cond
-         (not= id-magic* id-nippy-magic-prefix)
-         (ex (str "Not Nippy data, data frozen with Nippy < 2.x, "
-                  "or data may be corrupt?\n"
-                  "Enable `:legacy-mode?` option for data frozen with Nippy < 2.x."))
+    (if (= legacy-mode true)
+      (legacy-thaw ba) ; Read as legacy, and only as legacy
+      (if-let [[[_ _ id-hver* id-comp* id-enc* _] data-ba] (maybe-headers)]
+        (let [compressed? (not (zero? id-comp*))
+              encrypted?  (not (zero? id-enc*))]
 
-         (> id-header* id-nippy-header-ver)
-         (ex "Data frozen with newer Nippy version. Please upgrade.")
+          (if (= legacy-mode :auto)
+            (try ; Header looks okay: try read as modern, fall back to legacy
+              (modern-thaw data-ba compressed? encrypted?)
+              (catch Exception _ (legacy-thaw ba)))
 
-         (and strict? (not encrypted?) password)
-         (ex (str "Data is not encrypted. Try again w/o password.\n"
-                  "Disable `:strict?` option to ignore this error. "))
+            (cond ; Read as modern, and only as modern
+             (> id-hver* id-nippy-header-ver)
+             (ex "Data frozen with newer Nippy version. Please upgrade.")
 
-         (and strict? (not compressed?) compressor)
-         (ex (str "Data is not compressed. Try again w/o compressor.\n"
-                  "Disable `:strict?` option to ignore this error."))
+             (and strict? (not encrypted?) password)
+             (ex (str "Data is not encrypted. Try again w/o password.\n"
+                      "Disable `:strict?` option to ignore this error. "))
 
-         (and encrypted? (not password))
-         (ex "Data is encrypted. Please try again with a password.")
+             (and strict? (not compressed?) compressor)
+             (ex (str "Data is not compressed. Try again w/o compressor.\n"
+                      "Disable `:strict?` option to ignore this error."))
 
-         (and encrypted? password
-              (not= id-enc* (encryption/header-id encryptor)))
-         (ex "Data encrypted with a different Encrypter.")
+             (and encrypted? (not password))
+             (ex "Data is encrypted. Please try again with a password.")
 
-         (and compressed? compressor
-              (not= id-comp* (compression/header-id compressor)))
-         (ex "Data compressed with a different Compressor.")
+             (and encrypted? password
+                  (not= id-enc* (encryption/header-id encryptor)))
+             (ex "Data encrypted with a different Encrypter.")
 
-         :else
-         (try (thaw-data data-ba (when compressed? compressor)
-                                 (when encrypted?  password))
-              (catch Exception e
-                (if (and encrypted? password)
-                  (ex "Wrong password, or data may be corrupt?" e)
-                  (ex "Data may be corrupt?" e)))))))))
+             (and compressed? compressor
+                  (not= id-comp* (compression/header-id compressor)))
+             (ex "Data compressed with a different Compressor.")
+
+             :else (modern-thaw data-ba compressed? encrypted?))))
+
+        ;; Header definitely not okay
+        (if (= legacy-mode :auto)
+          (legacy-thaw ba)
+          (ex (str "Not Nippy data, data frozen with Nippy < 2.x, "
+                   "or data may be corrupt?\n"
+                   "Enable `:legacy-mode` option for data frozen with Nippy < 2.x.")))))))
 
 (comment (thaw (freeze "hello"))
          (thaw (freeze "hello" {:compressor nil}))
@@ -390,7 +421,7 @@
   (freeze x {:print-dup?   print-dup?
              :compressor   (when compress? compression/default-snappy-compressor)
              :password     password
-             :legacy-mode? true}))
+             :legacy-mode  true}))
 
 (defn thaw-from-bytes "DEPRECATED: Use `thaw` instead."
   [ba & {:keys [read-eval? compressed? password]
@@ -398,4 +429,4 @@
   (thaw ba {:read-eval?   read-eval?
             :compressor   (when compressed? compression/default-snappy-compressor)
             :password     password
-            :legacy-mode? true}))
+            :legacy-mode  true}))

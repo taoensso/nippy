@@ -2,7 +2,7 @@ Current [semantic](http://semver.org/) version:
 
 ```clojure
 [com.taoensso/nippy "1.2.1"]        ; Stable
-[com.taoensso/nippy "2.0.0-alpha1"] ; Development (see notes below)
+[com.taoensso/nippy "2.0.0-alpha3"] ; Development (see notes below)
 ```
 
 2.x adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), and hugely improved performance. It **is backwards compatible**, but please note that the `freeze-to-bytes`/`thaw-from-bytes` API has been **deprecated** in favor of `freeze`/`thaw`.
