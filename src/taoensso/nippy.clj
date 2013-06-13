@@ -16,13 +16,14 @@
 ;; TODO Provide ToFreeze, Frozen, Encrypted, etc. tooling helpers
 
 ;;;; Header IDs
-;; Nippy 2.x+ prefixes frozen data with a 5-byte header:
-
-(def ^:const id-nippy-magic-prefix (byte 17))
-(def ^:const id-nippy-header-ver   (byte 0))
+;; Nippy 2.x+ prefixes frozen data with a header:
+(def ^:const header-len 6)
+(def ^:const id-nippy-magic-id1  (byte  17))
+(def ^:const id-nippy-magic-id2  (byte -42))
+(def ^:const id-nippy-header-ver (byte   0))
 ;; * Compressor id (0 if no compressor)
 ;; * Encryptor id  (0 if no encryptor)
-(def ^:const id-nippy-reserved     (byte 0))
+(def ^:const id-nippy-reserved   (byte   0))
 
 ;;;; Data type IDs
 
@@ -173,7 +174,8 @@
 
 (defn- wrap-nippy-header [data-ba compressor encryptor password]
   (let [header-ba (byte-array
-                   [id-nippy-magic-prefix
+                   [id-nippy-magic-id1
+                    id-nippy-magic-id2
                     id-nippy-header-ver
                     (byte (if compressor (compression/header-id compressor) 0))
                     (byte (if password   (encryption/header-id  encryptor)  0))
@@ -289,8 +291,11 @@
 
         maybe-headers
         (fn []
-          (when-let [[[id-magic* & _ :as headers] data-ba] (utils/ba-split ba 5)]
-            (when (= id-magic* id-nippy-magic-prefix) ; Not a guarantee of correctness!
+          (when-let [[[id-mag1* id-mag2* & _ :as headers] data-ba]
+                     (utils/ba-split ba header-len)]
+            (when (and (= id-mag1* id-nippy-magic-id1)
+                       (= id-mag2* id-nippy-magic-id2))
+              ;; Not a guarantee of correctness!
               [headers data-ba])))
 
         legacy-thaw
@@ -312,7 +317,7 @@
 
     (if (= legacy-mode true)
       (legacy-thaw ba) ; Read as legacy, and only as legacy
-      (if-let [[[_ id-header* id-comp* id-enc* _] data-ba] (maybe-headers)]
+      (if-let [[[_ _ id-hver* id-comp* id-enc* _] data-ba] (maybe-headers)]
         (let [compressed? (not (zero? id-comp*))
               encrypted?  (not (zero? id-enc*))]
 
@@ -322,7 +327,7 @@
               (catch Exception _ (legacy-thaw ba)))
 
             (cond ; Read as modern, and only as modern
-             (> id-header* id-nippy-header-ver)
+             (> id-hver* id-nippy-header-ver)
              (ex "Data frozen with newer Nippy version. Please upgrade.")
 
              (and strict? (not encrypted?) password)
