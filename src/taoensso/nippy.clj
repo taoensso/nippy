@@ -6,8 +6,8 @@
              (utils       :as utils)
              (compression :as compression)
              (encryption  :as encryption)])
-  (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
-             ByteArrayInputStream]
+  (:import  [java.io DataOutputStream ByteArrayOutputStream]
+            [java.nio ByteBuffer]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
              PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
              IPersistentSet IPersistentCollection]))
@@ -76,6 +76,11 @@
     (.writeInt stream size) ; Encode size of byte array
     (.write stream ba 0 size)))
 
+(defn- write-utf8
+  "Encodes string to byte utf8 byte array"
+  [^DataOutputStream s ^String x]
+  (write-bytes s (.getBytes x "UTF-8")))
+
 (defn- write-biginteger
   "Wrapper around `write-bytes` for common case of writing a BigInteger."
   [^DataOutputStream stream ^BigInteger x]
@@ -83,15 +88,24 @@
 
 (defn- read-bytes
   "Reads arbitrary byte data, preceded by its length."
-  ^bytes [^DataInputStream stream]
-  (let [size (.readInt stream)
+  ^bytes [^ByteBuffer stream]
+  (let [size (.getInt stream)
         ba   (byte-array size)]
-    (.read stream ba 0 size) ba))
+    (.get stream ba 0 size)
+    ba))
+
+(defn- read-utf8
+  "Reads arbitrary byte data to an utf-8 string"
+  ^String [^ByteBuffer stream]
+  (let [size (.getInt stream)
+        ba   (byte-array size)]
+    (.get stream ba 0 size)
+    (String. ba "UTF-8")))
 
 (defn- read-biginteger
   "Wrapper around `read-bytes` for common case of reading a BigInteger.
   Note that as of Clojure 1.3, java.math.BigInteger ≠ clojure.lang.BigInt."
-  ^BigInteger [^DataInputStream stream]
+  ^BigInteger [^ByteBuffer stream]
   (BigInteger. (read-bytes stream)))
 
 ;;;; Freezing
@@ -136,10 +150,10 @@
 (freezer Boolean              id-boolean (.writeBoolean s x))
 
 (freezer Character id-char    (.writeChar s (int x)))
-(freezer String    id-string  (write-bytes s (.getBytes x "UTF-8")))
-(freezer Keyword   id-keyword (.writeUTF s (if-let [ns (namespace x)]
-                                             (str ns "/" (name x))
-                                             (name x))))
+(freezer String    id-string  (write-utf8 s x))
+(freezer Keyword   id-keyword (write-utf8 s (if-let [ns (namespace x)]
+                                              (str ns "/" (name x))
+                                              (name x))))
 
 (coll-freezer PersistentQueue       id-queue)
 (coll-freezer PersistentTreeSet     id-sorted-set)
@@ -197,64 +211,64 @@
 
 ;;;; Thawing
 
-(declare thaw-from-stream)
+(declare thaw-from-buffer)
 
 (defn coll-thaw
   "Thaws simple collection types."
-  [coll ^DataInputStream s]
-  (utils/repeatedly-into coll (.readInt s) #(thaw-from-stream s)))
+  [coll ^ByteBuffer s]
+  (utils/repeatedly-into coll (.getInt s) #(thaw-from-buffer s)))
 
 (defn coll-thaw-kvs
   "Thaws key-value collection types."
-  [coll ^DataInputStream s]
-  (utils/repeatedly-into coll (/ (.readInt s) 2)
-    (fn [] [(thaw-from-stream s) (thaw-from-stream s)])))
+  [coll ^ByteBuffer s]
+  (utils/repeatedly-into coll (/ (.getInt s) 2)
+    (fn [] [(thaw-from-buffer s) (thaw-from-buffer s)])))
 
-(defn- thaw-from-stream
-  [^DataInputStream s]
-  (let [type-id (.readByte s)]
+(defn- thaw-from-buffer
+  [^ByteBuffer bb]
+  (let [type-id (.get bb)]
     (utils/case-eval
      type-id
 
-     id-reader  (read-string (String. (read-bytes s) "UTF-8"))
-     id-bytes   (read-bytes s)
+     id-reader  (read-string (read-utf8 bb))
+     id-bytes   (read-bytes bb)
      id-nil     nil
-     id-boolean (.readBoolean s)
+     id-boolean (= 1 (.get bb))
 
-     id-char    (.readChar s)
-     id-string  (String. (read-bytes s) "UTF-8")
-     id-keyword (keyword (.readUTF s))
+     id-char    (.getChar bb)
+     id-string  (read-utf8 bb)
+     id-keyword (keyword (read-utf8 bb))
 
-     id-queue      (coll-thaw (PersistentQueue/EMPTY) s)
-     id-sorted-set (coll-thaw     (sorted-set) s)
-     id-sorted-map (coll-thaw-kvs (sorted-map) s)
+     id-queue      (coll-thaw (PersistentQueue/EMPTY) bb)
+     id-sorted-set (coll-thaw     (sorted-set) bb)
+     id-sorted-map (coll-thaw-kvs (sorted-map) bb)
 
-     id-list    (into '() (rseq (coll-thaw [] s)))
-     id-vector  (coll-thaw  [] s)
-     id-set     (coll-thaw #{} s)
-     id-map     (coll-thaw-kvs {} s)
-     id-coll    (seq (coll-thaw [] s))
+     id-list    (into '() (rseq (coll-thaw [] bb)))
+     id-vector  (coll-thaw  [] bb)
+     id-set     (coll-thaw #{} bb)
+     id-map     (coll-thaw-kvs {} bb)
+     id-coll    (seq (coll-thaw [] bb))
 
-     id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
+     id-meta (let [m (thaw-from-buffer bb)] (with-meta (thaw-from-buffer bb) m))
 
-     id-byte    (.readByte s)
-     id-short   (.readShort s)
-     id-integer (.readInt s)
-     id-long    (.readLong s)
-     id-bigint  (bigint (read-biginteger s))
+     id-byte    (.get bb)
+     id-short   (.getShort bb)
+     id-integer (.getInt bb)
+     id-long    (.getLong bb)
+     id-bigint  (bigint (read-biginteger bb))
 
-     id-float  (.readFloat s)
-     id-double (.readDouble s)
-     id-bigdec (BigDecimal. (read-biginteger s) (.readInt s))
+     id-float  (.getFloat bb)
+     id-double (.getDouble bb)
+     id-bigdec (BigDecimal. (read-biginteger bb) (.getInt bb))
 
-     id-ratio (/ (bigint (read-biginteger s))
-                 (bigint (read-biginteger s)))
+     id-ratio (/ (bigint (read-biginteger bb))
+                 (bigint (read-biginteger bb)))
 
      ;;; DEPRECATED
-     id-old-reader (read-string (.readUTF s))
-     id-old-string (.readUTF s)
-     id-old-map    (apply hash-map (utils/repeatedly-into [] (* 2 (.readInt s))
-                                     #(thaw-from-stream s)))
+     id-old-reader (read-string (read-utf8 bb))
+     id-old-string (read-utf8 bb)
+     id-old-map    (apply hash-map (utils/repeatedly-into [] (* 2 (.getInt bb))
+                                     #(thaw-from-buffer bb)))
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
 
@@ -269,13 +283,15 @@
                  :or   {compressor compression/default-snappy-compressor
                         encryptor  encryption/default-aes128-encryptor}}]]
 
-  (let [ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed. " msg) e)))
+  (let [ex (fn [msg & [e]]
+             (.printStackTrace e)
+             (throw (Exception. (str "Thaw failed. " msg) e)))
         thaw-data (fn [data-ba compressor password]
           (let [ba data-ba
                 ba (if password   (encryption/decrypt encryptor password ba) ba)
                 ba (if compressor (compression/decompress compressor ba) ba)
-                stream (DataInputStream. (ByteArrayInputStream. ba))]
-            (binding [*read-eval* read-eval?] (thaw-from-stream stream))))]
+                bb (ByteBuffer/wrap ba)]
+            (binding [*read-eval* read-eval?] (thaw-from-buffer bb))))]
 
     (if legacy-mode? ; Nippy < 2.x
       (try (thaw-data ba compressor password)
@@ -399,3 +415,5 @@
             :compressor   (when compressed? compression/default-snappy-compressor)
             :password     password
             :legacy-mode? true}))
+
+;; (prn (thaw-from-bytes (freeze-to-bytes false)))
