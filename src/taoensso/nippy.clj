@@ -294,11 +294,11 @@
 
   (let [ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed. " msg) e)))
         thaw-data (fn [data-ba compressor password]
-          (let [ba data-ba
+          (let [^"[B" ba data-ba
                 ba (if password   (encryption/decrypt encryptor password ba) ba)
                 ba (if compressor (compression/decompress compressor ba) ba)
-                bb (doto ^ByteBuffer (ByteBuffer/allocateDirect (count ba))
-                         (.put ^"[B" ba)
+                bb (doto ^ByteBuffer (ByteBuffer/allocateDirect (alength ba))
+                         (.put ba)
                          (.flip))]
             (binding [*read-eval* read-eval?] (thaw-from-buffer bb))))
         maybe-headers
