@@ -8,9 +8,7 @@
 
 ;;;; Basic data integrity
 (expect test-data ((comp thaw freeze) test-data))
-(expect test-data ((comp #(thaw   % {:legacy-mode :auto})
-                         #(freeze % {:legacy-mode true}))
-                   test-data))
+(expect test-data ((comp thaw #(freeze % {:legacy-mode true})) test-data))
 (expect test-data ((comp #(thaw   % {:password [:salted "p"]})
                          #(freeze % {:password [:salted "p"]}))
                    test-data))
