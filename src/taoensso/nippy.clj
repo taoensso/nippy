@@ -297,7 +297,9 @@
           (let [ba data-ba
                 ba (if password   (encryption/decrypt encryptor password ba) ba)
                 ba (if compressor (compression/decompress compressor ba) ba)
-                bb (ByteBuffer/wrap ba)]
+                bb (doto ^ByteBuffer (ByteBuffer/allocateDirect (count ba))
+                         (.put ^"[B" ba)
+                         (.flip))]
             (binding [*read-eval* read-eval?] (thaw-from-buffer bb))))
         maybe-headers
         (fn []
