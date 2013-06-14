@@ -12,9 +12,6 @@
              PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
              IPersistentSet IPersistentCollection]))
 
-;; TODO Allow ba or wrapped-ba input?
-;; TODO Provide ToFreeze, Frozen, Encrypted, etc. tooling helpers
-
 ;;;; Nippy 2.x+ header spec (4 bytes)
 
 (def ^:private ^:const head-version 1)

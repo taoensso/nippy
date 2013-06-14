@@ -15,8 +15,7 @@
 (def roundtrip-defaults  (comp thaw freeze))
 (def roundtrip-encrypted (comp #(thaw   % {:password [:cached "p"]})
                                #(freeze % {:password [:cached "p"]})))
-(def roundtrip-fast      (comp #(thaw   % {})
-                               #(freeze % {:compressor nil})))
+(def roundtrip-fast      (comp thaw #(freeze % {:compressor nil})))
 
 (defn autobench []
   (println "Benchmarking roundtrips")
