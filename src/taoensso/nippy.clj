@@ -209,13 +209,15 @@
 (defn coll-thaw
   "Thaws simple collection types."
   [coll ^DataInputStream s]
-  (utils/repeatedly-into coll (.readInt s) #(thaw-from-stream s)))
+  (utils/repeatedly-into coll
+                         (.readInt s)
+                         (thaw-from-stream s)))
 
 (defn coll-thaw-kvs
   "Thaws key-value collection types."
   [coll ^DataInputStream s]
   (utils/repeatedly-into coll (/ (.readInt s) 2)
-    (fn [] [(thaw-from-stream s) (thaw-from-stream s)])))
+    [(thaw-from-stream s) (thaw-from-stream s)]))
 
 (defn- thaw-from-stream
   [^DataInputStream s]
@@ -260,8 +262,9 @@
      ;;; DEPRECATED
      id-old-reader (read-string (.readUTF s))
      id-old-string (.readUTF s)
-     id-old-map    (apply hash-map (utils/repeatedly-into [] (* 2 (.readInt s))
-                                                          #(thaw-from-stream s)))
+     id-old-map    (apply hash-map (utils/repeatedly-into []
+                                                          (* 2 (.readInt s))
+                                                          (thaw-from-stream s)))
      id-old-keyword (keyword (.readUTF s))
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
@@ -271,6 +274,10 @@
     (let [[head-sig* [meta-id]] (utils/ba-split head-ba 3)]
       (when (utils/ba= head-sig* head-sig)
         [data-ba (head-meta meta-id {:unrecognized-header? true})]))))
+
+
+(defn throw-thaw-exception [msg & [e]]
+  (throw (Exception. (str "Thaw failed: " msg) e)))
 
 (defn thaw
   "Deserializes frozen bytes to their original Clojure data type.
@@ -291,8 +298,7 @@
                         compressor compression/default-snappy-compressor
                         encryptor  encryption/default-aes128-encryptor}}]]
 
-  (let [ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
-        try-thaw-data
+  (let [try-thaw-data
         (fn [data-ba {decompress? :compressed? decrypt? :encrypted?
                      :or {decompress? compressor
                           decrypt?    password}
@@ -305,11 +311,11 @@
                     stream (DataInputStream. (ByteArrayInputStream. ba))]
                 (binding [*read-eval* read-eval?] (thaw-from-stream stream)))
               (catch Exception e
-                (cond decrypt?    (ex "Wrong password/encryptor?" e)
-                      decompress? (ex "Encrypted data or wrong compressor?" e)
+                (cond decrypt?    (throw-thaw-exception "Wrong password/encryptor?" e)
+                      decompress? (throw-thaw-exception "Encrypted data or wrong compressor?" e)
                       :else       (if apparent-header?
-                                    (ex "Corrupt data?" e)
-                                    (ex "Encrypted and/or compressed data?" e)))))))]
+                                    (throw-thaw-exception "Corrupt data?" e)
+                                    (throw-thaw-exception "Encrypted and/or compressed data?" e)))))))]
 
     (if (= legacy-mode true)
       (try-thaw-data ba nil)
@@ -324,23 +330,23 @@
 
           (cond ; Trust metadata, give fancy error messages
            unrecognized-header?
-           (ex "Unrecognized header. Data frozen with newer Nippy version?")
+           (throw-thaw-exception "Unrecognized header. Data frozen with newer Nippy version?")
            (and strict? (not encrypted?) password)
-           (ex (str "Unencrypted data. Try again w/o password.\n"
+           (throw-thaw-exception (str "Unencrypted data. Try again w/o password.\n"
                     "Disable `:strict?` option to ignore this error. "))
            (and strict? (not compressed?) compressor)
-           (ex (str "Uncompressed data. Try again w/o compressor.\n"
+           (throw-thaw-exception (str "Uncompressed data. Try again w/o compressor.\n"
                     "Disable `:strict?` option to ignore this error."))
            (and compressed? (not compressor))
-           (ex "Compressed data. Try again with compressor.")
+           (throw-thaw-exception "Compressed data. Try again with compressor.")
            (and encrypted? (not password))
-           (ex "Encrypted data. Try again with password.")
+           (throw-thaw-exception "Encrypted data. Try again with password.")
            :else (try-thaw-data data-ba head-meta)))
 
         ;; Header definitely not okay
         (if (= legacy-mode :auto)
           (try-thaw-data ba nil) ; Legacy thaw
-          (ex (str "Not Nippy data, data frozen with Nippy < 2.x, "
+          (throw-thaw-exception (str "Not Nippy data, data frozen with Nippy < 2.x, "
                    "or corrupt data?\n"
                    "See `:legacy-mode` option for data frozen with Nippy < 2.x.")))))))
 
