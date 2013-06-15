@@ -209,13 +209,15 @@
 (defn coll-thaw
   "Thaws simple collection types."
   [coll ^DataInputStream s]
-  (utils/repeatedly-into coll (.readInt s) #(thaw-from-stream s)))
+  (utils/repeatedly-into coll
+                         (.readInt s)
+                         (thaw-from-stream s)))
 
 (defn coll-thaw-kvs
   "Thaws key-value collection types."
   [coll ^DataInputStream s]
   (utils/repeatedly-into coll (/ (.readInt s) 2)
-    (fn [] [(thaw-from-stream s) (thaw-from-stream s)])))
+    [(thaw-from-stream s) (thaw-from-stream s)]))
 
 (defn- thaw-from-stream
   [^DataInputStream s]
@@ -260,8 +262,9 @@
      ;;; DEPRECATED
      id-old-reader (read-string (.readUTF s))
      id-old-string (.readUTF s)
-     id-old-map    (apply hash-map (utils/repeatedly-into [] (* 2 (.readInt s))
-                                                          #(thaw-from-stream s)))
+     id-old-map    (apply hash-map (utils/repeatedly-into []
+                                                          (* 2 (.readInt s))
+                                                          (thaw-from-stream s)))
      id-old-keyword (keyword (.readUTF s))
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
