@@ -65,49 +65,26 @@
 (def ^:const id-old-map     (int 22)) ; as of 0.9.0, for more efficient thaw
 (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
 
-;;;; Shared low-level stream stuff
-
-(defn- write-id [^DataOutputStream stream ^Integer id] (.writeByte stream id))
-
-(defn- write-bytes
-  [^DataOutputStream stream ^bytes ba]
-  (let [size (alength ba)]
-    (.writeInt stream size)
-    (.write stream ba 0 size)))
-
-(defn- write-biginteger
-  [^DataOutputStream stream ^BigInteger x]
-  (write-bytes stream (.toByteArray x)))
-
-(defn- write-utf8
-  [^DataOutputStream stream ^String x]
-  (write-bytes stream (.getBytes x "UTF-8")))
-
-(defn- read-bytes
-  ^bytes [^DataInputStream stream]
-  (let [size (.readInt stream)
-        ba   (byte-array size)]
-    (.read stream ba 0 size) ba))
-
-(defn- read-biginteger
-  ^BigInteger [^DataInputStream stream]
-  (BigInteger. (read-bytes stream)))
-
-(defn- read-utf8
-  [^DataInputStream stream]
-  (String. (read-bytes stream) "UTF-8"))
-
 ;;;; Freezing
-
 (defprotocol Freezable (freeze-to-stream* [this stream]))
 
-(defn- freeze-to-stream
+(defmacro ^:private write-id    [s id] `(.writeByte ~s ~id))
+(defmacro ^:private write-bytes [s ba]
+  `(let [s# ~s ba# ~ba]
+     (let [size# (alength ba#)]
+       (.writeInt s# size#)
+       (.write s# ba# 0 size#))))
+
+(defmacro ^:private write-biginteger [s x] `(write-bytes ~s (.toByteArray ~x)))
+(defmacro ^:private write-utf8       [s x] `(write-bytes ~s (.getBytes ~x "UTF-8")))
+(defmacro ^:private freeze-to-stream
   "Like `freeze-to-stream*` but with metadata support."
-  [x ^DataOutputStream s]
-  (if-let [m (meta x)]
-    (do (write-id s id-meta)
-        (freeze-to-stream m s)))
-  (freeze-to-stream* x s))
+  [x s]
+  `(let [x# ~x s# ~s]
+     (if-let [m# (meta x#)]
+       (do (write-id s# ~id-meta)
+           (freeze-to-stream* m# s#)))
+     (freeze-to-stream* x# s#)))
 
 (defmacro ^:private freezer
   "Helper to extend Freezable protocol."
@@ -134,7 +111,7 @@
       (freeze-to-stream k# ~'s)
       (freeze-to-stream v# ~'s))))
 
-(freezer (Class/forName "[B") id-bytes   (write-bytes s x))
+(freezer (Class/forName "[B") id-bytes   (write-bytes s ^bytes x))
 (freezer nil                  id-nil)
 (freezer Boolean              id-boolean (.writeBoolean s x))
 
@@ -206,16 +183,25 @@
 
 (declare thaw-from-stream)
 
-(defn coll-thaw
-  "Thaws simple collection types."
-  [coll ^DataInputStream s]
-  (utils/repeatedly-into coll (.readInt s) #(thaw-from-stream s)))
+(defmacro ^:private read-bytes [s]
+  `(let [s# ~s
+         size# (.readInt s#)
+         ba#   (byte-array size#)]
+     (.read s# ba# 0 size#) ba#))
 
-(defn coll-thaw-kvs
-  "Thaws key-value collection types."
-  [coll ^DataInputStream s]
-  (utils/repeatedly-into coll (/ (.readInt s) 2)
-    (fn [] [(thaw-from-stream s) (thaw-from-stream s)])))
+(defmacro ^:private read-biginteger [s] `(BigInteger. (read-bytes ~s)))
+(defmacro ^:private read-utf8       [s] `(String. (read-bytes ~s) "UTF-8"))
+
+(defmacro ^:private coll-thaw "Thaws simple collection types."
+  [s coll]
+  `(let [s# ~s]
+     (utils/repeatedly-into ~coll (.readInt s#) (thaw-from-stream s#))))
+
+(defmacro ^:private coll-thaw-kvs "Thaws key-value collection types."
+  [s coll]
+  `(let [s# ~s]
+     (utils/repeatedly-into ~coll (/ (.readInt s#) 2)
+       [(thaw-from-stream s#) (thaw-from-stream s#)])))
 
 (defn- thaw-from-stream
   [^DataInputStream s]
@@ -223,7 +209,7 @@
     (utils/case-eval
      type-id
 
-     id-reader  (read-string (String. (read-bytes s) "UTF-8"))
+     id-reader  (read-string (read-utf8 s))
      id-bytes   (read-bytes s)
      id-nil     nil
      id-boolean (.readBoolean s)
@@ -232,15 +218,15 @@
      id-string  (read-utf8 s)
      id-keyword (keyword (read-utf8 s))
 
-     id-queue      (coll-thaw (PersistentQueue/EMPTY) s)
-     id-sorted-set (coll-thaw     (sorted-set) s)
-     id-sorted-map (coll-thaw-kvs (sorted-map) s)
+     id-queue      (coll-thaw s (PersistentQueue/EMPTY))
+     id-sorted-set (coll-thaw s     (sorted-set))
+     id-sorted-map (coll-thaw-kvs s (sorted-map))
 
-     id-list    (into '() (rseq (coll-thaw [] s)))
-     id-vector  (coll-thaw  [] s)
-     id-set     (coll-thaw #{} s)
-     id-map     (coll-thaw-kvs {} s)
-     id-coll    (seq (coll-thaw [] s))
+     id-list    (into '() (rseq (coll-thaw s [])))
+     id-vector  (coll-thaw s  [])
+     id-set     (coll-thaw s #{})
+     id-map     (coll-thaw-kvs s  {})
+     id-coll    (seq (coll-thaw s []))
 
      id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
 
@@ -260,8 +246,8 @@
      ;;; DEPRECATED
      id-old-reader (read-string (.readUTF s))
      id-old-string (.readUTF s)
-     id-old-map    (apply hash-map (utils/repeatedly-into [] (* 2 (.readInt s))
-                                                          #(thaw-from-stream s)))
+     id-old-map    (apply hash-map (utils/repeatedly-into []
+                     (* 2 (.readInt s)) (thaw-from-stream s)))
      id-old-keyword (keyword (.readUTF s))
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
@@ -271,6 +257,9 @@
     (let [[head-sig* [meta-id]] (utils/ba-split head-ba 3)]
       (when (utils/ba= head-sig* head-sig)
         [data-ba (head-meta meta-id {:unrecognized-header? true})]))))
+
+
+(defn throw-thaw-ex [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
 
 (defn thaw
   "Deserializes frozen bytes to their original Clojure data type.
@@ -291,8 +280,7 @@
                         compressor compression/default-snappy-compressor
                         encryptor  encryption/default-aes128-encryptor}}]]
 
-  (let [ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
-        try-thaw-data
+  (let [try-thaw-data
         (fn [data-ba {decompress? :compressed? decrypt? :encrypted?
                      :or {decompress? compressor
                           decrypt?    password}
@@ -305,11 +293,13 @@
                     stream (DataInputStream. (ByteArrayInputStream. ba))]
                 (binding [*read-eval* read-eval?] (thaw-from-stream stream)))
               (catch Exception e
-                (cond decrypt?    (ex "Wrong password/encryptor?" e)
-                      decompress? (ex "Encrypted data or wrong compressor?" e)
-                      :else       (if apparent-header?
-                                    (ex "Corrupt data?" e)
-                                    (ex "Encrypted and/or compressed data?" e)))))))]
+                (cond
+                 decrypt?    (throw-thaw-ex "Wrong password/encryptor?" e)
+                 decompress? (throw-thaw-ex "Encrypted data or wrong compressor?" e)
+                 :else
+                 (if apparent-header?
+                   (throw-thaw-ex "Corrupt data?" e)
+                   (throw-thaw-ex "Encrypted and/or compressed data?" e)))))))]
 
     (if (= legacy-mode true)
       (try-thaw-data ba nil)
@@ -324,25 +314,27 @@
 
           (cond ; Trust metadata, give fancy error messages
            unrecognized-header?
-           (ex "Unrecognized header. Data frozen with newer Nippy version?")
+           (throw-thaw-ex
+            "Unrecognized header. Data frozen with newer Nippy version?")
            (and strict? (not encrypted?) password)
-           (ex (str "Unencrypted data. Try again w/o password.\n"
-                    "Disable `:strict?` option to ignore this error. "))
+           (throw-thaw-ex (str "Unencrypted data. Try again w/o password.\n"
+                               "Disable `:strict?` option to ignore this error. "))
            (and strict? (not compressed?) compressor)
-           (ex (str "Uncompressed data. Try again w/o compressor.\n"
-                    "Disable `:strict?` option to ignore this error."))
+           (throw-thaw-ex (str "Uncompressed data. Try again w/o compressor.\n"
+                               "Disable `:strict?` option to ignore this error."))
            (and compressed? (not compressor))
-           (ex "Compressed data. Try again with compressor.")
+           (throw-thaw-ex "Compressed data. Try again with compressor.")
            (and encrypted? (not password))
-           (ex "Encrypted data. Try again with password.")
+           (throw-thaw-ex "Encrypted data. Try again with password.")
            :else (try-thaw-data data-ba head-meta)))
 
         ;; Header definitely not okay
         (if (= legacy-mode :auto)
           (try-thaw-data ba nil) ; Legacy thaw
-          (ex (str "Not Nippy data, data frozen with Nippy < 2.x, "
-                   "or corrupt data?\n"
-                   "See `:legacy-mode` option for data frozen with Nippy < 2.x.")))))))
+          (throw-thaw-ex
+           (str "Not Nippy data, data frozen with Nippy < 2.x, "
+                "or corrupt data?\n"
+                "See `:legacy-mode` option for data frozen with Nippy < 2.x.")))))))
 
 (comment (thaw (freeze "hello"))
          (thaw (freeze "hello" {:compressor nil}))

@@ -34,35 +34,41 @@
 
     (println
      {:reader
-      {:freeze    (bench (freeze-reader data))
+      {:round     (bench (roundtrip-reader data))
+       :freeze    (bench (freeze-reader data))
        :thaw      (let [frozen (freeze-reader data)] (bench (thaw-reader frozen)))
-       :round     (bench (roundtrip-reader data))
        :data-size (count (.getBytes ^String (freeze-reader data) "UTF-8"))}})
 
     (println
      {:defaults
-      {:freeze    (bench (freeze data))
+      {:round     (bench (roundtrip-defaults data))
+       :freeze    (bench (freeze data))
        :thaw      (let [frozen (freeze data)] (bench (thaw frozen)))
-       :round     (bench (roundtrip-defaults data))
        :data-size (count (freeze data))}})
 
     (println
      {:encrypted
-      {:freeze    (bench (freeze data {:password [:cached "p"]}))
+      {:round     (bench (roundtrip-encrypted data))
+       :freeze    (bench (freeze data {:password [:cached "p"]}))
        :thaw      (let [frozen (freeze data {:password [:cached "p"]})]
                     (bench (thaw frozen {:password [:cached "p"]})))
-       :round     (bench (roundtrip-encrypted data))
        :data-size (count (freeze data {:password [:cached "p"]}))}})
 
     (println
      {:fast
-      {:freeze    (bench (freeze data {:compressor nil}))
+      {:round     (bench (roundtrip-fast data))
+       :freeze    (bench (freeze data {:compressor nil}))
        :thaw      (let [frozen (freeze data {:compressor nil})]
                     (bench (thaw frozen)))
-       :round     (bench (roundtrip-fast data))
        :data-size (count (freeze data {:compressor nil}))}})
 
     (println "Done! (Time for cake?)"))
+
+  ;;; 16 June 2013: Clojure 1.5.1, Nippy 2.0.0-alpha6
+  ;; {:reader    {:freeze 23601, :thaw 26247, :round 49819, :data-size 22966}}
+  ;; {:defaults  {:freeze 3554,  :thaw 2002,  :round 5831,  :data-size 12394}}
+  ;; {:encrypted {:freeze 5117,  :thaw 3600,  :round 9006,  :data-size 12420}}
+  ;; {:fast      {:freeze 3247,  :thaw 1914,  :round 5329,  :data-size 13342}}
 
   ;;; 13 June 2013: Clojure 1.5.1, Nippy 2.0.0-alpha1
   ;; {:reader    {:freeze 23124, :thaw 26469, :round 47674, :data-size 22923}}
