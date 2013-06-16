@@ -66,32 +66,25 @@
 (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
 
 ;;;; Freezing
-
 (defprotocol Freezable (freeze-to-stream* [this stream]))
 
-(defn- write-id [^DataOutputStream stream ^Integer id] (.writeByte stream id))
+(defmacro ^:private write-id    [s id] `(.writeByte ~s ~id))
+(defmacro ^:private write-bytes [s ba]
+  `(let [s# ~s ba# ~ba]
+     (let [size# (alength ba#)]
+       (.writeInt s# size#)
+       (.write s# ba# 0 size#))))
 
-(defn- write-bytes
-  [^DataOutputStream stream ^bytes ba]
-  (let [size (alength ba)]
-    (.writeInt stream size)
-    (.write stream ba 0 size)))
-
-(defn- write-biginteger
-  [^DataOutputStream stream ^BigInteger x]
-  (write-bytes stream (.toByteArray x)))
-
-(defn- write-utf8
-  [^DataOutputStream stream ^String x]
-  (write-bytes stream (.getBytes x "UTF-8")))
-
-(defn- freeze-to-stream
+(defmacro ^:private write-biginteger [s x] `(write-bytes ~s (.toByteArray ~x)))
+(defmacro ^:private write-utf8       [s x] `(write-bytes ~s (.getBytes ~x "UTF-8")))
+(defmacro ^:private freeze-to-stream
   "Like `freeze-to-stream*` but with metadata support."
-  [x ^DataOutputStream s]
-  (if-let [m (meta x)]
-    (do (write-id s id-meta)
-        (freeze-to-stream m s)))
-  (freeze-to-stream* x s))
+  [x s]
+  `(let [x# ~x s# ~s]
+     (if-let [m# (meta x#)]
+       (do (write-id s# ~id-meta)
+           (freeze-to-stream* m# s#)))
+     (freeze-to-stream* x# s#)))
 
 (defmacro ^:private freezer
   "Helper to extend Freezable protocol."
@@ -118,7 +111,7 @@
       (freeze-to-stream k# ~'s)
       (freeze-to-stream v# ~'s))))
 
-(freezer (Class/forName "[B") id-bytes   (write-bytes s x))
+(freezer (Class/forName "[B") id-bytes   (write-bytes s ^bytes x))
 (freezer nil                  id-nil)
 (freezer Boolean              id-boolean (.writeBoolean s x))
 
@@ -190,19 +183,14 @@
 
 (declare thaw-from-stream)
 
-(defn- read-bytes
-  ^bytes [^DataInputStream stream]
-  (let [size (.readInt stream)
-        ba   (byte-array size)]
-    (.read stream ba 0 size) ba))
+(defmacro ^:private read-bytes [s]
+  `(let [s# ~s
+         size# (.readInt s#)
+         ba#   (byte-array size#)]
+     (.read s# ba# 0 size#) ba#))
 
-(defn- read-biginteger
-  ^BigInteger [^DataInputStream stream]
-  (BigInteger. (read-bytes stream)))
-
-(defn- read-utf8
-  [^DataInputStream stream]
-  (String. (read-bytes stream) "UTF-8"))
+(defmacro ^:private read-biginteger [s] `(BigInteger. (read-bytes ~s)))
+(defmacro ^:private read-utf8       [s] `(String. (read-bytes ~s) "UTF-8"))
 
 (defmacro ^:private coll-thaw "Thaws simple collection types."
   [s coll]
