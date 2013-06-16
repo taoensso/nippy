@@ -51,7 +51,7 @@
 (defn- destructure-typed-pwd
   [typed-password]
   (letfn [(throw-ex []
-            (throw (Exception.
+            (throw (AssertionError.
               (str "Expected password form: "
                    "[<#{:salted :cached}> <password-string>].\n "
                    "See `default-aes128-encryptor` docstring for details!"))))]
