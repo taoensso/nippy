@@ -206,16 +206,16 @@
 
 (declare thaw-from-stream)
 
-(defn coll-thaw
-  "Thaws simple collection types."
-  [coll ^DataInputStream s]
-  (utils/repeatedly-into coll (.readInt s) (thaw-from-stream s)))
+(defmacro ^:private coll-thaw "Thaws simple collection types."
+  [s coll]
+  `(let [s# ~s]
+     (utils/repeatedly-into ~coll (.readInt s#) (thaw-from-stream s#))))
 
-(defn coll-thaw-kvs
-  "Thaws key-value collection types."
-  [coll ^DataInputStream s]
-  (utils/repeatedly-into coll (/ (.readInt s) 2)
-    [(thaw-from-stream s) (thaw-from-stream s)]))
+(defmacro ^:private coll-thaw-kvs "Thaws key-value collection types."
+  [s coll]
+  `(let [s# ~s]
+     (utils/repeatedly-into ~coll (/ (.readInt s#) 2)
+       [(thaw-from-stream s#) (thaw-from-stream s#)])))
 
 (defn- thaw-from-stream
   [^DataInputStream s]
@@ -232,15 +232,15 @@
      id-string  (read-utf8 s)
      id-keyword (keyword (read-utf8 s))
 
-     id-queue      (coll-thaw (PersistentQueue/EMPTY) s)
-     id-sorted-set (coll-thaw     (sorted-set) s)
-     id-sorted-map (coll-thaw-kvs (sorted-map) s)
+     id-queue      (coll-thaw s (PersistentQueue/EMPTY))
+     id-sorted-set (coll-thaw s     (sorted-set))
+     id-sorted-map (coll-thaw-kvs s (sorted-map))
 
-     id-list    (into '() (rseq (coll-thaw [] s)))
-     id-vector  (coll-thaw  [] s)
-     id-set     (coll-thaw #{} s)
-     id-map     (coll-thaw-kvs {} s)
-     id-coll    (seq (coll-thaw [] s))
+     id-list    (into '() (rseq (coll-thaw s [])))
+     id-vector  (coll-thaw s  [])
+     id-set     (coll-thaw s #{})
+     id-map     (coll-thaw-kvs s  {})
+     id-coll    (seq (coll-thaw s []))
 
      id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
 
@@ -261,7 +261,7 @@
      id-old-reader (read-string (.readUTF s))
      id-old-string (.readUTF s)
      id-old-map    (apply hash-map (utils/repeatedly-into []
-                                     (* 2 (.readInt s)) (thaw-from-stream s)))
+                     (* 2 (.readInt s)) (thaw-from-stream s)))
      id-old-keyword (keyword (.readUTF s))
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
