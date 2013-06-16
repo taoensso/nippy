@@ -65,7 +65,9 @@
 (def ^:const id-old-map     (int 22)) ; as of 0.9.0, for more efficient thaw
 (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
 
-;;;; Shared low-level stream stuff
+;;;; Freezing
+
+(defprotocol Freezable (freeze-to-stream* [this stream]))
 
 (defn- write-id [^DataOutputStream stream ^Integer id] (.writeByte stream id))
 
@@ -82,24 +84,6 @@
 (defn- write-utf8
   [^DataOutputStream stream ^String x]
   (write-bytes stream (.getBytes x "UTF-8")))
-
-(defn- read-bytes
-  ^bytes [^DataInputStream stream]
-  (let [size (.readInt stream)
-        ba   (byte-array size)]
-    (.read stream ba 0 size) ba))
-
-(defn- read-biginteger
-  ^BigInteger [^DataInputStream stream]
-  (BigInteger. (read-bytes stream)))
-
-(defn- read-utf8
-  [^DataInputStream stream]
-  (String. (read-bytes stream) "UTF-8"))
-
-;;;; Freezing
-
-(defprotocol Freezable (freeze-to-stream* [this stream]))
 
 (defn- freeze-to-stream
   "Like `freeze-to-stream*` but with metadata support."
@@ -205,6 +189,20 @@
 ;;;; Thawing
 
 (declare thaw-from-stream)
+
+(defn- read-bytes
+  ^bytes [^DataInputStream stream]
+  (let [size (.readInt stream)
+        ba   (byte-array size)]
+    (.read stream ba 0 size) ba))
+
+(defn- read-biginteger
+  ^BigInteger [^DataInputStream stream]
+  (BigInteger. (read-bytes stream)))
+
+(defn- read-utf8
+  [^DataInputStream stream]
+  (String. (read-bytes stream) "UTF-8"))
 
 (defmacro ^:private coll-thaw "Thaws simple collection types."
   [s coll]
