@@ -4,8 +4,8 @@
   {:author "Peter Taoussanis"}
   (:require [taoensso.nippy
              (utils       :as utils)
-             (compression :as compression)
-             (encryption  :as encryption)])
+             (compression :as compression :refer (snappy-compressor))
+             (encryption  :as encryption  :refer (aes128-encryptor))])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
@@ -167,8 +167,9 @@
   true to produce bytes readble by Nippy < 2.x."
   ^bytes [x & [{:keys [print-dup? password compressor encryptor legacy-mode]
                 :or   {print-dup? true
-                       compressor compression/default-snappy-compressor
-                       encryptor  encryption/default-aes128-encryptor}}]]
+                       compressor snappy-compressor
+                       encryptor  aes128-encryptor}}]]
+
   (let [ba     (ByteArrayOutputStream.)
         stream (DataOutputStream. ba)]
     (binding [*print-dup* print-dup?] (freeze-to-stream x stream))
@@ -277,8 +278,8 @@
   [^bytes ba & [{:keys [read-eval? password compressor encryptor legacy-mode
                         strict?]
                  :or   {legacy-mode :auto
-                        compressor compression/default-snappy-compressor
-                        encryptor  encryption/default-aes128-encryptor}}]]
+                        compressor  snappy-compressor
+                        encryptor   aes128-encryptor}}]]
 
   (let [try-thaw-data
         (fn [data-ba {decompress? :compressed? decrypt? :encrypted?
@@ -398,7 +399,8 @@
                :or   {print-dup? true
                       compress?  true}}]
   (freeze x {:print-dup?   print-dup?
-             :compressor   (when compress? compression/default-snappy-compressor)
+             :compressor   (when compress? snappy-compressor)
+             :encryptor    nil
              :password     password
              :legacy-mode  true}))
 
@@ -406,6 +408,7 @@
   [ba & {:keys [read-eval? compressed? password]
          :or   {compressed? true}}]
   (thaw ba {:read-eval?   read-eval?
-            :compressor   (when compressed? compression/default-snappy-compressor)
+            :compressor   (when compressed? snappy-compressor)
+            :encryptor    nil
             :password     password
             :legacy-mode  true}))

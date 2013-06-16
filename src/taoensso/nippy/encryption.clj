@@ -64,7 +64,7 @@
 
 (comment (destructure-typed-pwd [:salted "foo"]))
 
-(defrecord DefaultAES128Encryptor [key-cache]
+(defrecord AES128Encryptor [key-cache]
   IEncryptor
   (encrypt [this typed-pwd data-ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
@@ -93,7 +93,7 @@
              ^javax.crypto.spec.SecretKeySpec key iv)
       (.doFinal aes128-cipher data-ba))))
 
-(def default-aes128-encryptor
+(def aes128-encryptor
   "Alpha - subject to change.
   Default 128bit AES encryptor with multi-round SHA-512 keygen.
 
@@ -129,12 +129,12 @@
 
   Faster than `aes128-salted`, and harder to attack any particular key - but
   increased danger if a key is somehow compromised."
-  (DefaultAES128Encryptor. (atom {})))
+  (AES128Encryptor. (atom {})))
 
 ;;;; Default implementation
 
 (comment
-  (def dae default-aes128-encryptor)
+  (def dae aes128-encryptor)
   (def secret-ba (.getBytes "Secret message" "UTF-8"))
   (encrypt dae "p" secret-ba) ; Malformed
   (time (encrypt dae [:salted "p"] secret-ba))
