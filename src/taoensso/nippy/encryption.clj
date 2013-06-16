@@ -13,15 +13,15 @@
 
 ;;;; Default digests, ciphers, etc.
 
-(def ^:private ^:const aes128-block-size (int 16))
-(def ^:private ^:const salt-size         (int 16))
-
 (def ^:private ^javax.crypto.Cipher aes128-cipher
   (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding"))
 (def ^:private ^java.security.MessageDigest sha512-md
   (java.security.MessageDigest/getInstance "SHA-512"))
 (def ^:private ^java.security.SecureRandom prng
   (java.security.SecureRandom/getInstance "SHA1PRNG"))
+
+(def ^:private ^:const aes128-block-size (.getBlockSize aes128-cipher))
+(def ^:private ^:const salt-size         aes128-block-size)
 
 (defn- rand-bytes [size] (let [seed (byte-array size)] (.nextBytes prng seed) seed))
 
