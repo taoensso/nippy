@@ -11,11 +11,10 @@
 
 ;;;; Default implementations
 
-(deftype DefaultSnappyCompressor []
+(deftype SnappyCompressor []
   ICompressor
   (compress   [_ ba] (org.iq80.snappy.Snappy/compress   ba))
   (decompress [_ ba] (org.iq80.snappy.Snappy/uncompress ba 0 (alength ^bytes ba))))
 
-(def default-snappy-compressor
-  "Default org.iq80.snappy.Snappy compressor."
-  (DefaultSnappyCompressor.))
+(def snappy-compressor "Default org.iq80.snappy.Snappy compressor."
+  (SnappyCompressor.))

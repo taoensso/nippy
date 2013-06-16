@@ -13,15 +13,15 @@
 
 ;;;; Default digests, ciphers, etc.
 
-(def ^:private ^:const aes128-block-size (int 16))
-(def ^:private ^:const salt-size         (int 16))
-
 (def ^:private ^javax.crypto.Cipher aes128-cipher
   (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding"))
 (def ^:private ^java.security.MessageDigest sha512-md
   (java.security.MessageDigest/getInstance "SHA-512"))
 (def ^:private ^java.security.SecureRandom prng
   (java.security.SecureRandom/getInstance "SHA1PRNG"))
+
+(def ^:private ^:const aes128-block-size (.getBlockSize aes128-cipher))
+(def ^:private ^:const salt-size         aes128-block-size)
 
 (defn- rand-bytes [size] (let [seed (byte-array size)] (.nextBytes prng seed) seed))
 
@@ -51,7 +51,7 @@
 (defn- destructure-typed-pwd
   [typed-password]
   (letfn [(throw-ex []
-            (throw (Exception.
+            (throw (AssertionError.
               (str "Expected password form: "
                    "[<#{:salted :cached}> <password-string>].\n "
                    "See `default-aes128-encryptor` docstring for details!"))))]
@@ -64,7 +64,7 @@
 
 (comment (destructure-typed-pwd [:salted "foo"]))
 
-(defrecord DefaultAES128Encryptor [key-cache]
+(defrecord AES128Encryptor [key-cache]
   IEncryptor
   (encrypt [this typed-pwd data-ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
@@ -93,7 +93,7 @@
              ^javax.crypto.spec.SecretKeySpec key iv)
       (.doFinal aes128-cipher data-ba))))
 
-(def default-aes128-encryptor
+(def aes128-encryptor
   "Alpha - subject to change.
   Default 128bit AES encryptor with multi-round SHA-512 keygen.
 
@@ -129,12 +129,12 @@
 
   Faster than `aes128-salted`, and harder to attack any particular key - but
   increased danger if a key is somehow compromised."
-  (DefaultAES128Encryptor. (atom {})))
+  (AES128Encryptor. (atom {})))
 
 ;;;; Default implementation
 
 (comment
-  (def dae default-aes128-encryptor)
+  (def dae aes128-encryptor)
   (def secret-ba (.getBytes "Secret message" "UTF-8"))
   (encrypt dae "p" secret-ba) ; Malformed
   (time (encrypt dae [:salted "p"] secret-ba))
