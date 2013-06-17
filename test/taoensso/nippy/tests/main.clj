@@ -27,4 +27,4 @@
       (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
       (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
 
-(expect (benchmarks/autobench)) ; Also tests :cached passwords
+(expect (benchmarks/bench {:reader? false})) ; Also tests :cached passwords

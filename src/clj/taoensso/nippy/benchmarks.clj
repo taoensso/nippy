@@ -6,7 +6,7 @@
 ;; Remove stuff from stress-data that breaks reader
 (def data (dissoc nippy/stress-data :queue :queue-empty :bytes))
 
-(defmacro bench [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 2000))
+(defmacro bench* [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 2000))
 
 (defn freeze-reader [x] (binding [*print-dup* false] (pr-str x)))
 (defn thaw-reader   [x] (binding [*read-eval* false] (read-string x)))
@@ -17,52 +17,59 @@
                                #(freeze % {:password [:cached "p"]})))
 (def roundtrip-fast      (comp thaw #(freeze % {:compressor nil})))
 
-(defn autobench []
-  (println "Benchmarking roundtrips")
-  (println "-----------------------")
-  (let [results {:defaults  (bench (roundtrip-defaults  data))
-                 :encrypted (bench (roundtrip-encrypted data))
-                 :fast      (bench (roundtrip-fast      data))}]
-    (println results)
-    results))
+(defn bench [{:keys [reader? laps] :or {reader? true laps 1}}]
+  (println)
+  (println "Benching (this can take some time)")
+  (println "----------------------------------")
+  (dotimes [l laps]
+    (println)
+    (println (str "Lap " (inc l) "/" laps "..."))
 
-(comment
-
-  (do ; Roundtrip times
-    (println "Benching (this can take some time)...")
-    (println "-------------------------------------")
-
-    (println
-     {:reader
-      {:round     (bench (roundtrip-reader data))
-       :freeze    (bench (freeze-reader data))
-       :thaw      (let [frozen (freeze-reader data)] (bench (thaw-reader frozen)))
-       :data-size (count (.getBytes ^String (freeze-reader data) "UTF-8"))}})
+    (when reader?
+      (println
+       {:reader
+        {:round     (bench* (roundtrip-reader data))
+         :freeze    (bench* (freeze-reader data))
+         :thaw      (let [frozen (freeze-reader data)] (bench* (thaw-reader frozen)))
+         :data-size (count (.getBytes ^String (freeze-reader data) "UTF-8"))}}))
 
     (println
      {:defaults
-      {:round     (bench (roundtrip-defaults data))
-       :freeze    (bench (freeze data))
-       :thaw      (let [frozen (freeze data)] (bench (thaw frozen)))
+      {:round     (bench* (roundtrip-defaults data))
+       :freeze    (bench* (freeze data))
+       :thaw      (let [frozen (freeze data)] (bench* (thaw frozen)))
        :data-size (count (freeze data))}})
 
     (println
      {:encrypted
-      {:round     (bench (roundtrip-encrypted data))
-       :freeze    (bench (freeze data {:password [:cached "p"]}))
+      {:round     (bench* (roundtrip-encrypted data))
+       :freeze    (bench* (freeze data {:password [:cached "p"]}))
        :thaw      (let [frozen (freeze data {:password [:cached "p"]})]
-                    (bench (thaw frozen {:password [:cached "p"]})))
+                    (bench* (thaw frozen {:password [:cached "p"]})))
        :data-size (count (freeze data {:password [:cached "p"]}))}})
 
     (println
      {:fast
-      {:round     (bench (roundtrip-fast data))
-       :freeze    (bench (freeze data {:compressor nil}))
+      {:round     (bench* (roundtrip-fast data))
+       :freeze    (bench* (freeze data {:compressor nil}))
        :thaw      (let [frozen (freeze data {:compressor nil})]
-                    (bench (thaw frozen)))
-       :data-size (count (freeze data {:compressor nil}))}})
+                    (bench* (thaw frozen)))
+       :data-size (count (freeze data {:compressor nil}))}}))
 
-    (println "Done! (Time for cake?)"))
+  (println)
+  (println "Done! (Time for cake?)")
+  true)
+
+(comment
+  ;; (bench {:reader? true  :laps 2})
+  ;; (bench {:reader? false :laps 1})
+  ;; (bench {:reader? false :laps 2})
+
+  ;;; 17 June 2013: Clojure 1.5.1, Nippy 2.0.0-alpha6 w/fast io-streams
+  ;; {:reader    {:round 49819, :freeze 23601, :thaw 26247, :data-size 22966}}
+  ;; {:defaults  {:round 5670,  :freeze 3536,  :thaw 1919,  :data-size 12396}}
+  ;; {:encrypted {:round 9038,  :freeze 5111,  :thaw 3582,  :data-size 12420}}
+  ;; {:fast      {:round 5182,  :freeze 3177,  :thaw 1820,  :data-size 13342}}
 
   ;;; 16 June 2013: Clojure 1.5.1, Nippy 2.0.0-alpha6
   ;; {:reader    {:freeze 23601, :thaw 26247, :round 49819, :data-size 22966}}
@@ -96,7 +103,7 @@
   ;; {:reader {:freeze 28505, :thaw 36451, :round 59545},
   ;;  :nippy  {:freeze 3751,  :thaw 4184,  :round 7769}}
 
-  (println (bench (roundtrip data))) ; Snappy implementations
+  (println (bench* (roundtrip data))) ; Snappy implementations
   ;; {:no-snappy [6163 6064 6042 6176] :JNI [6489 6446 6542 6412]
   ;;  :native-array-copy [6569 6419 6414 6590]}
   )
