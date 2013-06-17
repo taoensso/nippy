@@ -2,10 +2,10 @@ Current [semantic](http://semver.org/) version:
 
 ```clojure
 [com.taoensso/nippy "1.2.1"]        ; Stable
-[com.taoensso/nippy "2.0.0-alpha8"] ; Development (notes below)
+[com.taoensso/nippy "2.0.0-alpha9"] ; Development (notes below)
 ```
 
-2.x adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), and hugely improved performance. It **is backwards compatible**, but please note that the old `freeze-to-bytes`/`thaw-from-bytes` API has been **deprecated** in favor of `freeze`/`thaw`. **PLEASE REPORT ANY PROBLEMS!**
+v2 adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), easier integration into other tools/libraries, and hugely improved performance. It **is backwards compatible**, but please note that the old `freeze-to-bytes`/`thaw-from-bytes` API has been **deprecated** in favor of `freeze`/`thaw`. **PLEASE REPORT ANY PROBLEMS!**
 
 # Nippy, a Clojure serialization library
 
@@ -20,7 +20,8 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
   * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
   * **Full test coverage** for every supported type.
   * Fully pluggable **compression**, including built-in high-performance [Snappy](http://code.google.com/p/snappy/) compressor.
-  * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option. (2.0.0+)
+  * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option. (v2+)
+  * Utils for **easy integration into 3rd-party tools/libraries**. (v2+)
 
 ## Getting started
 
@@ -103,7 +104,7 @@ Couldn't be simpler!
 
 ### Encryption (currently in **ALPHA**)
 
-As of 2.0.0, Nippy also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
+Nippy v2+ also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
 
 ```clojure
 (nippy/freeze nippy/stress-data {:password [:salted "my-password"]}) ; Encrypt
