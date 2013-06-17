@@ -21,5 +21,5 @@
             [codox             "0.6.4"]]
   :min-lein-version "2.0.0"
   :warn-on-reflection true
-  :java-source-paths ["java-src"]
-  :javac-options     ["-target" "1.6" "-source" "1.6"])
+  :source-paths      ["src/clj"]
+  :java-source-paths ["src/java"])
