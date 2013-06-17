@@ -269,7 +269,8 @@
   [^bytes ba & [{:keys [read-eval? password compressor encryptor legacy-opts]
                  :or   {legacy-opts {:compressed? true}
                         compressor  snappy-compressor
-                        encryptor   aes128-encryptor}}]]
+                        encryptor   aes128-encryptor}
+                 :as   opts}]]
 
   (let [ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
         try-thaw-data
@@ -301,7 +302,8 @@
        (and compressed? (not compressor))
        (ex "Compressed data. Try again with compressor.")
        (and encrypted? (not password))
-       (ex "Encrypted data. Try again with password.")
+       (if (::tools-thaw? opts) ::need-password
+           (ex "Encrypted data. Try again with password."))
        :else (try (try-thaw-data data-ba head-meta)
                   (catch Exception _ (try-thaw-data ba nil))))
 
