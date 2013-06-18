@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.0.0-alpha10"
+(defproject com.taoensso/nippy "2.0.0-beta1"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
   :license {:name "Eclipse Public License"
@@ -20,6 +20,4 @@
             [lein-autoexpect   "0.2.5"]
             [codox             "0.6.4"]]
   :min-lein-version "2.0.0"
-  :warn-on-reflection true
-  :source-paths      ["src/clj"]
-  :java-source-paths ["src/java"])
+  :warn-on-reflection true)
