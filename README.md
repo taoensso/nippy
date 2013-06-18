@@ -1,7 +1,7 @@
 Current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "1.2.1"]        ; Stable
+[com.taoensso/nippy "1.2.1"]         ; Stable
 [com.taoensso/nippy "2.0.0-alpha10"] ; Development (notes below)
 ```
 

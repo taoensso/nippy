@@ -10,7 +10,7 @@
 (defn wrapped-for-freezing? [x] (instance? WrappedForFreezing x))
 (defn wrap-for-freezing
   "Wraps arg (any freezable data type) so that (tools/freeze <wrapped-arg>)
-  will freeze the arg using given options."
+  will serialize the arg using given options."
   [value & [opts]] (WrappedForFreezing. value opts))
 
 (defn freeze
@@ -28,7 +28,10 @@
 (defn encrypted-frozen? [x] (instance? EncryptedFrozen x))
 
 (def ^:dynamic *thaw-opts* nil)
-(defmacro with-thaw-opts [opts & body] `(binding [*thaw-opts* ~opts] ~@body))
+(defmacro with-thaw-opts
+  "Evaluates body using given options for any automatic deserialization in
+  context."
+  [opts & body] `(binding [*thaw-opts* ~opts] ~@body))
 
 (defn thaw
   "Like `nippy/thaw` but takes options from *thaw-opts* binding, and wraps
