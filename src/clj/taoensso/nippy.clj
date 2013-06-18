@@ -296,7 +296,7 @@
     (if-let [[data-ba {:keys [unrecognized-header? compressed? encrypted?]
                        :as   head-meta}] (try-parse-header ba)]
 
-      (cond ; Header appears okay
+      (cond ; Header _appears_ okay
        (and (not legacy-opts) unrecognized-header?) ; Conservative
        (ex "Unrecognized header. Data frozen with newer Nippy version?")
        (and compressed? (not compressor))
@@ -305,10 +305,15 @@
        (if (::tools-thaw? opts) ::need-password
            (ex "Encrypted data. Try again with password."))
        :else (try (try-thaw-data data-ba head-meta)
-                  (catch Exception _ (try-thaw-data ba nil))))
+                  (catch Exception e
+                    (if legacy-opts
+                      (try-thaw-data ba nil)
+                      (throw e)))))
 
       ;; Header definitely not okay
-      (try-thaw-data ba nil))))
+      (if legacy-opts
+        (try-thaw-data ba nil)
+        (ex "Unfrozen or corrupt data?")))))
 
 (comment (thaw (freeze "hello"))
          (thaw (freeze "hello" {:compressor nil}))
