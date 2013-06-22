@@ -6,8 +6,11 @@
              (utils       :as utils)
              (compression :as compression :refer (snappy-compressor))
              (encryption  :as encryption  :refer (aes128-encryptor))])
-  (:import  [java.io DataInputStream DataOutputStream]
-            [cc.qbits.grease.io FastByteArrayInputStream FastByteArrayOutputStream]
+  (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
+             ByteArrayInputStream]
+            ;; [java.io DataInputStream DataOutputStream]
+            ;;[cc.qbits.grease.io FastByteArrayInputStream
+            ;;FastByteArrayOutputStream]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
              PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
              IPersistentSet IPersistentCollection]))
@@ -171,7 +174,7 @@
                        compressor snappy-compressor
                        encryptor  aes128-encryptor}}]]
   (when legacy-mode (assert-legacy-args compressor password))
-  (let [ba     (FastByteArrayOutputStream.)
+  (let [ba     (ByteArrayOutputStream.)
         stream (DataOutputStream. ba)]
     (binding [*print-dup* print-dup?] (freeze-to-stream x stream))
     (let [ba (.toByteArray ba)
@@ -283,7 +286,7 @@
               (let [ba data-ba
                     ba (if password (encryption/decrypt encryptor password ba) ba)
                     ba (if compressor (compression/decompress compressor ba) ba)
-                    stream (DataInputStream. (FastByteArrayInputStream. ba))]
+                    stream (DataInputStream. (ByteArrayInputStream. ba))]
                 (binding [*read-eval* read-eval?] (thaw-from-stream stream)))
               (catch Exception e
                 (cond

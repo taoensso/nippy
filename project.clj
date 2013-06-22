@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.0.0-beta1"
+(defproject com.taoensso/nippy "2.0.0-beta2"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
   :license {:name "Eclipse Public License"
@@ -6,7 +6,8 @@
   :dependencies [[org.clojure/clojure    "1.4.0"]
                  [expectations           "1.4.43"]
                  [org.iq80.snappy/snappy "0.3"]
-                 [cc.qbits/grease        "0.2.1"]]
+                 ;; [cc.qbits/grease        "0.2.1"]
+                 ]
   :profiles {:1.4   {:dependencies [[org.clojure/clojure "1.4.0"]]}
              :1.5   {:dependencies [[org.clojure/clojure "1.5.1"]]}
              :dev   {:dependencies []}
