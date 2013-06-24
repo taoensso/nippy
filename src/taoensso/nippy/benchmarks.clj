@@ -65,7 +65,7 @@
   ;; (bench {:reader? false :laps 1})
   ;; (bench {:reader? false :laps 2})
 
-  ;;; 17 June 2013: Clojure 1.5.1, Nippy 2.0.0-alpha6 w/fast io-streams
+  ;;; 17 June 2013: Clojure 1.5.1, JVM 7 Nippy 2.0.0-alpha6 w/fast io-streams
   ;; {:reader    {:round 49819, :freeze 23601, :thaw 26247, :data-size 22966}}
   ;; {:defaults  {:round 5670,  :freeze 3536,  :thaw 1919,  :data-size 12396}}
   ;; {:encrypted {:round 9038,  :freeze 5111,  :thaw 3582,  :data-size 12420}}
