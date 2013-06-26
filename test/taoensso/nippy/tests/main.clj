@@ -6,6 +6,9 @@
 ;; Remove stuff from stress-data that breaks roundtrip equality
 (def test-data (dissoc nippy/stress-data :bytes))
 
+(defn- before-run {:expectations-options :before-run} [])
+(defn- after-run  {:expectations-options :after-run}  [])
+
 (expect test-data ((comp thaw freeze) test-data))
 (expect test-data ((comp thaw #(freeze % {:legacy-mode true})) test-data))
 (expect test-data ((comp #(thaw   % {:password [:salted "p"]})
