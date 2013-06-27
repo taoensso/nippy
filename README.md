@@ -114,7 +114,7 @@ Nippy v2+ also gives you **dead simple data encryption**. Add a single option to
 (nippy/thaw   <encrypted-data>  {:password [:salted "my-password"]}) ; Decrypt
 ```
 
-There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `default-aes128-encryptor` [docstring](http://ptaoussanis.github.io/nippy/taoensso.nippy.encryption.html) for a detailed explanation of why/when you'd want one or the other.
+There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-encryptor` [docstring](http://ptaoussanis.github.io/nippy/taoensso.nippy.encryption.html) for a detailed explanation of why/when you'd want one or the other.
 
 ## Performance
 
