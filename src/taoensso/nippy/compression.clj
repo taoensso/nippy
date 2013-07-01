@@ -17,4 +17,4 @@
   (decompress [_ ba] (org.iq80.snappy.Snappy/uncompress ba 0 (alength ^bytes ba))))
 
 (def snappy-compressor "Default org.iq80.snappy.Snappy compressor."
-  (SnappyCompressor.))
+  (->SnappyCompressor))

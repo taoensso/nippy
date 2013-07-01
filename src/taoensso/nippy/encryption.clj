@@ -129,7 +129,7 @@
 
   Faster than `aes128-salted`, and harder to attack any particular key - but
   increased danger if a key is somehow compromised."
-  (AES128Encryptor. (atom {})))
+  (->AES128Encryptor (atom {})))
 
 ;;;; Default implementation
 

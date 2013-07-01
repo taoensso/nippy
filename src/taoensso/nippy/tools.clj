@@ -11,7 +11,7 @@
 (defn wrap-for-freezing
   "Wraps arg (any freezable data type) so that (tools/freeze <wrapped-arg>)
   will serialize the arg using given options."
-  [value & [opts]] (WrappedForFreezing. value opts))
+  [value & [opts]] (->WrappedForFreezing value opts))
 
 (defn freeze
   "Like `nippy/freeze` but takes options from special argument wrapper when

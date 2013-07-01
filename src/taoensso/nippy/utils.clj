@@ -87,7 +87,7 @@
 (defn ba-split [^bytes ba ^Integer idx]
   (let [s (alength ba)]
     (when (> s idx)
-      [(java.util.Arrays/copyOfRange ba 0 idx)
+      [(java.util.Arrays/copyOf      ba idx)
        (java.util.Arrays/copyOfRange ba idx s)])))
 
 (comment (String. (ba-concat (.getBytes "foo") (.getBytes "bar")))
