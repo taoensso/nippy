@@ -1,4 +1,4 @@
-## v1.2.1 → v2.0.0-RC1
+## v1.2.1 → v2.0.0
   * Refactored for huge performance improvements (~40% roundtrip time).
   * New header format for better error messages.
   * New `taoensso.nippy.tools` ns for easier integration with 3rd-party tools.
