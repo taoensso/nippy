@@ -9,6 +9,8 @@ v2 adds pluggable compression, crypto support (also pluggable), an improved API 
   * **BREAKING**: Nothing (but please test first).
   * **DEPRECATED**: `freeze-to-bytes`->`freeze`, `thaw-from-bytes`->`thaw`.
 
+**Migration note**: Please be sure to use `lein clean` to clear old (v1) build artifacts!
+
 # Nippy, a Clojure serialization library
 
 Clojure's [rich data types](http://clojure.org/datatypes) are *awesome*. And its [reader](http://clojure.org/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).

@@ -1,4 +1,5 @@
 ## v1.2.1 → v2.0.0
+  * **MIGRATION NOTE**: Please be sure to use `lein clean` to clear old (v1) build artifacts!
   * Refactored for huge performance improvements (~40% roundtrip time).
   * New header format for better error messages.
   * New `taoensso.nippy.tools` ns for easier integration with 3rd-party tools.
