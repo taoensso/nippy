@@ -15,7 +15,7 @@
 ;;;; Nippy 2.x+ header spec (4 bytes)
 (def ^:private ^:const head-version 1)
 (def ^:private head-sig (.getBytes "NPY" "UTF-8"))
-(def ^:private head-meta "Final byte stores version-dependent metadata."
+(def ^:private ^:const head-meta "Final byte stores version-dependent metadata."
   {(byte 0) {:version 1 :compressed? false :encrypted? false}
    (byte 1) {:version 1 :compressed? true  :encrypted? false}
    (byte 2) {:version 1 :compressed? false :encrypted? true}
