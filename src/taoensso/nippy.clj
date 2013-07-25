@@ -78,12 +78,19 @@
 (defmacro ^:private write-utf8       [s x] `(write-bytes ~s (.getBytes ~x "UTF-8")))
 (defmacro ^:private freeze-to-stream
   "Like `freeze-to-stream*` but with metadata support."
-  [x s]
+  [s x]
   `(let [x# ~x s# ~s]
-     (if-let [m# (meta x#)]
-       (do (write-id s# ~id-meta)
-           (freeze-to-stream* m# s#)))
+     (when-let [m# (meta x#)]
+       (write-id s# ~id-meta)
+       (freeze-to-stream* m# s#))
      (freeze-to-stream* x# s#)))
+
+(defn freeze-to-stream!
+  "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
+  [^DataOutputStream data-output-stream x & [{:keys [print-dup?]
+                                              :or   {print-dup? true}}]]
+  (binding [*print-dup* print-dup?]
+    (freeze-to-stream data-output-stream x)))
 
 (defmacro ^:private freezer
   "Helper to extend Freezable protocol."
@@ -99,7 +106,7 @@
   [type id & body]
   `(freezer ~type ~id
     (.writeInt ~'s (count ~'x))
-    (doseq [i# ~'x] (freeze-to-stream i# ~'s))))
+    (doseq [i# ~'x] (freeze-to-stream ~'s i#))))
 
 (defmacro ^:private kv-freezer
   "Extends Freezable to key-value collection types."
@@ -107,8 +114,8 @@
   `(freezer ~type ~id
     (.writeInt ~'s (* 2 (count ~'x)))
     (doseq [[k# v#] ~'x]
-      (freeze-to-stream k# ~'s)
-      (freeze-to-stream v# ~'s))))
+      (freeze-to-stream ~'s k#)
+      (freeze-to-stream ~'s v#))))
 
 (freezer (Class/forName "[B") id-bytes   (write-bytes s ^bytes x))
 (freezer nil                  id-nil)
@@ -173,7 +180,7 @@
   (when legacy-mode (assert-legacy-args compressor password))
   (let [ba     (ByteArrayOutputStream.)
         stream (DataOutputStream. ba)]
-    (binding [*print-dup* print-dup?] (freeze-to-stream x stream))
+    (freeze-to-stream! stream x {:print-dup? print-dup?})
     (let [ba (.toByteArray ba)
           ba (if compressor (compression/compress compressor ba) ba)
           ba (if password   (encryption/encrypt encryptor password ba) ba)]
@@ -254,6 +261,13 @@
 
      (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
 
+(defn thaw-from-stream!
+  "Low-level API. Deserializes a frozen object from given DataInputStream to its
+  original Clojure data type."
+  [data-input-stream & [{:keys [read-eval?]}]]
+  (binding [*read-eval* read-eval?]
+    (thaw-from-stream data-input-stream)))
+
 (defn- try-parse-header [ba]
   (when-let [[head-ba data-ba] (utils/ba-split ba 4)]
     (let [[head-sig* [meta-id]] (utils/ba-split head-ba 3)]
@@ -261,8 +275,9 @@
         [data-ba (head-meta meta-id {:unrecognized-header? true})]))))
 
 (defn thaw
-  "Deserializes frozen bytes to their original Clojure data type. Supports data
-  frozen with current and all previous versions of Nippy.
+  "Deserializes a frozen object from given byte array to its original Clojure
+  data type. Supports data frozen with current and all previous versions of
+  Nippy.
 
   WARNING: Enabling `:read-eval?` can lead to security vulnerabilities unless
   you are sure you know what you're doing."
@@ -284,7 +299,7 @@
                     ba (if password (encryption/decrypt encryptor password ba) ba)
                     ba (if compressor (compression/decompress compressor ba) ba)
                     stream (DataInputStream. (ByteArrayInputStream. ba))]
-                (binding [*read-eval* read-eval?] (thaw-from-stream stream)))
+                (thaw-from-stream! stream {:read-eval? read-eval?}))
               (catch Exception e
                 (cond
                  password   (ex "Wrong password/encryptor?" e)
