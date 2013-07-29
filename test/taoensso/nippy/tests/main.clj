@@ -30,4 +30,15 @@
       (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
       (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
 
+;;; Custom types
+(defrecord MyType [data]
+  nippy/Freezable
+  (freeze-to-stream* [x s]
+    (.writeByte s -1)
+    (.writeUTF s (:data x))))
+
+(expect Exception (thaw (freeze (MyType. "Joe"))))
+(expect "Joe"     (thaw (freeze (MyType. "Joe"))
+                        {:readers {-1 (fn [s] (.readUTF s))}}))
+
 (expect (benchmarks/bench {:reader? false})) ; Also tests :cached passwords

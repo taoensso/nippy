@@ -23,6 +23,9 @@
 
 ;;;; Data type IDs
 
+;; **Negative ids reserved for user-defined types**
+
+(def ^:const id-reserved   (int 0))
 ;;                              1
 (def ^:const id-bytes      (int 2))
 (def ^:const id-nil        (int 3))
@@ -65,7 +68,7 @@
 (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
 
 ;;;; Freezing
-(defprotocol Freezable (freeze-to-stream* [this stream]))
+(defprotocol Freezable (freeze-to-stream* [this ^DataOutputStream stream]))
 
 (defmacro ^:private write-id    [s id] `(.writeByte ~s ~id))
 (defmacro ^:private write-bytes [s ba]
@@ -173,7 +176,14 @@
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. Set :legacy-mode to
-  true to produce bytes readble by Nippy < 2.x."
+  true to produce bytes readble by Nippy < 2.x.
+
+  For custom types extend the Clojure reader or Nippy's `Freezable` protocol:
+  (defrecord MyType [data]
+    nippy/Freezable
+    (freeze-to-stream* [x stream]
+      (.writeByte stream -1) ; Custom type id ∈ [-128, -1]
+      (.writeUTF  stream (:data x))))"
   ^bytes [x & [{:keys [print-dup? password compressor encryptor legacy-mode]
                 :or   {print-dup? true
                        compressor snappy-compressor
@@ -214,10 +224,9 @@
        [(thaw-from-stream s#) (thaw-from-stream s#)])))
 
 (defn- thaw-from-stream
-  [^DataInputStream s]
+  [^DataInputStream s & [readers]]
   (let [type-id (.readByte s)]
-    (utils/case-eval
-     type-id
+    (utils/case-eval type-id
 
      id-reader  (read-string (read-utf8 s))
      id-bytes   (read-bytes s)
@@ -260,14 +269,22 @@
                      (* 2 (.readInt s)) (thaw-from-stream s)))
      id-old-keyword (keyword (.readUTF s))
 
-     (throw (Exception. (str "Failed to thaw unknown type ID: " type-id))))))
+     ;;; Custom types
+     (or (when-let [reader (get readers type-id)]
+           (try (reader s)
+                (catch Exception e
+                  (throw (Exception. (str "Reader exception for custom type ID: "
+                                          type-id) e)))))
+         (if (neg? type-id)
+           (throw (Exception. (str "No reader provided for custom type ID: " type-id)))
+           (throw (Exception. (str "Unknown type ID: " type-id))))))))
 
 (defn thaw-from-stream!
   "Low-level API. Deserializes a frozen object from given DataInputStream to its
   original Clojure data type."
-  [data-input-stream & [{:keys [read-eval?]}]]
+  [data-input-stream & [{:keys [read-eval? readers]}]]
   (binding [*read-eval* read-eval?]
-    (thaw-from-stream data-input-stream)))
+    (thaw-from-stream data-input-stream readers)))
 
 (defn- try-parse-header [ba]
   (when-let [[head-ba data-ba] (utils/ba-split ba 4)]
@@ -280,9 +297,12 @@
   data type. Supports data frozen with current and all previous versions of
   Nippy.
 
+  For custom `Freezable` types provide a `:readers` arg:
+  (thaw (freeze (MyType. \"Joe\")) {:readers {-1 (fn [stream] (.readUTF stream))}})
+
   WARNING: Enabling `:read-eval?` can lead to security vulnerabilities unless
   you are sure you know what you're doing."
-  [^bytes ba & [{:keys [read-eval? password compressor encryptor legacy-opts]
+  [^bytes ba & [{:keys [read-eval? password compressor encryptor legacy-opts readers]
                  :or   {legacy-opts {:compressed? true}
                         compressor  snappy-compressor
                         encryptor   aes128-encryptor}
@@ -300,7 +320,9 @@
                     ba (if password (encryption/decrypt encryptor password ba) ba)
                     ba (if compressor (compression/decompress compressor ba) ba)
                     stream (DataInputStream. (ByteArrayInputStream. ba))]
-                (thaw-from-stream! stream {:read-eval? read-eval?}))
+
+                (thaw-from-stream! stream {:read-eval? read-eval? :readers readers}))
+
               (catch Exception e
                 (cond
                  password   (ex "Wrong password/encryptor?" e)
@@ -323,7 +345,9 @@
        :else (try (try-thaw-data data-ba head-meta)
                   (catch Exception e
                     (if legacy-opts
-                      (try-thaw-data ba nil)
+                      (try (try-thaw-data ba nil)
+                           (catch Exception _
+                             (throw e)))
                       (throw e)))))
 
       ;; Header definitely not okay
