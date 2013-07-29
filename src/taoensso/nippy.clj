@@ -83,7 +83,11 @@
      (when-let [m# (meta x#)]
        (write-id s# ~id-meta)
        (freeze-to-stream* m# s#))
-     (freeze-to-stream* x# s#)))
+     (try (freeze-to-stream* x# s#)
+          (catch java.lang.IllegalArgumentException _#
+            ;; Use Clojure reader as final fallback (after custom extensions)
+            (write-id    s# id-reader)
+            (write-bytes s# (.getBytes (pr-str x#) "UTF-8"))))))
 
 (defn freeze-to-stream!
   "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
@@ -153,9 +157,6 @@
 (freezer Ratio id-ratio
          (write-biginteger s (.numerator   x))
          (write-biginteger s (.denominator x)))
-
-;; Use Clojure's own reader as final fallback
-(freezer Object id-reader (write-bytes s (.getBytes (pr-str x) "UTF-8")))
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 
