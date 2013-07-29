@@ -1,7 +1,7 @@
 **[API docs](http://ptaoussanis.github.io/nippy/)** | **[CHANGELOG](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md)** | [contact & contributing](#contact--contributing) | [other Clojure libs](https://www.taoensso.com/clojure-libraries) | [Twitter](https://twitter.com/#!/ptaoussanis) | current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "2.0.0"] ; See CHANGELOG for changes since 1.x
+[com.taoensso/nippy "2.1.0"] ; See CHANGELOG for changes since 1.x
 ```
 
 v2 adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), easier integration into other tools/libraries, and hugely improved performance.
@@ -20,8 +20,9 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 ## What's in the box™?
   * Small, uncomplicated **all-Clojure** library.
   * **Great performance**.
-  * Comprehesive, extensible **support for all major data types**.
-  * **Reader-fallback** for difficult/future types (including Clojure 1.4+ tagged literals).
+  * Comprehesive **support for all standard data types**.
+  * **Easily extendable to custom data types**. (v2.1+)
+  * **Reader-fallback** for all other types (including Clojure 1.4+ tagged literals).
   * **Full test coverage** for every supported type.
   * Fully pluggable **compression**, including built-in high-performance [Snappy](http://code.google.com/p/snappy/) compressor.
   * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option. (v2+)
@@ -34,7 +35,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your [Leiningen](http://leiningen.org/) `project.clj` and `require` the library in your ns:
 
 ```clojure
-[com.taoensso/nippy "2.0.0"] ; project.clj
+[com.taoensso/nippy "2.1.0"] ; project.clj
 (ns my-app (:require [taoensso.nippy :as nippy])) ; ns
 ```
 
@@ -116,6 +117,22 @@ Nippy v2+ also gives you **dead simple data encryption**. Add a single option to
 ```
 
 There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-encryptor` [docstring](http://ptaoussanis.github.io/nippy/taoensso.nippy.encryption.html) for a detailed explanation of why/when you'd want one or the other.
+
+### Custom types (v2.1+, ALPHA - subject to change)
+
+```clojure
+(defrecord MyType [data])
+
+(nippy/extend-freeze MyType 1 ; A unique type id ∈[1, 128]
+  [x data-output-steam]
+  (.writeUTF data-output-stream (:data x)))
+
+(nippy/extend-thaw 1 ; Same type id
+  [data-input-stream]
+  (->MyType (.readUTF data-input-stream)))
+
+(nippy/thaw (nippy/freeze (->MyType "Joe"))) => #taoensso.nippy.MyType{:data "Joe"}
+```
 
 ## Performance
 
