@@ -108,22 +108,6 @@
        (write-id ~'s ~id)
        ~@body)))
 
-(defmacro custom-freezer
-  "Helper to extend Freezable protocol to custom types with id ∈[1, 128]:
-  (defrecord MyType [data])
-  (custom-freezer MyType 1 x s (.writeUTF s (:data x)))"
-  [type id x data-output-stream & body]
-  (assert (and (>= id 1) (<= id 128)))
-  `(extend-type ~type
-     Freezable
-     (~'freeze-to-stream* [~x ~(with-meta data-output-stream
-                                 {:tag 'DataOutputStream})]
-       (write-id ~data-output-stream ~(int (- id)))
-       ~@body)))
-
-(comment (defrecord MyType [data])
-         (custom-freezer MyType 1 x s (.writeUTF s (:data x))))
-
 (defmacro ^:private coll-freezer
   "Extends Freezable to simple collection types."
   [type id & body]
@@ -193,7 +177,7 @@
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. Set :legacy-mode to
   true to produce bytes readble by Nippy < 2.x. For custom types extend the
-  Clojure reader or see `custom-freezer`."
+  Clojure reader or see `extend-freeze`."
   ^bytes [x & [{:keys [print-dup? password compressor encryptor legacy-mode]
                 :or   {print-dup? true
                        compressor snappy-compressor
@@ -231,10 +215,12 @@
   [s coll]
   `(let [s# ~s]
      (utils/repeatedly-into ~coll (/ (.readInt s#) 2)
-       [(thaw-from-stream s#) (thaw-from-stream s#)])))
+                            [(thaw-from-stream s#) (thaw-from-stream s#)])))
+
+(declare ^:private custom-readers)
 
 (defn- thaw-from-stream
-  [^DataInputStream s & [readers]]
+  [^DataInputStream s]
   (let [type-id (.readByte s)]
     (utils/case-eval type-id
 
@@ -279,23 +265,24 @@
                      (* 2 (.readInt s)) (thaw-from-stream s)))
      id-old-keyword (keyword (.readUTF s))
 
-     ;;; Custom types
-     (or (when-let [reader (get readers (- type-id))]
-           (try (reader s)
-                (catch Exception e
-                  (throw (Exception. (str "Reader exception for custom type ID: "
-                                          (- type-id)) e)))))
-         (if (neg? type-id)
-           (throw (Exception. (str "No reader provided for custom type ID: "
-                                   (- type-id))))
-           (throw (Exception. (str "Unknown type ID: " type-id))))))))
+     (if-not (neg? type-id)
+       (throw (Exception. (str "Unknown type ID: " type-id)))
+
+       ;; Custom types
+       (if-let [reader (get @custom-readers type-id)]
+         (try (reader s)
+              (catch Exception e
+                (throw (Exception. (str "Reader exception for custom type ID: "
+                                        (- type-id)) e))))
+         (throw (Exception. (str "No reader provided for custom type ID: "
+                                 (- type-id)))))))))
 
 (defn thaw-from-stream!
   "Low-level API. Deserializes a frozen object from given DataInputStream to its
   original Clojure data type."
-  [data-input-stream & [{:keys [read-eval? readers]}]]
+  [data-input-stream & [{:keys [read-eval?]}]]
   (binding [*read-eval* read-eval?]
-    (thaw-from-stream data-input-stream readers)))
+    (thaw-from-stream data-input-stream)))
 
 (defn- try-parse-header [ba]
   (when-let [[head-ba data-ba] (utils/ba-split ba 4)]
@@ -306,11 +293,7 @@
 (defn thaw
   "Deserializes a frozen object from given byte array to its original Clojure
   data type. Supports data frozen with current and all previous versions of
-  Nippy.
-
-  For custom `Freezable` types provide a `:readers` arg:
-  (thaw (freeze (MyType. \"Joe\"))
-    {:readers {1 (fn [^DataInputStream stream] (.readUTF stream))}})
+  Nippy. For custom types extend the Clojure reader or see `extend-thaw`.
 
   WARNING: Enabling `:read-eval?` can lead to security vulnerabilities unless
   you are sure you know what you're doing."
@@ -333,7 +316,7 @@
                     ba (if compressor (compression/decompress compressor ba) ba)
                     stream (DataInputStream. (ByteArrayInputStream. ba))]
 
-                (thaw-from-stream! stream {:read-eval? read-eval? :readers readers}))
+                (thaw-from-stream! stream {:read-eval? read-eval?}))
 
               (catch Exception e
                 (cond
@@ -371,6 +354,39 @@
          (thaw (freeze "hello" {:compressor nil}))
          (thaw (freeze "hello" {:password [:salted "p"]})) ; ex
          (thaw (freeze "hello") {:password [:salted "p"]}))
+
+;;;; Custom types
+
+(defmacro extend-freeze
+  "Alpha - subject to change.
+  Extends Nippy to support freezing of a custom type with id ∈[1, 128]:
+  (defrecord MyType [data])
+  (extend-freeze MyType 1 [x data-output-stream]
+    (.writeUTF [data-output-stream] (:data x)))"
+  [type custom-type-id [x stream] & body]
+  (assert (and (>= custom-type-id 1) (<= custom-type-id 128)))
+  `(extend-type ~type
+     Freezable
+     (~'freeze-to-stream* [~x ~(with-meta stream {:tag 'java.io.DataOutputStream})]
+       (write-id ~stream ~(int (- custom-type-id)))
+       ~@body)))
+
+(defonce custom-readers (atom {})) ; {<custom-type-id> (fn [data-input-stream]) ...}
+(defmacro extend-thaw
+  "Alpha - subject to change.
+  Extends Nippy to support thawing of a custom type with id ∈[1, 128]:
+  (extend-thaw 1 [data-input-stream]
+    (->MyType (.readUTF data-input-stream)))"
+  [custom-type-id [stream] & body]
+  (assert (and (>= custom-type-id 1) (<= custom-type-id 128)))
+  `(swap! custom-readers assoc ~(int (- custom-type-id))
+          (fn [~(with-meta stream {:tag 'java.io.DataInputStream})]
+            ~@body)))
+
+(comment (defrecord MyType [data])
+         (extend-freeze MyType 1 [x s] (.writeUTF s (:data x)))
+         (extend-thaw 1 [s] (->MyType (.readUTF s)))
+         (thaw (freeze (->MyType "Joe"))))
 
 ;;;; Stress data
 
