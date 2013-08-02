@@ -96,8 +96,11 @@
   "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
   [^DataOutputStream data-output-stream x & [{:keys [print-dup?]
                                               :or   {print-dup? true}}]]
-  (binding [*print-dup* print-dup?]
-    (freeze-to-stream data-output-stream x)))
+  (if (identical? *print-dup* print-dup?)
+    (freeze-to-stream data-output-stream x)
+    (binding [*print-dup* print-dup?] ; Expensive
+      (freeze-to-stream data-output-stream x))))
+
 
 (defmacro ^:private freezer
   "Helper to extend Freezable protocol."
@@ -281,8 +284,10 @@
   "Low-level API. Deserializes a frozen object from given DataInputStream to its
   original Clojure data type."
   [data-input-stream & [{:keys [read-eval?]}]]
-  (binding [*read-eval* read-eval?]
-    (thaw-from-stream data-input-stream)))
+  (if (identical? *read-eval* read-eval?)
+    (thaw-from-stream data-input-stream)
+    (binding [*read-eval* read-eval?] ; Expensive
+      (thaw-from-stream data-input-stream))))
 
 (defn- try-parse-header [ba]
   (when-let [[head-ba data-ba] (utils/ba-split ba 4)]
