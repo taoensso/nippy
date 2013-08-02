@@ -1,7 +1,8 @@
 (ns taoensso.nippy.tests.main
   (:require [expectations   :as test :refer :all]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
-            [taoensso.nippy.benchmarks :as benchmarks]))
+            [taoensso.nippy.benchmarks :as benchmarks])
+  (:import  [java.io DataInputStream DataOutputStream]))
 
 ;; Remove stuff from stress-data that breaks roundtrip equality
 (def test-data (dissoc nippy/stress-data :bytes))
@@ -31,14 +32,11 @@
       (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
 
 ;;; Custom types
-(defrecord MyType [data]
-  nippy/Freezable
-  (freeze-to-stream* [x s]
-    (.writeByte s -1)
-    (.writeUTF s (:data x))))
+(defrecord MyType [data])
+(nippy/custom-freezer MyType 1 x s (.writeUTF s (:data x)))
 
 (expect Exception (thaw (freeze (MyType. "Joe"))))
 (expect "Joe"     (thaw (freeze (MyType. "Joe"))
-                        {:readers {-1 (fn [s] (.readUTF s))}}))
+                        {:readers {1 (fn [^DataInputStream s] (.readUTF s))}}))
 
 (expect (benchmarks/bench {:reader? false})) ; Also tests :cached passwords

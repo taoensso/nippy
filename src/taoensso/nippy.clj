@@ -68,9 +68,9 @@
 (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
 
 ;;;; Freezing
-(defprotocol Freezable (freeze-to-stream* [this ^DataOutputStream stream]))
+(defprotocol Freezable (freeze-to-stream* [this stream]))
 
-(defmacro ^:private write-id    [s id] `(.writeByte ~s ~id))
+(defmacro           write-id    [s id] `(.writeByte ~s ~id))
 (defmacro ^:private write-bytes [s ba]
   `(let [s# ~s ba# ~ba]
      (let [size# (alength ba#)]
@@ -84,7 +84,7 @@
   [s x]
   `(let [x# ~x s# ~s]
      (when-let [m# (meta x#)]
-       (write-id s# ~id-meta)
+       (write-id  s# ~id-meta)
        (freeze-to-stream* m# s#))
      (try (freeze-to-stream* x# s#)
           (catch java.lang.IllegalArgumentException _#
@@ -103,10 +103,26 @@
   "Helper to extend Freezable protocol."
   [type id & body]
   `(extend-type ~type
-     ~'Freezable
+     Freezable
      (~'freeze-to-stream* [~'x ~(with-meta 's {:tag 'DataOutputStream})]
        (write-id ~'s ~id)
        ~@body)))
+
+(defmacro custom-freezer
+  "Helper to extend Freezable protocol to custom types with id ∈[1, 128]:
+  (defrecord MyType [data])
+  (custom-freezer MyType 1 x s (.writeUTF s (:data x)))"
+  [type id x data-output-stream & body]
+  (assert (and (>= id 1) (<= id 128)))
+  `(extend-type ~type
+     Freezable
+     (~'freeze-to-stream* [~x ~(with-meta data-output-stream
+                                 {:tag 'DataOutputStream})]
+       (write-id ~data-output-stream ~(int (- id)))
+       ~@body)))
+
+(comment (defrecord MyType [data])
+         (custom-freezer MyType 1 x s (.writeUTF s (:data x))))
 
 (defmacro ^:private coll-freezer
   "Extends Freezable to simple collection types."
@@ -176,14 +192,8 @@
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. Set :legacy-mode to
-  true to produce bytes readble by Nippy < 2.x.
-
-  For custom types extend the Clojure reader or Nippy's `Freezable` protocol:
-  (defrecord MyType [data]
-    nippy/Freezable
-    (freeze-to-stream* [x stream]
-      (.writeByte stream -1) ; Custom type id ∈ [-128, -1]
-      (.writeUTF  stream (:data x))))"
+  true to produce bytes readble by Nippy < 2.x. For custom types extend the
+  Clojure reader or see `custom-freezer`."
   ^bytes [x & [{:keys [print-dup? password compressor encryptor legacy-mode]
                 :or   {print-dup? true
                        compressor snappy-compressor
@@ -270,13 +280,14 @@
      id-old-keyword (keyword (.readUTF s))
 
      ;;; Custom types
-     (or (when-let [reader (get readers type-id)]
+     (or (when-let [reader (get readers (- type-id))]
            (try (reader s)
                 (catch Exception e
                   (throw (Exception. (str "Reader exception for custom type ID: "
-                                          type-id) e)))))
+                                          (- type-id)) e)))))
          (if (neg? type-id)
-           (throw (Exception. (str "No reader provided for custom type ID: " type-id)))
+           (throw (Exception. (str "No reader provided for custom type ID: "
+                                   (- type-id))))
            (throw (Exception. (str "Unknown type ID: " type-id))))))))
 
 (defn thaw-from-stream!
@@ -298,7 +309,8 @@
   Nippy.
 
   For custom `Freezable` types provide a `:readers` arg:
-  (thaw (freeze (MyType. \"Joe\")) {:readers {-1 (fn [stream] (.readUTF stream))}})
+  (thaw (freeze (MyType. \"Joe\"))
+    {:readers {1 (fn [^DataInputStream stream] (.readUTF stream))}})
 
   WARNING: Enabling `:read-eval?` can lead to security vulnerabilities unless
   you are sure you know what you're doing."
