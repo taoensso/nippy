@@ -1,3 +1,14 @@
+## v2.0.0 → v2.1.0
+  * Exposed low-level fns: `freeze-to-stream!`, `thaw-from-stream!`.
+  * Added `extend-freeze` and `extend-thaw` for extending to custom types:
+  * Added support for easily extending Nippy de/serialization to custom types:
+  ```clojure
+  (defrecord MyType [data])
+  (nippy/extend-freeze MyType 1 [x steam] (.writeUTF stream (:data x)))
+  (nippy/extend-thaw 1 [stream] (->MyType (.readUTF stream)))
+  (nippy/thaw (nippy/freeze (->MyType "Joe"))) => #taoensso.nippy.MyType{:data "Joe"}
+  ```
+
 ## v1.2.1 → v2.0.0
   * **MIGRATION NOTE**: Please be sure to use `lein clean` to clear old (v1) build artifacts!
   * Refactored for huge performance improvements (~40% roundtrip time).
