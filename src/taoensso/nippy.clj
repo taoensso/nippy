@@ -5,7 +5,9 @@
   (:require [taoensso.nippy
              (utils       :as utils)
              (compression :as compression :refer (snappy-compressor))
-             (encryption  :as encryption  :refer (aes128-encryptor))])
+             (encryption  :as encryption  :refer (aes128-encryptor))]
+            [clojure.tools.reader
+             (edn         :as edn)])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
@@ -227,7 +229,7 @@
   (let [type-id (.readByte s)]
     (utils/case-eval type-id
 
-     id-reader  (read-string (read-utf8 s))
+     id-reader  (edn/read-string (read-utf8 s))
      id-bytes   (read-bytes s)
      id-nil     nil
      id-boolean (.readBoolean s)
@@ -262,7 +264,7 @@
                  (bigint (read-biginteger s)))
 
      ;;; DEPRECATED
-     id-old-reader (read-string (.readUTF s))
+     id-old-reader (edn/read-string (.readUTF s))
      id-old-string (.readUTF s)
      id-old-map    (apply hash-map (utils/repeatedly-into []
                      (* 2 (.readInt s)) (thaw-from-stream s)))
