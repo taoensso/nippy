@@ -8,9 +8,10 @@
              (encryption  :as encryption  :refer (aes128-encryptor))])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
+            [java.lang.reflect Method]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
              PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
-             IPersistentSet IPersistentCollection]))
+             IPersistentSet IPersistentCollection IRecord]))
 
 ;;;; Nippy 2.x+ header spec (4 bytes)
 (def ^:private ^:const head-version 1)
@@ -60,6 +61,8 @@
 (def ^:const id-bigdec     (int 62))
 
 (def ^:const id-ratio      (int 70))
+
+(def ^:const id-record     (int 80))
 
 ;;; DEPRECATED (old types will be supported only for thawing)
 (def ^:const id-old-reader  (int 1))  ; as of 0.9.2, for +64k support
@@ -136,6 +139,10 @@
 (freezer Keyword   id-keyword (write-utf8 s (if-let [ns (namespace x)]
                                               (str ns "/" (name x))
                                               (name x))))
+
+(freezer IRecord id-record
+         (write-utf8 s (.getName (class x)))
+         (freeze-to-stream s (into {} x)))
 
 (coll-freezer PersistentQueue       id-queue)
 (coll-freezer PersistentTreeSet     id-sorted-set)
@@ -260,6 +267,12 @@
 
      id-ratio (/ (bigint (read-biginteger s))
                  (bigint (read-biginteger s)))
+
+     id-record
+     (let [class    ^Class (Class/forName (read-utf8 s))
+           meth-sig (into-array Class [IPersistentMap])
+           method   ^Method (.getMethod class "create" meth-sig)]
+       (.invoke method class (into-array Object [(thaw-from-stream s)])))
 
      ;;; DEPRECATED
      id-old-reader (read-string (.readUTF s))

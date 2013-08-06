@@ -30,6 +30,11 @@
       (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
       (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
 
+;;; Records
+(defrecord RecordType [data])
+(expect RecordType (thaw (freeze (RecordType. "Joe"))))
+(expect (RecordType. "Joe") (thaw (freeze (RecordType. "Joe"))))
+
 ;;; Custom types
 (defrecord MyType [data])
 (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (:data x)))
