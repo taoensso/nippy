@@ -237,7 +237,7 @@
   (let [type-id (.readByte s)]
     (utils/case-eval type-id
 
-     id-reader  (edn/read-string (read-utf8 s))
+     id-reader  (edn/read-string {:readers *data-readers*} (read-utf8 s))
      id-bytes   (read-bytes s)
      id-nil     nil
      id-boolean (.readBoolean s)
