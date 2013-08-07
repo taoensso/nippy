@@ -13,7 +13,7 @@
             [java.util Date UUID]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
              PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
-             IPersistentSet IPersistentCollection IRecord]))
+             IPersistentMap IPersistentSet ISeq IRecord]))
 
 ;;;; Nippy 2.x+ header spec (4 bytes)
 (def ^:private ^:const head-version 1)
@@ -45,7 +45,7 @@
 (def ^:const id-vector     (int 21))
 ;;                              22
 (def ^:const id-set        (int 23))
-(def ^:const id-coll       (int 24)) ; Fallback: non-specific collection
+(def ^:const id-seq        (int 24))
 (def ^:const id-meta       (int 25))
 (def ^:const id-queue      (int 26))
 (def ^:const id-map        (int 27))
@@ -156,7 +156,7 @@
 (coll-freezer IPersistentVector     id-vector)
 (coll-freezer IPersistentSet        id-set)
 (kv-freezer   IPersistentMap        id-map)
-(coll-freezer IPersistentCollection id-coll) ; Must be LAST collection freezer!
+(coll-freezer ISeq                  id-seq)
 
 (freezer Byte       id-byte    (.writeByte s x))
 (freezer Short      id-short   (.writeShort s x))
@@ -260,7 +260,7 @@
      id-vector  (coll-thaw s  [])
      id-set     (coll-thaw s #{})
      id-map     (coll-thaw-kvs s  {})
-     id-coll    (seq (coll-thaw s []))
+     id-seq     (coll-thaw s [])
 
      id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
 
