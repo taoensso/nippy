@@ -66,6 +66,12 @@
   ;; (bench {:reader? false :laps 1})
   ;; (bench {:reader? false :laps 2})
 
+  ;;; 7 Auguest 2013: Nippy v2.2.0-RC1
+  ;; {:reader    {:round 71582, :freeze 13656, :thaw 56730, :data-size 22964}}
+  ;; {:defaults  {:round 5619,  :freeze 3710,  :thaw 1783,  :data-size 12368}}
+  ;; {:encrypted {:round 9113,  :freeze 5324,  :thaw 3500,  :data-size 12388}}
+  ;; {:fast      {:round 5130,  :freeze 3286,  :thaw 1667,  :data-size 13325}}
+
   ;;; 17 June 2013: Clojure 1.5.1, JVM 7 Nippy 2.0.0-alpha6 w/fast io-streams
   ;; {:reader    {:round 49819, :freeze 23601, :thaw 26247, :data-size 22966}}
   ;; {:defaults  {:round 5670,  :freeze 3536,  :thaw 1919,  :data-size 12396}}
