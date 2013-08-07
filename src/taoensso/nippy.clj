@@ -5,7 +5,9 @@
   (:require [taoensso.nippy
              (utils       :as utils)
              (compression :as compression :refer (snappy-compressor))
-             (encryption  :as encryption  :refer (aes128-encryptor))])
+             (encryption  :as encryption  :refer (aes128-encryptor))]
+            [clojure.tools.reader
+             (edn         :as edn)])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
@@ -227,7 +229,7 @@
   (let [type-id (.readByte s)]
     (utils/case-eval type-id
 
-     id-reader  (read-string (read-utf8 s))
+     id-reader  (edn/read-string (read-utf8 s))
      id-bytes   (read-bytes s)
      id-nil     nil
      id-boolean (.readBoolean s)
@@ -262,7 +264,7 @@
                  (bigint (read-biginteger s)))
 
      ;;; DEPRECATED
-     id-old-reader (read-string (.readUTF s))
+     id-old-reader (edn/read-string (.readUTF s))
      id-old-string (.readUTF s)
      id-old-map    (apply hash-map (utils/repeatedly-into []
                      (* 2 (.readInt s)) (thaw-from-stream s)))
@@ -283,11 +285,8 @@
 (defn thaw-from-stream!
   "Low-level API. Deserializes a frozen object from given DataInputStream to its
   original Clojure data type."
-  [data-input-stream & [{:keys [read-eval?]}]]
-  (if (identical? *read-eval* read-eval?)
-    (thaw-from-stream data-input-stream)
-    (binding [*read-eval* read-eval?] ; Expensive
-      (thaw-from-stream data-input-stream))))
+  [data-input-stream]
+  (thaw-from-stream data-input-stream))
 
 (defn- try-parse-header [ba]
   (when-let [[head-ba data-ba] (utils/ba-split ba 4)]
@@ -298,11 +297,8 @@
 (defn thaw
   "Deserializes a frozen object from given byte array to its original Clojure
   data type. Supports data frozen with current and all previous versions of
-  Nippy. For custom types extend the Clojure reader or see `extend-thaw`.
-
-  WARNING: Enabling `:read-eval?` can lead to security vulnerabilities unless
-  you are sure you know what you're doing."
-  [^bytes ba & [{:keys [read-eval? password compressor encryptor legacy-opts readers]
+  Nippy. For custom types extend the Clojure reader or see `extend-thaw`."
+  [^bytes ba & [{:keys [password compressor encryptor legacy-opts readers]
                  :or   {legacy-opts {:compressed? true}
                         compressor  snappy-compressor
                         encryptor   aes128-encryptor}
@@ -321,7 +317,7 @@
                     ba (if compressor (compression/decompress compressor ba) ba)
                     stream (DataInputStream. (ByteArrayInputStream. ba))]
 
-                (thaw-from-stream! stream {:read-eval? read-eval?}))
+                (thaw-from-stream! stream))
 
               (catch Exception e
                 (cond
@@ -459,8 +455,7 @@
              :password     nil}))
 
 (defn thaw-from-bytes "DEPRECATED: Use `thaw` instead."
-  [ba & {:keys [read-eval? compressed?]
+  [ba & {:keys [compressed?]
          :or   {compressed? true}}]
   (thaw ba {:legacy-opts  {:compressed? compressed?}
-            :read-eval?   read-eval?
             :password     nil}))
