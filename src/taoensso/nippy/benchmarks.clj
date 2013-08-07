@@ -1,6 +1,7 @@
 (ns taoensso.nippy.benchmarks
   {:author "Peter Taoussanis"}
-  (:require [taoensso.nippy :as nippy :refer (freeze thaw)]
+  (:require [clojure.tools.reader.edn :as edn]
+            [taoensso.nippy :as nippy :refer (freeze thaw)]
             [taoensso.nippy.utils :as utils]))
 
 ;; Remove stuff from stress-data that breaks reader
@@ -9,7 +10,7 @@
 (defmacro bench* [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 2000))
 
 (defn freeze-reader [x] (binding [*print-dup* false] (pr-str x)))
-(defn thaw-reader   [x] (binding [*read-eval* false] (read-string x)))
+(defn thaw-reader   [x] (edn/read-string x))
 (def  roundtrip-reader (comp thaw-reader freeze-reader))
 
 (def roundtrip-defaults  (comp thaw freeze))
