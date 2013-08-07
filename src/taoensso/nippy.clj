@@ -33,7 +33,7 @@
 (def ^:const id-bytes      (int 2))
 (def ^:const id-nil        (int 3))
 (def ^:const id-boolean    (int 4))
-(def ^:const id-reader     (int 5)) ; Fallback: *print-dup* pr-str output
+(def ^:const id-reader     (int 5)) ; Fallback: pr-str output
 
 (def ^:const id-char       (int 10))
 ;;                              11
@@ -98,12 +98,8 @@
 
 (defn freeze-to-stream!
   "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
-  [^DataOutputStream data-output-stream x & [{:keys [print-dup?]
-                                              :or   {print-dup? true}}]]
-  (if (identical? *print-dup* print-dup?)
-    (freeze-to-stream data-output-stream x)
-    (binding [*print-dup* print-dup?] ; Expensive
-      (freeze-to-stream data-output-stream x))))
+  [^DataOutputStream data-output-stream x & _]
+  (freeze-to-stream data-output-stream x))
 
 (defmacro ^:private freezer
   "Helper to extend Freezable protocol."
@@ -196,14 +192,13 @@
   "Serializes arg (any Clojure data type) to a byte array. Set :legacy-mode to
   true to produce bytes readble by Nippy < 2.x. For custom types extend the
   Clojure reader or see `extend-freeze`."
-  ^bytes [x & [{:keys [print-dup? password compressor encryptor legacy-mode]
-                :or   {print-dup? true
-                       compressor snappy-compressor
+  ^bytes [x & [{:keys [password compressor encryptor legacy-mode]
+                :or   {compressor snappy-compressor
                        encryptor  aes128-encryptor}}]]
   (when legacy-mode (assert-legacy-args compressor password))
   (let [ba     (ByteArrayOutputStream.)
         stream (DataOutputStream. ba)]
-    (freeze-to-stream! stream x {:print-dup? print-dup?})
+    (freeze-to-stream! stream x)
     (let [ba (.toByteArray ba)
           ba (if compressor (compression/compress compressor ba) ba)
           ba (if password   (encryption/encrypt encryptor password ba) ba)]
@@ -468,11 +463,9 @@
     (throw (AssertionError. "Only Snappy compressor supported in legacy mode."))))
 
 (defn freeze-to-bytes "DEPRECATED: Use `freeze` instead."
-  ^bytes [x & {:keys [print-dup? compress?]
-               :or   {print-dup? true
-                      compress?  true}}]
+  ^bytes [x & {:keys [compress?]
+               :or   {compress? true}}]
   (freeze x {:legacy-mode  true
-             :print-dup?   print-dup?
              :compressor   (when compress? snappy-compressor)
              :password     nil}))
 

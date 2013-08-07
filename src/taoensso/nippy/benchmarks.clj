@@ -9,7 +9,7 @@
 
 (defmacro bench* [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 2000))
 
-(defn freeze-reader [x] (binding [*print-dup* false] (pr-str x)))
+(defn freeze-reader [x] (pr-str x))
 (defn thaw-reader   [x] (edn/read-string x))
 (def  roundtrip-reader (comp thaw-reader freeze-reader))
 
