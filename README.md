@@ -1,7 +1,8 @@
 **[API docs](http://ptaoussanis.github.io/nippy/)** | **[CHANGELOG](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md)** | [contact & contributing](#contact--contributing) | [other Clojure libs](https://www.taoensso.com/clojure-libraries) | [Twitter](https://twitter.com/#!/ptaoussanis) | current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "2.1.0"] ; See CHANGELOG for changes since 1.x
+[com.taoensso/nippy "2.2.0-RC1"] ; Development (see CHANGELOG for details)
+[com.taoensso/nippy "2.1.0"]     ; Stable
 ```
 
 v2 adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), easier integration into other tools/libraries, and hugely improved performance.

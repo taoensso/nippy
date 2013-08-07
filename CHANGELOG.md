@@ -1,3 +1,12 @@
+## v2.1.0 → v2.2.0-RC1
+  * Dropped `:read-eval?`, `:print-dup?` options.
+
+  Thanks to James Reeves (weavejester) for these changes!:
+  * Switched to `tools.reader.edn` for safer reader fallback.
+  * Added fast binary serialization for Date and UUID types.
+  * Added fast binary serialization for record types.
+
+
 ## v2.0.0 → v2.1.0
   * Exposed low-level fns: `freeze-to-stream!`, `thaw-from-stream!`.
   * Added `extend-freeze` and `extend-thaw` for extending to custom types:
