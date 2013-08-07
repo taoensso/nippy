@@ -11,6 +11,7 @@
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
             [java.lang.reflect Method]
+            [java.util Date UUID]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
              PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
              IPersistentSet IPersistentCollection IRecord]))
@@ -65,6 +66,9 @@
 (def ^:const id-ratio      (int 70))
 
 (def ^:const id-record     (int 80))
+
+(def ^:const id-date       (int 90))
+(def ^:const id-uuid       (int 91))
 
 ;;; DEPRECATED (old types will be supported only for thawing)
 (def ^:const id-old-reader  (int 1))  ; as of 0.9.2, for +64k support
@@ -173,6 +177,11 @@
          (write-biginteger s (.numerator   x))
          (write-biginteger s (.denominator x)))
 
+(freezer Date id-date (.writeLong s (.getTime x)))
+(freezer UUID id-uuid
+         (.writeLong s (.getMostSignificantBits x))
+         (.writeLong s (.getLeastSignificantBits x)))
+
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 
 (defn- wrap-header [data-ba metadata]
@@ -275,6 +284,9 @@
            meth-sig (into-array Class [IPersistentMap])
            method   ^Method (.getMethod class "create" meth-sig)]
        (.invoke method class (into-array Object [(thaw-from-stream s)])))
+
+     id-date  (Date. (.readLong s))
+     id-uuid  (UUID. (.readLong s) (.readLong s))
 
      ;;; DEPRECATED
      id-old-reader (edn/read-string (.readUTF s))
