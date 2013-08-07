@@ -13,7 +13,7 @@
             [java.util Date UUID]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
              PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
-             IPersistentMap IPersistentSet ISeq IRecord]))
+             APersistentMap IPersistentSet ISeq IRecord]))
 
 ;;;; Nippy 2.x+ header spec (4 bytes)
 (def ^:private ^:const head-version 1)
@@ -155,7 +155,7 @@
 (coll-freezer IPersistentList       id-list)
 (coll-freezer IPersistentVector     id-vector)
 (coll-freezer IPersistentSet        id-set)
-(kv-freezer   IPersistentMap        id-map)
+(kv-freezer   APersistentMap        id-map)
 (coll-freezer ISeq                  id-seq)
 
 (freezer Byte       id-byte    (.writeByte s x))
