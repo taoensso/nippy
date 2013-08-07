@@ -2,12 +2,11 @@
   "Simple, high-performance Clojure serialization library. Originally adapted
   from Deep-Freeze."
   {:author "Peter Taoussanis"}
-  (:require [taoensso.nippy
+  (:require [clojure.tools.reader.edn :as edn]
+            [taoensso.nippy
              (utils       :as utils)
              (compression :as compression :refer (snappy-compressor))
-             (encryption  :as encryption  :refer (aes128-encryptor))]
-            [clojure.tools.reader
-             (edn         :as edn)])
+             (encryption  :as encryption  :refer (aes128-encryptor))])
   (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
              ByteArrayInputStream]
             [java.lang.reflect Method]
@@ -109,7 +108,6 @@
     (freeze-to-stream data-output-stream x)
     (binding [*print-dup* print-dup?] ; Expensive
       (freeze-to-stream data-output-stream x))))
-
 
 (defmacro ^:private freezer
   "Helper to extend Freezable protocol."
@@ -323,7 +321,7 @@
   "Deserializes a frozen object from given byte array to its original Clojure
   data type. Supports data frozen with current and all previous versions of
   Nippy. For custom types extend the Clojure reader or see `extend-thaw`."
-  [^bytes ba & [{:keys [password compressor encryptor legacy-opts readers]
+  [^bytes ba & [{:keys [password compressor encryptor legacy-opts]
                  :or   {legacy-opts {:compressed? true}
                         compressor  snappy-compressor
                         encryptor   aes128-encryptor}

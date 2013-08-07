@@ -30,16 +30,20 @@
       (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
       (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
 
-;;; Records
-(defrecord RecordType [data])
-(expect RecordType (thaw (freeze (RecordType. "Joe"))))
-(expect (RecordType. "Joe") (thaw (freeze (RecordType. "Joe"))))
+;;; Records (reflecting)
+(defrecord MyRec [data])
+(expect (let [rec (->MyRec "val")] (= rec (thaw (freeze rec)))))
 
 ;;; Custom types
 (defrecord MyType [data])
 (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (:data x)))
-(expect Exception       (thaw (freeze (->MyType "Joe"))))
-(expect (MyType. "Joe") (do (nippy/extend-thaw 1 [s] (->MyType (.readUTF s)))
-                            (thaw (freeze (->MyType "Joe")))))
+(expect Exception (thaw (freeze (->MyType "val"))))
+(expect (do (nippy/extend-thaw 1 [s] (->MyType (.readUTF s)))
+            (let [type (->MyType "val")] (= type (thaw (freeze type))))))
+
+;;; Records (extend)
+(expect (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "fast-" (:data x))))
+            (nippy/extend-thaw 2 [s] (->MyRec (.readUTF s)))
+            (= (->MyRec "fast-val") (thaw (freeze (->MyRec "val"))))))
 
 (expect (benchmarks/bench {:reader? false})) ; Also tests :cached passwords
