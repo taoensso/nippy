@@ -302,7 +302,7 @@
 (defn thaw-from-stream!
   "Low-level API. Deserializes a frozen object from given DataInputStream to its
   original Clojure data type."
-  [data-input-stream]
+  [data-input-stream & _]
   (thaw-from-stream data-input-stream))
 
 (defn- try-parse-header [ba]
