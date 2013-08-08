@@ -190,7 +190,7 @@
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. Set :legacy-mode to
-  true to produce bytes readble by Nippy < 2.x. For custom types extend the
+  true to produce bytes readable by Nippy < 2.x. For custom types extend the
   Clojure reader or see `extend-freeze`."
   ^bytes [x & [{:keys [password compressor encryptor legacy-mode]
                 :or   {compressor snappy-compressor
