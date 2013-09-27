@@ -125,7 +125,7 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 (defrecord MyType [data])
 
 (nippy/extend-freeze MyType 1 ; A unique type id ∈[1, 128]
-  [x data-output-steam]
+  [x data-output-stream]
   (.writeUTF data-output-stream (:data x)))
 
 (nippy/extend-thaw 1 ; Same type id
