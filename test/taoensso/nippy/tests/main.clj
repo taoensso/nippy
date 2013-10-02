@@ -1,7 +1,8 @@
 (ns taoensso.nippy.tests.main
   (:require [expectations   :as test :refer :all]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
-            [taoensso.nippy.benchmarks :as benchmarks]))
+            [taoensso.nippy.benchmarks :as benchmarks]
+            [taoensso.nippy.compression :refer [lz4-compressor lz4hc-compressor]]))
 
 ;; Remove stuff from stress-data that breaks roundtrip equality
 (def test-data (dissoc nippy/stress-data :bytes))
@@ -29,6 +30,16 @@
       (thaw (org.xerial.snappy.Snappy/uncompress iq80-ba))
       (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
       (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
+
+(expect
+ (= test-data (thaw (freeze test-data
+                            {:compressor lz4-compressor})
+                    {:compressor lz4-compressor})))
+
+(expect
+ (= test-data (thaw (freeze test-data
+                            {:compressor lz4hc-compressor})
+                    {:compressor lz4hc-compressor})))
 
 ;;; Records (reflecting)
 (defrecord MyRec [data])
