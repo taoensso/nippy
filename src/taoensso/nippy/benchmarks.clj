@@ -2,7 +2,8 @@
   {:author "Peter Taoussanis"}
   (:require [clojure.tools.reader.edn :as edn]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
-            [taoensso.nippy.utils :as utils]))
+            [taoensso.nippy.utils :as utils]
+            [taoensso.nippy.compression :refer (lz4-compressor lz4hc-compressor)]))
 
 ;; Remove stuff from stress-data that breaks reader
 (def data (dissoc nippy/stress-data :queue :queue-empty :bytes))
@@ -16,6 +17,10 @@
 (def roundtrip-defaults  (comp thaw freeze))
 (def roundtrip-encrypted (comp #(thaw   % {:password [:cached "p"]})
                                #(freeze % {:password [:cached "p"]})))
+(def roundtrip-lz4       (comp #(thaw   % {:compressor lz4-compressor})
+                               #(freeze % {:compressor lz4-compressor})))
+(def roundtrip-lz4hc     (comp #(thaw   % {:compressor lz4hc-compressor})
+                               #(freeze % {:compressor lz4hc-compressor})))
 (def roundtrip-fast      (comp thaw #(freeze % {:compressor nil})))
 
 (defn bench [{:keys [reader? laps] :or {reader? true laps 1}}]
@@ -55,7 +60,25 @@
        :freeze    (bench* (freeze data {:compressor nil}))
        :thaw      (let [frozen (freeze data {:compressor nil})]
                     (bench* (thaw frozen)))
-       :data-size (count (freeze data {:compressor nil}))}}))
+       :data-size (count (freeze data {:compressor nil}))}})
+
+    (println
+     {:LZ4
+      {:round     (bench* (roundtrip-lz4 data))
+       :freeze    (bench* (freeze data {:compressor lz4-compressor}))
+       :thaw      (let [frozen (freeze data {:compressor lz4-compressor})]
+                    (bench* (thaw frozen {:compressor lz4-compressor})))
+       :data-size (count (freeze data {:compressor lz4-compressor}))}})
+
+    (println
+     {:LZ4-hc
+      {:round     (bench* (roundtrip-lz4hc data))
+       :freeze    (bench* (freeze data {:compressor lz4hc-compressor}))
+       :thaw      (let [frozen (freeze data {:compressor lz4hc-compressor})]
+                    (bench* (thaw frozen {:compressor lz4hc-compressor})))
+       :data-size (count (freeze data {:compressor lz4hc-compressor}))}})
+
+    )
 
   (println)
   (println "Done! (Time for cake?)")
