@@ -1,4 +1,4 @@
-## v2.1.0 → v2.2.0-RC1
+## v2.1.0 → v2.2.0
   * Dropped `:read-eval?`, `:print-dup?` options.
 
   Thanks to James Reeves (weavejester) for these changes!:
