@@ -114,17 +114,30 @@
   "Extends Freezable to simple collection types."
   [type id & body]
   `(freezer ~type ~id
-    (.writeInt ~'s (count ~'x))
-    (doseq [i# ~'x] (freeze-to-stream ~'s i#))))
+     (if (counted? ~'x)
+       (do
+         (.writeInt ~'s (count ~'x))
+         (doseq [i# ~'x] (freeze-to-stream ~'s i#)))
+       (let [bas# (ByteArrayOutputStream.)
+             s# (DataOutputStream. bas#)
+             cnt# (reduce
+                    (fn [cnt# i#]
+                      (freeze-to-stream! s# i#)
+                      (unchecked-inc cnt#))
+                    0
+                    ~'x)
+             ba# (.toByteArray bas#)]
+         (.writeInt ~'s cnt#)
+         (.write ~'s ba# 0 (alength ba#))))))
 
 (defmacro ^:private kv-freezer
   "Extends Freezable to key-value collection types."
   [type id & body]
   `(freezer ~type ~id
     (.writeInt ~'s (* 2 (count ~'x)))
-    (doseq [[k# v#] ~'x]
-      (freeze-to-stream ~'s k#)
-      (freeze-to-stream ~'s v#))))
+    (doseq [kv# ~'x]
+      (freeze-to-stream ~'s (key kv#))
+      (freeze-to-stream ~'s (val kv#)))))
 
 (freezer (Class/forName "[B") id-bytes   (write-bytes s ^bytes x))
 (freezer nil                  id-nil)
