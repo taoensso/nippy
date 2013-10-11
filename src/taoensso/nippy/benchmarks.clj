@@ -66,6 +66,23 @@
   ;; (bench {:reader? false :laps 1})
   ;; (bench {:reader? false :laps 2})
 
+  ;;; 11 Oct 2013: Nippy v2.2.0, with both ztellman mods
+  ;; {:defaults  {:round 4319, :freeze 2950, :thaw 1446, :data-size 12369}}
+  ;; {:encrypted {:round 7675, :freeze 4479, :thaw 3160, :data-size 12388}}
+  ;; {:fast      {:round 3928, :freeze 2530, :thaw 1269, :data-size 13277}}
+  ;; {:defaults-delta {:round 0.84 :freeze 0.79 :thaw 1.14}} ; vs 2.2.0
+
+  ;;; 11 Oct 2013: Nippy v2.2.0, with first ztellman mod
+  ;; {:defaults  {:round 4059, :freeze 2578, :thaw 1351, :data-size 12342}}
+  ;; {:encrypted {:round 7248, :freeze 4058, :thaw 3041, :data-size 12372}}
+  ;; {:fast      {:round 3430, :freeze 2085, :thaw 1229, :data-size 13277}}
+  ;; {:defaults-delta {:round  0.79 :freeze 0.69 :thaw 1.07}} ; vs 2.2.0
+
+  ;;; 11 Oct 2013: Nippy v2.2.0
+  ;; {:defaults  {:round 5135, :freeze 3711, :thaw 1266, :data-size 12393}}
+  ;; {:encrypted {:round 8655, :freeze 5323, :thaw 3036, :data-size 12420}}
+  ;; {:fast      {:round 4670, :freeze 3282, :thaw 1294, :data-size 13277}}
+
   ;;; 7 Auguest 2013: Nippy v2.2.0-RC1
   ;; {:reader    {:round 71582, :freeze 13656, :thaw 56730, :data-size 22964}}
   ;; {:defaults  {:round 5619,  :freeze 3710,  :thaw 1783,  :data-size 12368}}
