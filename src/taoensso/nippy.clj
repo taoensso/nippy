@@ -87,14 +87,29 @@
 
 (defmacro ^:private write-biginteger [s x] `(write-bytes ~s (.toByteArray ~x)))
 (defmacro ^:private write-utf8       [s x] `(write-bytes ~s (.getBytes ~x "UTF-8")))
-(defmacro ^:private freeze-to-stream
-  "Like `freeze-to-stream*` but with metadata support."
-  [s x]
-  `(let [x# ~x s# ~s]
-     (when-let [m# (meta x#)]
-       (write-id  s# ~id-meta)
-       (freeze-to-stream* m# s#))
-     (freeze-to-stream* x# s#)))
+
+(defn- freeze-to-stream
+  "Like `freeze-to-stream*`, but with metadata support and certain fast-paths encoded."
+  [^DataOutputStream s x]
+  (condp instance? x
+    Number (condp instance? x
+             Long    (do (write-id s id-long) (.writeLong s x))
+             Double  (do (write-id s id-double) (.writeDouble s x))
+             (freeze-to-stream* x s))
+    Keyword (do
+              (write-id s id-keyword)
+              (write-utf8 s
+                (if-let [ns (namespace x)]
+                  (str ns "/" (name x))
+                  (name x))))
+    String (do
+             (write-id s id-string)
+             (write-utf8 s ^String x))
+    (do
+      (when-let [m (meta x)]
+        (write-id s id-meta)
+        (freeze-to-stream* m s))
+      (freeze-to-stream* x s))))
 
 (defn freeze-to-stream!
   "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
@@ -114,17 +129,30 @@
   "Extends Freezable to simple collection types."
   [type id & body]
   `(freezer ~type ~id
-    (.writeInt ~'s (count ~'x))
-    (doseq [i# ~'x] (freeze-to-stream ~'s i#))))
+     (if (counted? ~'x)
+       (do
+         (.writeInt ~'s (count ~'x))
+         (doseq [i# ~'x] (freeze-to-stream ~'s i#)))
+       (let [bas# (ByteArrayOutputStream.)
+             s# (DataOutputStream. bas#)
+             cnt# (loop [cnt# 0, x# ~'x]
+                    (if (empty? x#)
+                      cnt#
+                      (do
+                        (freeze-to-stream! s# (first x#))
+                        (recur (unchecked-inc cnt#) (rest x#)))))
+             ba# (.toByteArray bas#)]
+         (.writeInt ~'s cnt#)
+         (.write ~'s ba# 0 (alength ba#))))))
 
 (defmacro ^:private kv-freezer
   "Extends Freezable to key-value collection types."
   [type id & body]
   `(freezer ~type ~id
-    (.writeInt ~'s (* 2 (count ~'x)))
-    (doseq [[k# v#] ~'x]
-      (freeze-to-stream ~'s k#)
-      (freeze-to-stream ~'s v#))))
+     (.writeInt ~'s (* 2 (count ~'x)))
+     (doseq [kv# ~'x]
+       (freeze-to-stream ~'s (key kv#))
+       (freeze-to-stream ~'s (val kv#)))))
 
 (freezer (Class/forName "[B") id-bytes   (write-bytes s ^bytes x))
 (freezer nil                  id-nil)
