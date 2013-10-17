@@ -28,6 +28,9 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
   * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option. (v2+)
   * Utils for **easy integration into 3rd-party tools/libraries**. (v2+)
 
+## Optional plugins
+  * [LZ4 compressor](https://github.com/mpenet/nippy-lz4) by [mpenet](https://github.com/mpenet).
+
 ## Getting started
 
 ### Dependencies
