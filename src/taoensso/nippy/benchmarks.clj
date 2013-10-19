@@ -2,69 +2,56 @@
   {:author "Peter Taoussanis"}
   (:require [clojure.tools.reader.edn :as edn]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
-            [taoensso.nippy.utils :as utils]))
+            [taoensso.nippy.compression :as compression]
+            [taoensso.nippy.utils       :as utils]))
 
 ;; Remove stuff from stress-data that breaks reader
 (def data (dissoc nippy/stress-data :queue :queue-empty :bytes))
 
-(defmacro bench* [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 2000))
+(defmacro bench* [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 20000))
+(defn     bench1 [freezer thawer & [sizer]]
+  (let [data-frozen (freezer data)
+        time-freeze (bench* (freezer data))
+        time-thaw   (bench* (thawer  data-frozen))]
+    {:round  (+ time-freeze time-thaw)
+     :freeze time-freeze
+     :thaw   time-thaw
+     :size   ((or sizer count) data-frozen)}))
 
-(defn freeze-reader [x] (pr-str x))
-(defn thaw-reader   [x] (edn/read-string x))
-(def  roundtrip-reader (comp thaw-reader freeze-reader))
-
-(def roundtrip-defaults  (comp thaw freeze))
-(def roundtrip-encrypted (comp #(thaw   % {:password [:cached "p"]})
-                               #(freeze % {:password [:cached "p"]})))
-(def roundtrip-fast      (comp thaw #(freeze % {:compressor nil})))
-
-(defn bench [{:keys [reader? laps] :or {reader? true laps 1}}]
-  (println)
-  (println "Benching (this can take some time)")
+(defn bench [{:keys [reader? lzma2? laps] :or {laps 1}}]
+  (println "\nBenching (this can take some time)")
   (println "----------------------------------")
   (dotimes [l laps]
-    (println)
-    (println (str "Lap " (inc l) "/" laps "..."))
+    (println (str "\nLap " (inc l) "/" laps "..."))
 
-    (when reader?
-      (println
-       {:reader
-        {:round     (bench* (roundtrip-reader data))
-         :freeze    (bench* (freeze-reader data))
-         :thaw      (let [frozen (freeze-reader data)] (bench* (thaw-reader frozen)))
-         :data-size (count (.getBytes ^String (freeze-reader data) "UTF-8"))}}))
+    (when reader? ; Slow
+      (println {:reader (bench1 #(pr-str %) #(edn/read-string %)
+                                #(count (.getBytes ^String % "UTF-8")))}))
 
-    (println
-     {:defaults
-      {:round     (bench* (roundtrip-defaults data))
-       :freeze    (bench* (freeze data))
-       :thaw      (let [frozen (freeze data)] (bench* (thaw frozen)))
-       :data-size (count (freeze data))}})
+    (println {:default   (bench1 #(freeze % {})
+                                 #(thaw   % {}))})
+    (println {:encrypted (bench1 #(freeze % {:password [:cached "p"]})
+                                 #(thaw   % {:password [:cached "p"]}))})
+    (println {:fast      (bench1 #(freeze % {:compressor nil})
+                                 #(thaw   % {:compressor nil}))})
 
-    (println
-     {:encrypted
-      {:round     (bench* (roundtrip-encrypted data))
-       :freeze    (bench* (freeze data {:password [:cached "p"]}))
-       :thaw      (let [frozen (freeze data {:password [:cached "p"]})]
-                    (bench* (thaw frozen {:password [:cached "p"]})))
-       :data-size (count (freeze data {:password [:cached "p"]}))}})
+    (when lzma2? ; Slow as molasses
+      (println {:lzma2 (bench1 #(freeze % {:compressor compression/lzma2-compressor})
+                               #(thaw   % {:compressor compression/lzma2-compressor}))})))
 
-    (println
-     {:fast
-      {:round     (bench* (roundtrip-fast data))
-       :freeze    (bench* (freeze data {:compressor nil}))
-       :thaw      (let [frozen (freeze data {:compressor nil})]
-                    (bench* (thaw frozen)))
-       :data-size (count (freeze data {:compressor nil}))}}))
-
-  (println)
-  (println "Done! (Time for cake?)")
+  (println "\nDone! (Time for cake?)")
   true)
 
 (comment
-  ;; (bench {:reader? true  :laps 2})
-  ;; (bench {:reader? false :laps 1})
-  ;; (bench {:reader? false :laps 2})
+  ;; (bench {:reader? true :lzma2? true :laps 1})
+  ;; (bench {:laps 2})
+
+  ;;; 19 Oct 2013: Nippy v2.3.0, with lzma2 & (nb!) round=freeze+thaw
+  ;; {:reader    {:round 67798,  :freeze 23202,  :thaw 44596, :size 22971}}
+  ;; {:default   {:round 3632,   :freeze 2349,   :thaw 1283,  :size 12369}}
+  ;; {:encrypted {:round 6970,   :freeze 4073,   :thaw 2897,  :size 12388}}
+  ;; {:fast      {:round 3294,   :freeze 2109,   :thaw 1185,  :size 13277}}
+  ;; {:lzma2     {:round 145301, :freeze 123650, :thaw 21651, :size 9024}}
 
   ;;; 11 Oct 2013: Nippy v2.2.0, with both ztellman mods
   ;; {:defaults  {:round 4319, :freeze 2950, :thaw 1446, :data-size 12369}}

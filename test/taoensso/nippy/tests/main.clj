@@ -1,7 +1,8 @@
 (ns taoensso.nippy.tests.main
   (:require [expectations   :as test :refer :all]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
-            [taoensso.nippy.benchmarks :as benchmarks]))
+            [taoensso.nippy.compression :as compression]
+            [taoensso.nippy.benchmarks  :as benchmarks]))
 
 ;; Remove stuff from stress-data that breaks roundtrip equality
 (def test-data (dissoc nippy/stress-data :bytes))
@@ -13,6 +14,14 @@
 (expect test-data ((comp thaw #(freeze % {:legacy-mode true})) test-data))
 (expect test-data ((comp #(thaw   % {:password [:salted "p"]})
                          #(freeze % {:password [:salted "p"]}))
+                   test-data))
+(expect test-data ((comp #(thaw   % {:compressor compression/lzma2-compressor})
+                         #(freeze % {:compressor compression/lzma2-compressor}))
+                   test-data))
+(expect test-data ((comp #(thaw   % {:compressor compression/lzma2-compressor
+                                     :password [:salted "p"]})
+                         #(freeze % {:compressor compression/lzma2-compressor
+                                     :password [:salted "p"]}))
                    test-data))
 
 (expect AssertionError (thaw (freeze test-data {:password "malformed"})))
@@ -46,4 +55,4 @@
             (nippy/extend-thaw 2 [s] (->MyRec (.readUTF s)))
             (= (->MyRec "fast-val") (thaw (freeze (->MyRec "val"))))))
 
-(expect (benchmarks/bench {:reader? false})) ; Also tests :cached passwords
+(expect (benchmarks/bench {})) ; Also tests :cached passwords
