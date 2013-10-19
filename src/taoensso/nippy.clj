@@ -7,8 +7,8 @@
              (utils       :as utils)
              (compression :as compression :refer (snappy-compressor))
              (encryption  :as encryption  :refer (aes128-encryptor))])
-  (:import  [java.io DataInputStream DataOutputStream ByteArrayOutputStream
-             ByteArrayInputStream]
+  (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
+             DataOutputStream]
             [java.lang.reflect Method]
             [java.util Date UUID]
             [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
@@ -209,10 +209,10 @@
                 :or   {compressor snappy-compressor
                        encryptor  aes128-encryptor}}]]
   (when legacy-mode (assert-legacy-args compressor password))
-  (let [ba     (ByteArrayOutputStream.)
-        stream (DataOutputStream. ba)]
-    (freeze-to-stream! stream x)
-    (let [ba (.toByteArray ba)
+  (let [bas (ByteArrayOutputStream.)
+        ds  (DataOutputStream. bas)]
+    (freeze-to-stream! ds x)
+    (let [ba (.toByteArray bas)
           ba (if compressor (compression/compress compressor ba) ba)
           ba (if password   (encryption/encrypt encryptor password ba) ba)]
       (if legacy-mode ba
