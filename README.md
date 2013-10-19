@@ -1,7 +1,7 @@
 **[API docs](http://ptaoussanis.github.io/nippy/)** | **[CHANGELOG](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md)** | [contact & contributing](#contact--contributing) | [other Clojure libs](https://www.taoensso.com/clojure-libraries) | [Twitter](https://twitter.com/#!/ptaoussanis) | current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "2.3.0"] ; Stable; see CHANGELOG for changes since 1.x
+[com.taoensso/nippy "2.4.0"] ; Stable; see CHANGELOG for changes since 1.x
 ```
 
 v2 adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), easier integration into other tools/libraries, and hugely improved performance.
@@ -29,7 +29,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
   * Utils for **easy integration into 3rd-party tools/libraries**. (v2+)
 
 ## Optional plugins
-  * [LZ4 compressor](https://github.com/mpenet/nippy-lz4) by [mpenet](https://github.com/mpenet).
+  * [LZ4 compressor](https://github.com/mpenet/nippy-lz4) by [mpenet](https://github.com/mpenet) (v2+).
 
 ## Getting started
 
@@ -38,7 +38,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your [Leiningen](http://leiningen.org/) `project.clj` and `require` the library in your ns:
 
 ```clojure
-[com.taoensso/nippy "2.3.0"] ; project.clj
+[com.taoensso/nippy "2.4.0"] ; project.clj
 (ns my-app (:require [taoensso.nippy :as nippy])) ; ns
 ```
 

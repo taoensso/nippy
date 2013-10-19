@@ -1,3 +1,8 @@
+## v2.3.0 → v2.4.0
+  * Added (alpha) LZMA2 (high-ratio) compressor.
+  * Bump tools.reader dependency to 0.7.9.
+
+
 ## v2.2.0 → v2.3.0
   * Huge (~30%) improvement to freeze time courtesy of Zach Tellman (ztellman).
 
