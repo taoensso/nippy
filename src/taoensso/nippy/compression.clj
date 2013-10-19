@@ -28,7 +28,7 @@
   (->SnappyCompressor))
 
 (deftype LZMA2Compressor [compression-level]
-  ;; Compression level ∈ℕ[0,9] (low->high) with 6 LZMA2 default (we use 4)
+  ;; Compression level ∈ℕ[0,9] (low->high) with 6 LZMA2 default (we use 0)
   ICompressor
   (compress [_ ba]
     (let [ba-len (alength ^bytes ba)
@@ -55,8 +55,8 @@
   "Alpha - subject to change.
   Default org.tukaani.xz.LZMA2 compressor:
         Ratio: high.
-  Write speed: very slow.
-   Read speed: medium.
+  Write speed: _very_ slow (also currently single-threaded).
+   Read speed: slow.
 
-  A specialized compressor for large, low-write, high-read data."
-  (->LZMA2Compressor 4))
+  A specialized compressor for large, low-write data."
+  (->LZMA2Compressor 0))

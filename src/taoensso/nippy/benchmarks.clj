@@ -51,7 +51,7 @@
   ;; {:default   {:round 3632,   :freeze 2349,   :thaw 1283,  :size 12369}}
   ;; {:encrypted {:round 6970,   :freeze 4073,   :thaw 2897,  :size 12388}}
   ;; {:fast      {:round 3294,   :freeze 2109,   :thaw 1185,  :size 13277}}
-  ;; {:lzma2     {:round 145301, :freeze 123650, :thaw 21651, :size 9024}}
+  ;; {:lzma2     {:round 44590,  :freeze 29567,  :thaw 15023, :size 9076}}
 
   ;;; 11 Oct 2013: Nippy v2.2.0, with both ztellman mods
   ;; {:defaults  {:round 4319, :freeze 2950, :thaw 1446, :data-size 12369}}
