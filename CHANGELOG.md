@@ -1,4 +1,4 @@
-## v2.3.0 → v2.4.0
+## v2.3.0 → v2.4.1
   * Added (alpha) LZMA2 (high-ratio) compressor.
   * Bump tools.reader dependency to 0.7.9.
 
