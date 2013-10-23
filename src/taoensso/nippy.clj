@@ -11,9 +11,13 @@
              DataOutputStream]
             [java.lang.reflect Method]
             [java.util Date UUID]
-            [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
-             PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
-             APersistentMap IPersistentSet ISeq IRecord]))
+            [clojure.lang Keyword BigInt Ratio
+             APersistentMap APersistentVector APersistentSet
+             IPersistentList IPersistentMap ; IPersistentVector IPersistentSet
+             PersistentQueue PersistentTreeMap PersistentTreeSet ; PersistentList
+             LazySeq
+             IRecord ; ISeq
+             ]))
 
 ;;;; Nippy 2.x+ header spec (4 bytes)
 (def ^:private ^:const head-version 1)
@@ -77,7 +81,10 @@
 (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
 
 ;;;; Freezing
-(defprotocol Freezable (freeze-to-stream* [this stream]))
+
+(defprotocol Freezable
+  "Be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU."
+ (freeze-to-stream* [this stream]))
 
 (defmacro           write-id    [s id] `(.writeByte ~s ~id))
 (defmacro ^:private write-bytes [s ba]
@@ -136,19 +143,19 @@
                                               (str ns "/" (name x))
                                               (name x))))
 
-(freezer IRecord id-record
-         (write-utf8 s (.getName (class x)))
-         (freeze-to-stream s (into {} x)))
-
 (freezer-coll PersistentQueue       id-queue)
 (freezer-coll PersistentTreeSet     id-sorted-set)
 (freezer-kvs  PersistentTreeMap     id-sorted-map)
 
-(freezer-coll IPersistentList       id-list)
-(freezer-coll IPersistentVector     id-vector)
-(freezer-coll IPersistentSet        id-set)
 (freezer-kvs  APersistentMap        id-map)
-(freezer-coll ISeq                  id-seq)
+(freezer-coll APersistentVector     id-vector)
+(freezer-coll APersistentSet        id-set)
+(freezer-coll IPersistentList       id-list) ; No APersistentList
+(freezer-coll LazySeq               id-seq)
+
+(freezer IRecord id-record
+         (write-utf8 s (.getName (class x)))
+         (freeze-to-stream s (into {} x)))
 
 (freezer Byte       id-byte    (.writeByte s x))
 (freezer Short      id-short   (.writeShort s x))
@@ -380,7 +387,8 @@
 
 (defmacro extend-freeze
   "Alpha - subject to change.
-  Extends Nippy to support freezing of a custom type with id ∈[1, 128]:
+  Extends Nippy to support freezing of a custom type (ideally concrete) with
+  id ∈[1, 128]:
   (defrecord MyType [data])
   (extend-freeze MyType 1 [x data-output-stream]
     (.writeUTF [data-output-stream] (:data x)))"
