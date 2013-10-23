@@ -87,8 +87,8 @@ nippy/stress-data
  :bigdec       (bigdec 3.1415926535897932384626433832795)
 
  :ratio        22/7
- :tagged-uuid  (java.util.UUID/randomUUID)
- :tagged-date  (java.util.Date.)}
+ :uuid         (java.util.UUID/randomUUID)
+ :date         (java.util.Date.)}
 ```
 
 Serialize it:

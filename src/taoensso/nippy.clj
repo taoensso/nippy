@@ -452,10 +452,8 @@
      :bigdec       (bigdec 3.1415926535897932384626433832795)
 
      :ratio        22/7
-
-     ;; Clojure 1.4+ tagged literals
-     :tagged-uuid  (java.util.UUID/randomUUID)
-     :tagged-date  (java.util.Date.)}))
+     :uuid         (java.util.UUID/randomUUID)
+     :date         (java.util.Date.)}))
 
 ;;;; Deprecated API
 
