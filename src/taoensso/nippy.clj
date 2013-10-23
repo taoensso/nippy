@@ -65,6 +65,7 @@
 (def ^:const id-ratio      (int 70))
 
 (def ^:const id-record     (int 80))
+;; (def ^:const id-type    (int 81)) ; TODO
 
 (def ^:const id-date       (int 90))
 (def ^:const id-uuid       (int 91))
@@ -101,38 +102,29 @@
   [^DataOutputStream data-output-stream x & _]
   (freeze-to-stream data-output-stream x))
 
-(defmacro ^:private freezer
-  "Helper to extend Freezable protocol."
-  [type id & body]
+(defmacro ^:private freezer [type id & body]
   `(extend-type ~type
      Freezable
      (~'freeze-to-stream* [~'x ~(with-meta 's {:tag 'DataOutputStream})]
        (write-id ~'s ~id)
        ~@body)))
 
-(defmacro ^:private coll-freezer
-  "Extends Freezable to simple collection types."
-  [type id & body]
+(defmacro ^:private freezer-coll [type id & body]
   `(freezer ~type ~id
      (if (counted? ~'x)
-       (do
-         (.writeInt ~'s (count ~'x))
-         (doseq [i# ~'x] (freeze-to-stream ~'s i#)))
+       (do (.writeInt ~'s (count ~'x))
+           (doseq [i# ~'x] (freeze-to-stream ~'s i#)))
        (let [bas# (ByteArrayOutputStream.)
-             s# (DataOutputStream. bas#)
-             cnt# (reduce
-                    (fn [cnt# i#]
-                      (freeze-to-stream! s# i#)
-                      (unchecked-inc cnt#))
-                    0
-                    ~'x)
+             s#   (DataOutputStream. bas#)
+             cnt# (reduce (fn [cnt# i#]
+                            (freeze-to-stream s# i#)
+                            (unchecked-inc cnt#))
+                          0 ~'x)
              ba# (.toByteArray bas#)]
          (.writeInt ~'s cnt#)
          (.write ~'s ba# 0 (alength ba#))))))
 
-(defmacro ^:private kv-freezer
-  "Extends Freezable to key-value collection types."
-  [type id & body]
+(defmacro ^:private freezer-kvs [type id & body]
   `(freezer ~type ~id
     (.writeInt ~'s (* 2 (count ~'x)))
     (doseq [kv# ~'x]
@@ -153,15 +145,15 @@
          (write-utf8 s (.getName (class x)))
          (freeze-to-stream s (into {} x)))
 
-(coll-freezer PersistentQueue       id-queue)
-(coll-freezer PersistentTreeSet     id-sorted-set)
-(kv-freezer   PersistentTreeMap     id-sorted-map)
+(freezer-coll PersistentQueue       id-queue)
+(freezer-coll PersistentTreeSet     id-sorted-set)
+(freezer-kvs  PersistentTreeMap     id-sorted-map)
 
-(coll-freezer IPersistentList       id-list)
-(coll-freezer IPersistentVector     id-vector)
-(coll-freezer IPersistentSet        id-set)
-(kv-freezer   APersistentMap        id-map)
-(coll-freezer ISeq                  id-seq)
+(freezer-coll IPersistentList       id-list)
+(freezer-coll IPersistentVector     id-vector)
+(freezer-coll IPersistentSet        id-set)
+(freezer-kvs  APersistentMap        id-map)
+(freezer-coll ISeq                  id-seq)
 
 (freezer Byte       id-byte    (.writeByte s x))
 (freezer Short      id-short   (.writeShort s x))
@@ -186,7 +178,9 @@
          (.writeLong s (.getLeastSignificantBits x)))
 
 ;; Use Clojure's own reader as final fallback
-(freezer Object id-reader (write-bytes s (.getBytes (pr-str x) "UTF-8")))
+(freezer Object id-reader
+         ;; (println (format "DEBUG - Using reader for type: %s" (type x)))
+         (write-bytes s (.getBytes (pr-str x) "UTF-8")))
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 
@@ -232,16 +226,12 @@
 (defmacro ^:private read-biginteger [s] `(BigInteger. (read-bytes ~s)))
 (defmacro ^:private read-utf8       [s] `(String. (read-bytes ~s) "UTF-8"))
 
-(defmacro ^:private coll-thaw "Thaws simple collection types."
-  [s coll]
-  `(let [s# ~s]
-     (utils/repeatedly-into ~coll (.readInt s#) (thaw-from-stream s#))))
+(defmacro ^:private read-coll [s coll]
+  `(let [s# ~s] (utils/repeatedly-into ~coll (.readInt s#) (thaw-from-stream s#))))
 
-(defmacro ^:private coll-thaw-kvs "Thaws key-value collection types."
-  [s coll]
-  `(let [s# ~s]
-     (utils/repeatedly-into ~coll (/ (.readInt s#) 2)
-                            [(thaw-from-stream s#) (thaw-from-stream s#)])))
+(defmacro ^:private read-kvs [s coll]
+  `(let [s# ~s] (utils/repeatedly-into ~coll (/ (.readInt s#) 2)
+                  [(thaw-from-stream s#) (thaw-from-stream s#)])))
 
 (declare ^:private custom-readers)
 
@@ -259,15 +249,15 @@
      id-string  (read-utf8 s)
      id-keyword (keyword (read-utf8 s))
 
-     id-queue      (coll-thaw s (PersistentQueue/EMPTY))
-     id-sorted-set (coll-thaw s     (sorted-set))
-     id-sorted-map (coll-thaw-kvs s (sorted-map))
+     id-queue      (read-coll s (PersistentQueue/EMPTY))
+     id-sorted-set (read-coll s (sorted-set))
+     id-sorted-map (read-kvs  s (sorted-map))
 
-     id-list    (into '() (rseq (coll-thaw s [])))
-     id-vector  (coll-thaw s  [])
-     id-set     (coll-thaw s #{})
-     id-map     (coll-thaw-kvs s  {})
-     id-seq     (coll-thaw s [])
+     id-list    (into '() (rseq (read-coll s [])))
+     id-vector  (read-coll s  [])
+     id-set     (read-coll s #{})
+     id-map     (read-kvs  s  {})
+     id-seq     (read-coll s  [])
 
      id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
 
