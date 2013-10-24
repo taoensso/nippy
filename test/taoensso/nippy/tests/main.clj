@@ -5,7 +5,7 @@
             [taoensso.nippy.benchmarks  :as benchmarks]))
 
 ;; Remove stuff from stress-data that breaks roundtrip equality
-(def test-data (dissoc nippy/stress-data :bytes))
+(def test-data (dissoc nippy/stress-data :bytes :throwable :exception :ex-info))
 
 (defn- before-run {:expectations-options :before-run} [])
 (defn- after-run  {:expectations-options :after-run}  [])
@@ -39,18 +39,16 @@
       (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
       (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
 
-;;; Records (reflecting)
-(defrecord MyRec [data])
-(expect (let [rec (->MyRec "val")] (= rec (thaw (freeze rec)))))
 
-;;; Custom types
+;;; Extend to custom Type
 (defrecord MyType [data])
 (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (:data x)))
 (expect Exception (thaw (freeze (->MyType "val"))))
 (expect (do (nippy/extend-thaw 1 [s] (->MyType (.readUTF s)))
             (let [type (->MyType "val")] (= type (thaw (freeze type))))))
 
-;;; Records (extend)
+;;; Extend to custom Record
+(defrecord MyRec [data])
 (expect (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "fast-" (:data x))))
             (nippy/extend-thaw 2 [s] (->MyRec (.readUTF s)))
             (= (->MyRec "fast-val") (thaw (freeze (->MyRec "val"))))))

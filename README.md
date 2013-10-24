@@ -2,6 +2,7 @@
 
 ```clojure
 [com.taoensso/nippy "2.4.1"] ; Stable; see CHANGELOG for changes since 1.x
+[com.taoensso/nippy "2.5.0-beta1"] ; Development; adds Serializable fallback
 ```
 
 v2 adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), easier integration into other tools/libraries, and hugely improved performance.
@@ -22,6 +23,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
   * **Great performance**.
   * Comprehesive **support for all standard data types**.
   * **Easily extendable to custom data types**. (v2.1+)
+  * Java's **Serializable** fallback when available. (v2.5+)
   * **Reader-fallback** for all other types (including Clojure 1.4+ tagged literals).
   * **Full test coverage** for every supported type.
   * Fully pluggable **compression**, including built-in high-performance [Snappy](http://code.google.com/p/snappy/) compressor.
@@ -87,8 +89,15 @@ nippy/stress-data
  :bigdec       (bigdec 3.1415926535897932384626433832795)
 
  :ratio        22/7
- :tagged-uuid  (java.util.UUID/randomUUID)
- :tagged-date  (java.util.Date.)}
+ :uuid         (java.util.UUID/randomUUID)
+ :date         (java.util.Date.)
+
+ :stress-record (->StressRecord "data")
+
+ ;; Serializable
+ :throwable    (Throwable. "Yolo")
+ :exception    (try (/ 1 0) (catch Exception e e))
+ :ex-info      (ex-info "ExInfo" {:data "data"})}
 ```
 
 Serialize it:

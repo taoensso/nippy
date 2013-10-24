@@ -8,12 +8,16 @@
              (compression :as compression :refer (snappy-compressor))
              (encryption  :as encryption  :refer (aes128-encryptor))])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
-             DataOutputStream]
+             DataOutputStream Serializable]
             [java.lang.reflect Method]
             [java.util Date UUID]
-            [clojure.lang Keyword BigInt Ratio PersistentQueue PersistentTreeMap
-             PersistentTreeSet IPersistentList IPersistentVector IPersistentMap
-             APersistentMap IPersistentSet ISeq IRecord]))
+            [clojure.lang Keyword BigInt Ratio
+             APersistentMap APersistentVector APersistentSet
+             IPersistentList IPersistentMap ; IPersistentVector IPersistentSet
+             PersistentQueue PersistentTreeMap PersistentTreeSet ; PersistentList
+             LazySeq
+             IRecord ; ISeq
+             ]))
 
 ;;;; Nippy 2.x+ header spec (4 bytes)
 (def ^:private ^:const head-version 1)
@@ -33,7 +37,8 @@
 (def ^:const id-bytes      (int 2))
 (def ^:const id-nil        (int 3))
 (def ^:const id-boolean    (int 4))
-(def ^:const id-reader     (int 5)) ; Fallback: pr-str output
+(def ^:const id-reader     (int 5)) ; Fallback #2: pr-str output
+(def ^:const id-serializable (int 6)) ; Fallback #1
 
 (def ^:const id-char       (int 10))
 ;;                              11
@@ -65,6 +70,7 @@
 (def ^:const id-ratio      (int 70))
 
 (def ^:const id-record     (int 80))
+;; (def ^:const id-type    (int 81)) ; TODO
 
 (def ^:const id-date       (int 90))
 (def ^:const id-uuid       (int 91))
@@ -76,7 +82,10 @@
 (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
 
 ;;;; Freezing
-(defprotocol Freezable (freeze-to-stream* [this stream]))
+
+(defprotocol Freezable
+  "Be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU."
+ (freeze-to-stream* [this stream]))
 
 (defmacro           write-id    [s id] `(.writeByte ~s ~id))
 (defmacro ^:private write-bytes [s ba]
@@ -96,43 +105,29 @@
        (freeze-to-stream* m# s#))
      (freeze-to-stream* x# s#)))
 
-(defn freeze-to-stream!
-  "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
-  [^DataOutputStream data-output-stream x & _]
-  (freeze-to-stream data-output-stream x))
-
-(defmacro ^:private freezer
-  "Helper to extend Freezable protocol."
-  [type id & body]
+(defmacro ^:private freezer [type id & body]
   `(extend-type ~type
      Freezable
      (~'freeze-to-stream* [~'x ~(with-meta 's {:tag 'DataOutputStream})]
        (write-id ~'s ~id)
        ~@body)))
 
-(defmacro ^:private coll-freezer
-  "Extends Freezable to simple collection types."
-  [type id & body]
+(defmacro ^:private freezer-coll [type id & body]
   `(freezer ~type ~id
      (if (counted? ~'x)
-       (do
-         (.writeInt ~'s (count ~'x))
-         (doseq [i# ~'x] (freeze-to-stream ~'s i#)))
+       (do (.writeInt ~'s (count ~'x))
+           (doseq [i# ~'x] (freeze-to-stream ~'s i#)))
        (let [bas# (ByteArrayOutputStream.)
-             s# (DataOutputStream. bas#)
-             cnt# (reduce
-                    (fn [cnt# i#]
-                      (freeze-to-stream! s# i#)
-                      (unchecked-inc cnt#))
-                    0
-                    ~'x)
+             s#   (DataOutputStream. bas#)
+             cnt# (reduce (fn [cnt# i#]
+                            (freeze-to-stream s# i#)
+                            (unchecked-inc cnt#))
+                          0 ~'x)
              ba# (.toByteArray bas#)]
          (.writeInt ~'s cnt#)
          (.write ~'s ba# 0 (alength ba#))))))
 
-(defmacro ^:private kv-freezer
-  "Extends Freezable to key-value collection types."
-  [type id & body]
+(defmacro ^:private freezer-kvs [type id & body]
   `(freezer ~type ~id
     (.writeInt ~'s (* 2 (count ~'x)))
     (doseq [kv# ~'x]
@@ -149,19 +144,19 @@
                                               (str ns "/" (name x))
                                               (name x))))
 
+(freezer-coll PersistentQueue       id-queue)
+(freezer-coll PersistentTreeSet     id-sorted-set)
+(freezer-kvs  PersistentTreeMap     id-sorted-map)
+
+(freezer-kvs  APersistentMap        id-map)
+(freezer-coll APersistentVector     id-vector)
+(freezer-coll APersistentSet        id-set)
+(freezer-coll IPersistentList       id-list) ; No APersistentList
+(freezer-coll LazySeq               id-seq)
+
 (freezer IRecord id-record
-         (write-utf8 s (.getName (class x)))
+         (write-utf8 s (.getName (class x))) ; Reflect
          (freeze-to-stream s (into {} x)))
-
-(coll-freezer PersistentQueue       id-queue)
-(coll-freezer PersistentTreeSet     id-sorted-set)
-(kv-freezer   PersistentTreeMap     id-sorted-map)
-
-(coll-freezer IPersistentList       id-list)
-(coll-freezer IPersistentVector     id-vector)
-(coll-freezer IPersistentSet        id-set)
-(kv-freezer   APersistentMap        id-map)
-(coll-freezer ISeq                  id-seq)
 
 (freezer Byte       id-byte    (.writeByte s x))
 (freezer Short      id-short   (.writeShort s x))
@@ -185,8 +180,22 @@
          (.writeLong s (.getMostSignificantBits x))
          (.writeLong s (.getLeastSignificantBits x)))
 
-;; Use Clojure's own reader as final fallback
-(freezer Object id-reader (write-bytes s (.getBytes (pr-str x) "UTF-8")))
+;; Fallbacks. Note that we'll extend *only* to (lowly) Object to prevent
+;; interfering with higher-level implementations, Ref. http://goo.gl/6f7SKl
+(extend-type Object
+  Freezable
+  (freeze-to-stream* [x ^DataOutputStream s]
+    (if (instance? Serializable x)
+      (do ;; Fallback #1: Java's Serializable interface
+        ;;(println (format "DEBUG - Serializable fallback: %s" (type x)))
+        (write-id s id-serializable)
+        (write-utf8 s (.getName (class x))) ; Reflect
+        (.writeObject (java.io.ObjectOutputStream. s) x))
+
+      (do ;; Fallback #2: Clojure's Reader
+        ;;(println (format "DEBUG - Reader fallback: %s" (type x)))
+        (write-id s id-reader)
+        (write-bytes s (.getBytes (pr-str x) "UTF-8"))))))
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 
@@ -200,6 +209,11 @@
                                          :encrypted?  false}))
 
 (declare assert-legacy-args)
+
+(defn freeze-to-stream!
+  "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
+  [^DataOutputStream data-output-stream x & _]
+  (freeze-to-stream data-output-stream x))
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. Set :legacy-mode to
@@ -232,16 +246,12 @@
 (defmacro ^:private read-biginteger [s] `(BigInteger. (read-bytes ~s)))
 (defmacro ^:private read-utf8       [s] `(String. (read-bytes ~s) "UTF-8"))
 
-(defmacro ^:private coll-thaw "Thaws simple collection types."
-  [s coll]
-  `(let [s# ~s]
-     (utils/repeatedly-into ~coll (.readInt s#) (thaw-from-stream s#))))
+(defmacro ^:private read-coll [s coll]
+  `(let [s# ~s] (utils/repeatedly-into ~coll (.readInt s#) (thaw-from-stream s#))))
 
-(defmacro ^:private coll-thaw-kvs "Thaws key-value collection types."
-  [s coll]
-  `(let [s# ~s]
-     (utils/repeatedly-into ~coll (/ (.readInt s#) 2)
-                            [(thaw-from-stream s#) (thaw-from-stream s#)])))
+(defmacro ^:private read-kvs [s coll]
+  `(let [s# ~s] (utils/repeatedly-into ~coll (/ (.readInt s#) 2)
+                  [(thaw-from-stream s#) (thaw-from-stream s#)])))
 
 (declare ^:private custom-readers)
 
@@ -251,6 +261,10 @@
     (utils/case-eval type-id
 
      id-reader  (edn/read-string {:readers *data-readers*} (read-utf8 s))
+     id-serializable
+     (let [class ^Class (Class/forName (read-utf8 s))]
+       (cast class (.readObject (java.io.ObjectInputStream. s))))
+
      id-bytes   (read-bytes s)
      id-nil     nil
      id-boolean (.readBoolean s)
@@ -259,15 +273,15 @@
      id-string  (read-utf8 s)
      id-keyword (keyword (read-utf8 s))
 
-     id-queue      (coll-thaw s (PersistentQueue/EMPTY))
-     id-sorted-set (coll-thaw s     (sorted-set))
-     id-sorted-map (coll-thaw-kvs s (sorted-map))
+     id-queue      (read-coll s (PersistentQueue/EMPTY))
+     id-sorted-set (read-coll s (sorted-set))
+     id-sorted-map (read-kvs  s (sorted-map))
 
-     id-list    (into '() (rseq (coll-thaw s [])))
-     id-vector  (coll-thaw s  [])
-     id-set     (coll-thaw s #{})
-     id-map     (coll-thaw-kvs s  {})
-     id-seq     (coll-thaw s [])
+     id-list    (into '() (rseq (read-coll s [])))
+     id-vector  (read-coll s  [])
+     id-set     (read-coll s #{})
+     id-map     (read-kvs  s  {})
+     id-seq     (read-coll s  [])
 
      id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
 
@@ -390,7 +404,8 @@
 
 (defmacro extend-freeze
   "Alpha - subject to change.
-  Extends Nippy to support freezing of a custom type with id ∈[1, 128]:
+  Extends Nippy to support freezing of a custom type (ideally concrete) with
+  id ∈[1, 128]:
   (defrecord MyType [data])
   (extend-freeze MyType 1 [x data-output-stream]
     (.writeUTF [data-output-stream] (:data x)))"
@@ -421,6 +436,7 @@
 
 ;;;; Stress data
 
+(defrecord StressRecord [data])
 (def stress-data "Reference data used for tests & benchmarks."
   (let []
     {:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
@@ -462,10 +478,15 @@
      :bigdec       (bigdec 3.1415926535897932384626433832795)
 
      :ratio        22/7
+     :uuid         (java.util.UUID/randomUUID)
+     :date         (java.util.Date.)
 
-     ;; Clojure 1.4+ tagged literals
-     :tagged-uuid  (java.util.UUID/randomUUID)
-     :tagged-date  (java.util.Date.)}))
+     :stress-record (->StressRecord "data")
+
+     ;; Serializable
+     :throwable    (Throwable. "Yolo")
+     :exception    (try (/ 1 0) (catch Exception e e))
+     :ex-info      (ex-info "ExInfo" {:data "data"})}))
 
 ;;;; Deprecated API
 
