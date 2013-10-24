@@ -481,7 +481,12 @@
      :uuid         (java.util.UUID/randomUUID)
      :date         (java.util.Date.)
 
-     :stress-record (->StressRecord "data")}))
+     :stress-record (->StressRecord "data")
+
+     ;; Serializable
+     :throwable    (Throwable. "Yolo")
+     :exception    (try (/ 1 0) (catch Exception e e))
+     :ex-info      (ex-info "ExInfo" {:data "data"})}))
 
 ;;;; Deprecated API
 

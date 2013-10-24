@@ -5,7 +5,7 @@
             [taoensso.nippy.benchmarks  :as benchmarks]))
 
 ;; Remove stuff from stress-data that breaks roundtrip equality
-(def test-data (dissoc nippy/stress-data :bytes))
+(def test-data (dissoc nippy/stress-data :bytes :throwable :exception :ex-info))
 
 (defn- before-run {:expectations-options :before-run} [])
 (defn- after-run  {:expectations-options :after-run}  [])
