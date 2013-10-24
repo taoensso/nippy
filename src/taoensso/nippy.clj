@@ -8,7 +8,7 @@
              (compression :as compression :refer (snappy-compressor))
              (encryption  :as encryption  :refer (aes128-encryptor))])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
-             DataOutputStream]
+             DataOutputStream Serializable]
             [java.lang.reflect Method]
             [java.util Date UUID]
             [clojure.lang Keyword BigInt Ratio
@@ -37,7 +37,8 @@
 (def ^:const id-bytes      (int 2))
 (def ^:const id-nil        (int 3))
 (def ^:const id-boolean    (int 4))
-(def ^:const id-reader     (int 5)) ; Fallback: pr-str output
+(def ^:const id-reader     (int 5)) ; Fallback #2: pr-str output
+(def ^:const id-serializable (int 6)) ; Fallback #1
 
 (def ^:const id-char       (int 10))
 ;;                              11
@@ -179,10 +180,22 @@
          (.writeLong s (.getMostSignificantBits x))
          (.writeLong s (.getLeastSignificantBits x)))
 
-;; Use Clojure's own reader as final fallback
-(freezer Object id-reader
-         ;; (println (format "DEBUG - Using reader for type: %s" (type x)))
-         (write-bytes s (.getBytes (pr-str x) "UTF-8")))
+;; Fallbacks. Note that we'll extend *only* to (lowly) Object to prevent
+;; interfering with higher-level implementations, Ref. http://goo.gl/6f7SKl
+(extend-type Object
+  Freezable
+  (freeze-to-stream* [x ^DataOutputStream s]
+    (if (instance? Serializable x)
+      (do ;; Fallback #1: Java's Serializable interface
+        ;;(println (format "DEBUG - Serializable fallback: %s" (type x)))
+        (write-id s id-serializable)
+        (write-utf8 s (.getName (class x))) ; Reflect
+        (.writeObject (java.io.ObjectOutputStream. s) x))
+
+      (do ;; Fallback #2: Clojure's Reader
+        ;;(println (format "DEBUG - Reader fallback: %s" (type x)))
+        (write-id s id-reader)
+        (write-bytes s (.getBytes (pr-str x) "UTF-8"))))))
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 
@@ -248,6 +261,10 @@
     (utils/case-eval type-id
 
      id-reader  (edn/read-string {:readers *data-readers*} (read-utf8 s))
+     id-serializable
+     (let [class ^Class (Class/forName (read-utf8 s))]
+       (cast class (.readObject (java.io.ObjectInputStream. s))))
+
      id-bytes   (read-bytes s)
      id-nil     nil
      id-boolean (.readBoolean s)
