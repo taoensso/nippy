@@ -97,11 +97,6 @@
        (freeze-to-stream* m# s#))
      (freeze-to-stream* x# s#)))
 
-(defn freeze-to-stream!
-  "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
-  [^DataOutputStream data-output-stream x & _]
-  (freeze-to-stream data-output-stream x))
-
 (defmacro ^:private freezer [type id & body]
   `(extend-type ~type
      Freezable
@@ -194,6 +189,11 @@
                                          :encrypted?  false}))
 
 (declare assert-legacy-args)
+
+(defn freeze-to-stream!
+  "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
+  [^DataOutputStream data-output-stream x & _]
+  (freeze-to-stream data-output-stream x))
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. Set :legacy-mode to
