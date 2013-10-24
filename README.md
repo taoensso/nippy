@@ -88,7 +88,9 @@ nippy/stress-data
 
  :ratio        22/7
  :uuid         (java.util.UUID/randomUUID)
- :date         (java.util.Date.)}
+ :date         (java.util.Date.)
+
+ :stress-record (->StressRecord "data")}
 ```
 
 Serialize it:

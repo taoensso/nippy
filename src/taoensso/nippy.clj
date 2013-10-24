@@ -154,7 +154,7 @@
 (freezer-coll LazySeq               id-seq)
 
 (freezer IRecord id-record
-         (write-utf8 s (.getName (class x)))
+         (write-utf8 s (.getName (class x))) ; Reflect
          (freeze-to-stream s (into {} x)))
 
 (freezer Byte       id-byte    (.writeByte s x))
@@ -419,6 +419,7 @@
 
 ;;;; Stress data
 
+(defrecord StressRecord [data])
 (def stress-data "Reference data used for tests & benchmarks."
   (let []
     {:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
@@ -461,7 +462,9 @@
 
      :ratio        22/7
      :uuid         (java.util.UUID/randomUUID)
-     :date         (java.util.Date.)}))
+     :date         (java.util.Date.)
+
+     :stress-record (->StressRecord "data")}))
 
 ;;;; Deprecated API
 
