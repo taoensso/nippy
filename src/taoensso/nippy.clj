@@ -13,11 +13,9 @@
             [java.util Date UUID]
             [clojure.lang Keyword BigInt Ratio
              APersistentMap APersistentVector APersistentSet
-             IPersistentList IPersistentMap ; IPersistentVector IPersistentSet
-             PersistentQueue PersistentTreeMap PersistentTreeSet ; PersistentList
-             LazySeq
-             IRecord ; ISeq
-             ]))
+             IPersistentMap ; IPersistentVector IPersistentSet IPersistentList
+             PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList ; LazySeq
+             IRecord ISeq]))
 
 ;;;; Nippy 2.x+ header spec (4 bytes)
 (def ^:private ^:const head-version 1)
@@ -116,6 +114,8 @@
 
 (defmacro ^:private freezer-coll [type id & body]
   `(freezer ~type ~id
+     #_(when (and debug-mode? (instance? ISeq ~type))
+       (println (format "DEBUG - freezer-coll: %s for %s" ~type (type ~'x))))
      (if (counted? ~'x)
        (do (.writeInt ~'s (count ~'x))
            (doseq [i# ~'x] (freeze-to-stream ~'s i#)))
@@ -153,8 +153,12 @@
 (freezer-kvs  APersistentMap        id-map)
 (freezer-coll APersistentVector     id-vector)
 (freezer-coll APersistentSet        id-set)
-(freezer-coll IPersistentList       id-list) ; No APersistentList
-(freezer-coll LazySeq               id-seq)
+(freezer-coll PersistentList        id-list) ; No APersistentList
+(freezer-coll (type '())            id-list)
+
+;; Nb low-level interface!! Acts as fallback for seqs that don't have a
+;; concrete implementation. Will conflict with any other coll interfaces!
+(freezer-coll ISeq                  id-seq)
 
 (freezer IRecord id-record
          (write-utf8 s (.getName (class x))) ; Reflect
@@ -189,14 +193,14 @@
   (freeze-to-stream* [x ^DataOutputStream s]
     (if (instance? Serializable x)
       (do ;; Fallback #1: Java's Serializable interface
-        (when debug-mode?
+        #_(when debug-mode?
           (println (format "DEBUG - Serializable fallback: %s" (type x))))
         (write-id s id-serializable)
         (write-utf8 s (.getName (class x))) ; Reflect
         (.writeObject (java.io.ObjectOutputStream. s) x))
 
       (do ;; Fallback #2: Clojure's Reader
-        (when debug-mode?
+        #_(when debug-mode?
           (println (format "DEBUG - Reader fallback: %s" (type x))))
         (write-id s id-reader)
         (write-bytes s (.getBytes (pr-str x) "UTF-8"))))))
@@ -285,7 +289,7 @@
      id-vector  (read-coll s  [])
      id-set     (read-coll s #{})
      id-map     (read-kvs  s  {})
-     id-seq     (read-coll s  [])
+     id-seq     (seq (read-coll s []))
 
      id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
 
