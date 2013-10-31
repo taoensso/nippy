@@ -28,6 +28,8 @@
    (byte 2) {:version 1 :compressed? false :encrypted? true}
    (byte 3) {:version 1 :compressed? true  :encrypted? true}})
 
+(def ^:private ^:const debug-mode? false)
+
 ;;;; Data type IDs
 
 ;; **Negative ids reserved for user-defined types**
@@ -187,13 +189,15 @@
   (freeze-to-stream* [x ^DataOutputStream s]
     (if (instance? Serializable x)
       (do ;; Fallback #1: Java's Serializable interface
-        ;;(println (format "DEBUG - Serializable fallback: %s" (type x)))
+        (when debug-mode?
+          (println (format "DEBUG - Serializable fallback: %s" (type x))))
         (write-id s id-serializable)
         (write-utf8 s (.getName (class x))) ; Reflect
         (.writeObject (java.io.ObjectOutputStream. s) x))
 
       (do ;; Fallback #2: Clojure's Reader
-        ;;(println (format "DEBUG - Reader fallback: %s" (type x)))
+        (when debug-mode?
+          (println (format "DEBUG - Reader fallback: %s" (type x))))
         (write-id s id-reader)
         (write-bytes s (.getBytes (pr-str x) "UTF-8"))))))
 
