@@ -76,7 +76,7 @@ nippy/stress-data
  :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
  :set-empty    #{}
  :meta         (with-meta {:a :A} {:metakey :metaval})
- :coll         (repeatedly 1000 rand)
+ :lazy-seq     (repeatedly 1000 rand)
 
  :byte         (byte 16)
  :short        (short 42)

@@ -469,7 +469,7 @@
      :set-empty    #{}
      :meta         (with-meta {:a :A} {:metakey :metaval})
 
-     :coll         (repeatedly 1000 rand)
+     :lazy-seq     (repeatedly 1000 rand)
 
      :byte         (byte 16)
      :short        (short 42)
