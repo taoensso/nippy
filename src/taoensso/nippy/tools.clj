@@ -37,8 +37,8 @@
   "Like `nippy/thaw` but takes options from *thaw-opts* binding, and wraps
   encrypted bytes for easy identification when no password has been provided
   for decryption."
-  [ba & {:keys [default-opts]}]
-  (let [result (nippy/thaw ba (merge (or *thaw-opts* default-opts)
+  [ba & [{:keys [default-opts]}]]
+  (let [result (nippy/thaw ba (merge default-opts *thaw-opts*
                                      {:taoensso.nippy/tools-thaw? true}))]
     (if (= result :taoensso.nippy/need-password)
       (EncryptedFrozen. ba)
