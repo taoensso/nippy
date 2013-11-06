@@ -2,7 +2,7 @@
 
 ```clojure
 [com.taoensso/nippy "2.4.1"] ; Stable; see CHANGELOG for changes since 1.x
-[com.taoensso/nippy "2.5.0-beta2"] ; Development; adds Serializable fallback
+[com.taoensso/nippy "2.5.0-beta3"] ; Development; adds Serializable fallback
 ```
 
 v2 adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), easier integration into other tools/libraries, and hugely improved performance.

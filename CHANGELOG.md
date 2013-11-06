@@ -2,6 +2,7 @@
   * Refactored standard Freezable protocol implementations to de-emphasise interfaces as a matter of hygiene, Ref. http://goo.gl/IFXzvh.
   * BETA STATUS: Added an additional (pre-Reader) Serializable fallback. This should greatly extend the number of out-the-box-serializable types.
   * ISeq is now used as a fallback for non-concrete seq types, giving better type matching pre/post freeze for things like LazySeqs, etc.
+  * Experimental: add `Compressable-LZMA2` type & (replaceable) de/serializer.
 
 
 ## v2.3.0 → v2.4.1
