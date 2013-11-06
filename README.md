@@ -1,16 +1,9 @@
 **[API docs](http://ptaoussanis.github.io/nippy/)** | **[CHANGELOG](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md)** | [contact & contributing](#contact--contributing) | [other Clojure libs](https://www.taoensso.com/clojure-libraries) | [Twitter](https://twitter.com/#!/ptaoussanis) | current [semantic](http://semver.org/) version:
 
 ```clojure
-[com.taoensso/nippy "2.4.1"] ; Stable; see CHANGELOG for changes since 1.x
-[com.taoensso/nippy "2.5.0-beta3"] ; Development; adds Serializable fallback
+[com.taoensso/nippy "2.5.0-RC1"] ; Development; see CHANGELOG for details
+[com.taoensso/nippy "2.4.1"] ; Stable
 ```
-
-v2 adds pluggable compression, crypto support (also pluggable), an improved API (including much better error messages), easier integration into other tools/libraries, and hugely improved performance.
-
-  * **BREAKING**: Nothing (but please test first).
-  * **DEPRECATED**: `freeze-to-bytes`->`freeze`, `thaw-from-bytes`->`thaw`.
-
-**Migration note**: Please be sure to use `lein clean` to clear old (v1) build artifacts!
 
 # Nippy, a Clojure serialization library
 
@@ -40,7 +33,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your [Leiningen](http://leiningen.org/) `project.clj` and `require` the library in your ns:
 
 ```clojure
-[com.taoensso/nippy "2.4.1"] ; project.clj
+[com.taoensso/nippy "2.5.0-RC1"] ; project.clj
 (ns my-app (:require [taoensso.nippy :as nippy])) ; ns
 ```
 
