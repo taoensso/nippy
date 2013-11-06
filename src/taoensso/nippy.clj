@@ -442,6 +442,33 @@
          (extend-thaw 1 [s] (->MyType (.readUTF s)))
          (thaw (freeze (->MyType "Joe"))))
 
+;;; Some useful custom types - EXPERIMENTAL
+
+(defrecord Compressable-LZMA2 [value])
+(extend-freeze Compressable-LZMA2 128 [x st]
+  (let [ba        (freeze (:value x) {:compressor nil :legacy-mode true})
+        ba-len    (alength ba)
+        compress? (> ba-len 1024)]
+    (.writeBoolean st compress?)
+    (if-not compress?
+      (do (.writeLong st  ba-len)
+          (.write st ba 0 ba-len))
+      (let [ba*     (compression/compress compression/lzma2-compressor ba)
+            ba*-len (alength ba*)]
+        (.writeLong st   ba*-len)
+        (.write st ba* 0 ba*-len)))))
+
+(extend-thaw 128 [st]
+  (let [compressed? (.readBoolean st)
+        ba-len      (.readLong    st)
+        ba          (byte-array ba-len)]
+    (.read st ba 0 ba-len)
+    (thaw ba {:compressor (when compressed? compression/lzma2-compressor)})))
+
+(comment (count (freeze (apply str (repeatedly 1000 rand))))
+         (count (freeze (->> (apply str (repeatedly 1000 rand))
+                             (->Compressable-LZMA2)))))
+
 ;;;; Stress data
 
 (defrecord StressRecord [data])
