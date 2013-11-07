@@ -446,7 +446,8 @@
 
 (defrecord Compressable-LZMA2 [value])
 (extend-freeze Compressable-LZMA2 128 [x st]
-  (let [ba        (freeze (:value x) {:compressor nil :legacy-mode true})
+  (let [[_ ^bytes ba] (-> (freeze (:value x) {:compressor nil})
+                          (utils/ba-split 4))
         ba-len    (alength ba)
         compress? (> ba-len 1024)]
     (.writeBoolean st compress?)
@@ -463,11 +464,18 @@
         ba-len      (.readLong    st)
         ba          (byte-array ba-len)]
     (.read st ba 0 ba-len)
-    (thaw ba {:compressor (when compressed? compression/lzma2-compressor)})))
+    (thaw (wrap-header ba {:compressed? compressed? :encrypted? false})
+          {:compressor compression/lzma2-compressor})))
 
-(comment (count (freeze (apply str (repeatedly 1000 rand))))
-         (count (freeze (->> (apply str (repeatedly 1000 rand))
-                             (->Compressable-LZMA2)))))
+(comment
+  (->> (apply str (repeatedly 1000 rand))
+       (->Compressable-LZMA2)
+       (freeze)
+       (thaw))
+  (count (->> (apply str (repeatedly 1000 rand)) (freeze)))
+  (count (->> (apply str (repeatedly 1000 rand))
+              (->Compressable-LZMA2)
+              (freeze))))
 
 ;;;; Stress data
 
