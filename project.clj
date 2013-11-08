@@ -12,7 +12,7 @@
              :1.6   {:dependencies [[org.clojure/clojure "1.6.0-master-SNAPSHOT"]]}
              :dev   {:dependencies []}
              :test  {:dependencies [[expectations                  "1.4.56"]
-                                    [org.xerial.snappy/snappy-java "1.1.0"]]}
+                                    [org.xerial.snappy/snappy-java "1.1.0.1"]]}
              :bench {:dependencies [] :jvm-opts ^:replace ["-server"]}}
   :aliases {"test-all"    ["with-profile" "+test,+1.4:+test,+1.5:+test,+1.6" "expectations"]
             "test-auto"   ["with-profile" "+test" "autoexpect"]
