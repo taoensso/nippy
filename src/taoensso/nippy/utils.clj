@@ -35,41 +35,41 @@
   [& body] `(let [t0# (System/nanoTime)] ~@body (- (System/nanoTime) t0#)))
 
 (defmacro bench
-  "Repeatedly executes form and returns time taken to complete execution."
-  [num-laps form & {:keys [warmup-laps num-threads as-ns?]}]
-  `(try (when ~warmup-laps (dotimes [_# ~warmup-laps] ~form))
-        (let [nanosecs#
-              (if-not ~num-threads
-                (time-ns (dotimes [_# ~num-laps] ~form))
-                (let [laps-per-thread# (int (/ ~num-laps ~num-threads))]
-                  (time-ns
-                   (->> (fn [] (future (dotimes [_# laps-per-thread#] ~form)))
-                        (repeatedly ~num-threads)
-                        doall
-                        (map deref)
-                        dorun))))]
-          (if ~as-ns? nanosecs# (Math/round (/ nanosecs# 1000000.0))))
-        (catch Exception e# (str "DNF: " (.getMessage e#)))))
-
-(defn version-compare "Comparator for version strings like x.y.z, etc."
-  [x y] (let [vals (fn [s] (vec (map #(Integer/parseInt %) (str/split s #"\."))))]
-          (compare (vals x) (vals y))))
-
-(defn version-sufficient? [version-str min-version-str]
-  (try (>= (version-compare version-str min-version-str) 0)
-       (catch Exception _ false)))
+  "Repeatedly executes body and returns time taken to complete execution."
+  [nlaps {:keys [nlaps-warmup nthreads as-ns?]
+          :or   {nlaps-warmup 0
+                 nthreads     1}} & body]
+  `(let [nlaps#        ~nlaps
+         nlaps-warmup# ~nlaps-warmup
+         nthreads#     ~nthreads]
+     (try (dotimes [_# nlaps-warmup#] ~@body)
+          (let [nanosecs#
+                (if (= nthreads# 1)
+                  (time-ns (dotimes [_# nlaps#] ~@body))
+                  (let [nlaps-per-thread# (int (/ nlaps# nthreads#))]
+                    (time-ns
+                     (->> (fn [] (future (dotimes [_# nlaps-per-thread#] ~@body)))
+                          (repeatedly nthreads#)
+                          (doall)
+                          (map deref)
+                          (dorun)))))]
+            (if ~as-ns? nanosecs# (Math/round (/ nanosecs# 1000000.0))))
+          (catch Exception e# (format "DNF: %s" (.getMessage e#))))))
 
 (defn memoized
-  "Like `memoize` but takes an explicit cache atom (possibly nil) and
-  immediately applies memoized f to given arguments."
+  "Like `(partial memoize* {})` but takes an explicit cache atom (possibly nil)
+  and immediately applies memoized f to given arguments."
   [cache f & args]
   (if-not cache
     (apply f args)
     (if-let [dv (@cache args)]
       @dv
-      (let [dv (delay (apply f args))]
-        (swap! cache assoc args dv)
-        @dv))))
+      (locking cache ; For thread racing
+        (if-let [dv (@cache args)] ; Retry after lock acquisition!
+          @dv
+          (let [dv (delay (apply f args))]
+            (swap! cache assoc args dv)
+            @dv))))))
 
 (comment (memoized nil +)
          (memoized nil + 5 12))

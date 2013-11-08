@@ -8,7 +8,7 @@
 ;; Remove stuff from stress-data that breaks reader
 (def data (dissoc nippy/stress-data :queue :queue-empty :bytes))
 
-(defmacro bench* [& body] `(utils/bench 10000 (do ~@body) :warmup-laps 20000))
+(defmacro bench* [& body] `(utils/bench 10000 {:warmup-laps 20000} ~@body))
 (defn     bench1 [freezer thawer & [sizer]]
   (let [data-frozen (freezer data)
         time-freeze (bench* (freezer data))
