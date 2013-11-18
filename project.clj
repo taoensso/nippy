@@ -9,10 +9,10 @@
                  [org.tukaani/xz           "1.4"]]
   :profiles {:1.4   {:dependencies [[org.clojure/clojure "1.4.0"]]}
              :1.5   {:dependencies [[org.clojure/clojure "1.5.1"]]}
-             :1.6   {:dependencies [[org.clojure/clojure "1.6.0-master-SNAPSHOT"]]}
+             :1.6   {:dependencies [[org.clojure/clojure "1.6.0-alpha2"]]}
              :dev   {:dependencies []}
              :test  {:dependencies [[expectations                  "1.4.56"]
-                                    [org.xerial.snappy/snappy-java "1.1.0.1"]]}
+                                    [org.xerial.snappy/snappy-java "1.1.1-M1"]]}
              :bench {:dependencies [] :jvm-opts ^:replace ["-server"]}}
   :aliases {"test-all"    ["with-profile" "+test,+1.4:+test,+1.5:+test,+1.6" "expectations"]
             "test-auto"   ["with-profile" "+test" "autoexpect"]
@@ -21,7 +21,7 @@
             "codox"       ["with-profile" "+test" "doc"]}
   :plugins [[lein-expectations "0.0.8"]
             [lein-autoexpect   "1.0"]
-            [lein-ancient      "0.5.3"]
+            [lein-ancient      "0.5.4"]
             [codox             "0.6.6"]]
   :min-lein-version "2.0.0"
   :global-vars {*warn-on-reflection* true}
