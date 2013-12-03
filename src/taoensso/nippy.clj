@@ -207,6 +207,13 @@
 (comment (reader-serializable? "hello"))
 
 (def ^:dynamic *final-freeze-fallback* "Alpha - subject to change." nil)
+(defn freeze-fallback-as-str "Alpha-subject to change." [x s]
+  (freeze-to-stream* {:nippy/unfreezable (str x) :type (type x)} s))
+
+(comment
+  (require '[clojure.core.async :as async])
+  (binding [*final-freeze-fallback* freeze-fallback-as-str]
+    (-> (async/chan) (freeze) (thaw))))
 
 ;; Fallbacks. Note that we'll extend *only* to (lowly) Object to prevent
 ;; interfering with higher-level implementations, Ref. http://goo.gl/6f7SKl
