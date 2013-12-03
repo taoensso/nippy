@@ -6,7 +6,7 @@ WIP
  * Added experimental `inspect-ba` fn for examining data possibly frozen by Nippy.
 
 ### Changes
- *
+ * Now throw exception at freeze (rather than thaw) time when trying to serialize an unreadable object using the Clojure reader.
 
 ### Fixes
  *

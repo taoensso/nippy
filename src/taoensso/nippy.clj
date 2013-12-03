@@ -186,6 +186,28 @@
          (.writeLong s (.getMostSignificantBits x))
          (.writeLong s (.getLeastSignificantBits x)))
 
+(def reader-serializable?
+  "`pr-str` will happily print stuff that the Reader can't actually read back,
+  so we have to test a full roundtrip if we want to throw an exception at freeze
+  (rather than thaw) time."
+  (let [cache (atom {})] ; {<type> <serializable?>}
+    (fn [x]
+      (let [t (type x)]
+        (if-let [dv (@cache t)] @dv
+          (locking cache ; For thread racing
+            (if-let [dv (@cache t)] @dv ; Retry after lock acquisition
+              (let [dv (delay
+                        (try (edn/read-string {:readers *data-readers*}
+                                              (pr-str x))
+                             true
+                             (catch Exception _ false)))]
+                (swap! cache assoc t dv)
+                @dv))))))))
+
+(comment (reader-serializable? "hello"))
+
+(def ^:dynamic *final-freeze-fallback* "Alpha - subject to change." nil)
+
 ;; Fallbacks. Note that we'll extend *only* to (lowly) Object to prevent
 ;; interfering with higher-level implementations, Ref. http://goo.gl/6f7SKl
 (extend-type Object
@@ -200,10 +222,16 @@
         (.writeObject (java.io.ObjectOutputStream. s) x))
 
       (do ;; Fallback #2: Clojure's Reader
-        #_(when debug-mode?
-          (println (format "DEBUG - Reader fallback: %s" (type x))))
-        (write-id s id-reader)
-        (write-bytes s (.getBytes (pr-str x) "UTF-8"))))))
+        (when (reader-serializable? x)
+          #_(when debug-mode?
+              (println (format "DEBUG - Reader fallback: %s" (type x))))
+          (write-id s id-reader)
+          (write-bytes s (.getBytes (pr-str x) "UTF-8")))
+
+        ;; Fallback #3: *final-freeze-fallback*
+        (if-let [ffb *final-freeze-fallback*] (ffb x s)
+          (throw (Exception. (format "Unfreezable type: %s %s"
+                                     (type x) (str x)))))))))
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 
