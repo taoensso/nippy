@@ -266,6 +266,8 @@
 (defn- thaw-from-stream
   [^DataInputStream s]
   (let [type-id (.readByte s)]
+    #_(when debug-mode?
+        (println (format "DEBUG - thawing type-id: %s" type-id)))
     (utils/case-eval type-id
 
      id-reader  (edn/read-string {:readers *data-readers*} (read-utf8 s))
@@ -530,6 +532,34 @@
      :throwable    (Throwable. "Yolo")
      :exception    (try (/ 1 0) (catch Exception e e))
      :ex-info      (ex-info "ExInfo" {:data "data"})}))
+
+;;;; Data recovery/analysis
+
+(defn inspect-ba "Alpha - subject to change."
+  [ba & [thaw-opts]]
+  (if-not (utils/bytes? ba) :not-ba
+    (let [[first2bytes nextbytes] (utils/ba-split ba 2)
+          known-wrapper
+          (cond
+           (utils/ba= first2bytes (.getBytes "\u0000<" "UTF8")) :carmine/bin
+           (utils/ba= first2bytes (.getBytes "\u0000>" "UTF8")) :carmine/clj)
+
+          unwrapped-ba (if known-wrapper nextbytes ba)
+          [data-ba nippy-header] (or (try-parse-header unwrapped-ba)
+                                     [unwrapped-ba :no-header])]
+
+      {:known-wrapper  known-wrapper
+       :nippy2-header  nippy-header ; Nippy v1.x didn't have a header
+       :thawable?      (try (thaw unwrapped-ba thaw-opts) true
+                            (catch Exception _ false))
+       :unwrapped-ba   unwrapped-ba
+       :data-ba        data-ba
+       :unwrapped-size (alength ^bytes unwrapped-ba)
+       :ba-size        (alength ^bytes ba)
+       :data-size      (alength ^bytes data-ba)})))
+
+(comment (inspect-ba (freeze "hello"))
+         (seq (:data-ba (inspect-ba (freeze "hello")))))
 
 ;;;; Deprecated API
 

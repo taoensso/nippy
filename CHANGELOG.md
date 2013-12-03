@@ -1,3 +1,17 @@
+## WIP / 2013-12-03
+
+WIP
+
+### Features
+ * Added experimental `inspect-ba` fn for examining data possibly frozen by Nippy.
+
+### Changes
+ *
+
+### Fixes
+ *
+
+
 ## v2.4.1 → v2.5.0
   * Refactored standard Freezable protocol implementations to de-emphasise interfaces as a matter of hygiene, Ref. http://goo.gl/IFXzvh.
   * BETA STATUS: Added an additional (pre-Reader) Serializable fallback. This should greatly extend the number of out-the-box-serializable types.
