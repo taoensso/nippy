@@ -8,7 +8,7 @@
              (compression :as compression :refer (snappy-compressor))
              (encryption  :as encryption  :refer (aes128-encryptor))])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
-             DataOutputStream Serializable]
+             DataOutputStream Serializable ObjectOutputStream ObjectInputStream]
             [java.lang.reflect Method]
             [java.util Date UUID]
             [clojure.lang Keyword BigInt Ratio
@@ -26,7 +26,7 @@
    (byte 2) {:version 1 :compressed? false :encrypted? true}
    (byte 3) {:version 1 :compressed? true  :encrypted? true}})
 
-(def ^:private ^:const debug-mode? false)
+(defmacro when-debug-mode [& body] (when #_true false `(do ~@body)))
 
 ;;;; Data type IDs
 
@@ -114,8 +114,9 @@
 
 (defmacro ^:private freezer-coll [type id & body]
   `(freezer ~type ~id
-     #_(when (and debug-mode? (instance? ISeq ~type))
-       (println (format "DEBUG - freezer-coll: %s for %s" ~type (type ~'x))))
+     (when-debug-mode
+      (when (instance? ISeq ~type)
+        (println (format "DEBUG - freezer-coll: %s for %s" ~type (type ~'x)))))
      (if (counted? ~'x)
        (do (.writeInt ~'s (count ~'x))
            (doseq [i# ~'x] (freeze-to-stream ~'s i#)))
@@ -186,29 +187,9 @@
          (.writeLong s (.getMostSignificantBits x))
          (.writeLong s (.getLeastSignificantBits x)))
 
-(def reader-serializable?
-  "`pr-str` will happily print stuff that the Reader can't actually read back,
-  so we have to test a full roundtrip if we want to throw an exception at freeze
-  (rather than thaw) time."
-  (let [cache (atom {})] ; {<type> <serializable?>}
-    (fn [x]
-      (let [t (type x)]
-        (if-let [dv (@cache t)] @dv
-          (locking cache ; For thread racing
-            (if-let [dv (@cache t)] @dv ; Retry after lock acquisition
-              (let [dv (delay
-                        (try (edn/read-string {:readers *data-readers*}
-                                              (pr-str x))
-                             true
-                             (catch Exception _ false)))]
-                (swap! cache assoc t dv)
-                @dv))))))))
-
-(comment (reader-serializable? "hello"))
-
 (def ^:dynamic *final-freeze-fallback* "Alpha - subject to change." nil)
 (defn freeze-fallback-as-str "Alpha-subject to change." [x s]
-  (freeze-to-stream* {:nippy/unfreezable (str x) :type (type x)} s))
+  (freeze-to-stream* {:nippy/unfreezable (pr-str x) :type (type x)} s))
 
 (comment
   (require '[clojure.core.async :as async])
@@ -220,25 +201,24 @@
 (extend-type Object
   Freezable
   (freeze-to-stream* [x ^DataOutputStream s]
-    (if (instance? Serializable x)
-      (do ;; Fallback #1: Java's Serializable interface
-        #_(when debug-mode?
+    (cond
+     (utils/serializable? x) ; Fallback #1: Java's Serializable interface
+     (do (when-debug-mode
           (println (format "DEBUG - Serializable fallback: %s" (type x))))
-        (write-id s id-serializable)
-        (write-utf8 s (.getName (class x))) ; Reflect
-        (.writeObject (java.io.ObjectOutputStream. s) x))
+         (write-id s id-serializable)
+         (write-utf8 s (.getName (class x))) ; Reflect
+         (.writeObject (ObjectOutputStream. s) x))
 
-      (do ;; Fallback #2: Clojure's Reader
-        (when (reader-serializable? x)
-          #_(when debug-mode?
-              (println (format "DEBUG - Reader fallback: %s" (type x))))
-          (write-id s id-reader)
-          (write-bytes s (.getBytes (pr-str x) "UTF-8")))
+     (utils/readable? x) ; Fallback #2: Clojure's Reader
+     (do (when-debug-mode
+          (println (format "DEBUG - Reader fallback: %s" (type x))))
+         (write-id s id-reader)
+         (write-bytes s (.getBytes (pr-str x) "UTF-8")))
 
-        ;; Fallback #3: *final-freeze-fallback*
-        (if-let [ffb *final-freeze-fallback*] (ffb x s)
-          (throw (Exception. (format "Unfreezable type: %s %s"
-                                     (type x) (str x)))))))))
+     :else ; Fallback #3: *final-freeze-fallback*
+     (if-let [ffb *final-freeze-fallback*] (ffb x s)
+       (throw (Exception. (format "Unfreezable type: %s %s"
+                                  (type x) (str x))))))))
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 
@@ -301,75 +281,89 @@
 (defn- thaw-from-stream
   [^DataInputStream s]
   (let [type-id (.readByte s)]
-    #_(when debug-mode?
-        (println (format "DEBUG - thawing type-id: %s" type-id)))
-    (utils/case-eval type-id
+    (try
+      (when-debug-mode
+       (println (format "DEBUG - thawing type-id: %s" type-id)))
 
-     id-reader  (edn/read-string {:readers *data-readers*} (read-utf8 s))
-     id-serializable
-     (let [class ^Class (Class/forName (read-utf8 s))]
-       (cast class (.readObject (java.io.ObjectInputStream. s))))
+      (utils/case-eval type-id
 
-     id-bytes   (read-bytes s)
-     id-nil     nil
-     id-boolean (.readBoolean s)
+        id-reader
+        (let [edn (read-utf8 s)]
+          (try (edn/read-string {:readers *data-readers*} edn)
+               (catch Exception _ {:nippy/unthawable edn
+                                   :type :reader})))
 
-     id-char    (.readChar s)
-     id-string  (read-utf8 s)
-     id-keyword (keyword (read-utf8 s))
+        id-serializable
+        (let [class-name (read-utf8 s)
+              object     (.readObject (ObjectInputStream. s))]
+          (try (let [class ^Class (Class/forName class-name)]
+                 (cast class object))
+               (catch Exception _ {:nippy/unthawable [class-name object]
+                                   :type :serializable})))
 
-     id-queue      (read-coll s (PersistentQueue/EMPTY))
-     id-sorted-set (read-coll s (sorted-set))
-     id-sorted-map (read-kvs  s (sorted-map))
+        id-bytes   (read-bytes s)
+        id-nil     nil
+        id-boolean (.readBoolean s)
 
-     id-list    (into '() (rseq (read-coll s [])))
-     id-vector  (read-coll s  [])
-     id-set     (read-coll s #{})
-     id-map     (read-kvs  s  {})
-     id-seq     (seq (read-coll s []))
+        id-char    (.readChar s)
+        id-string  (read-utf8 s)
+        id-keyword (keyword (read-utf8 s))
 
-     id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
+        id-queue      (read-coll s (PersistentQueue/EMPTY))
+        id-sorted-set (read-coll s (sorted-set))
+        id-sorted-map (read-kvs  s (sorted-map))
 
-     id-byte    (.readByte s)
-     id-short   (.readShort s)
-     id-integer (.readInt s)
-     id-long    (.readLong s)
-     id-bigint  (bigint (read-biginteger s))
+        id-list    (into '() (rseq (read-coll s [])))
+        id-vector  (read-coll s  [])
+        id-set     (read-coll s #{})
+        id-map     (read-kvs  s  {})
+        id-seq     (seq (read-coll s []))
 
-     id-float  (.readFloat s)
-     id-double (.readDouble s)
-     id-bigdec (BigDecimal. (read-biginteger s) (.readInt s))
+        id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
 
-     id-ratio (/ (bigint (read-biginteger s))
-                 (bigint (read-biginteger s)))
+        id-byte    (.readByte s)
+        id-short   (.readShort s)
+        id-integer (.readInt s)
+        id-long    (.readLong s)
+        id-bigint  (bigint (read-biginteger s))
 
-     id-record
-     (let [class    ^Class (Class/forName (read-utf8 s))
-           meth-sig (into-array Class [IPersistentMap])
-           method   ^Method (.getMethod class "create" meth-sig)]
-       (.invoke method class (into-array Object [(thaw-from-stream s)])))
+        id-float  (.readFloat s)
+        id-double (.readDouble s)
+        id-bigdec (BigDecimal. (read-biginteger s) (.readInt s))
 
-     id-date  (Date. (.readLong s))
-     id-uuid  (UUID. (.readLong s) (.readLong s))
+        id-ratio (/ (bigint (read-biginteger s))
+                    (bigint (read-biginteger s)))
 
-     ;;; DEPRECATED
-     id-old-reader (edn/read-string (.readUTF s))
-     id-old-string (.readUTF s)
-     id-old-map    (apply hash-map (utils/repeatedly-into []
-                     (* 2 (.readInt s)) (thaw-from-stream s)))
-     id-old-keyword (keyword (.readUTF s))
+        id-record
+        (let [class    ^Class (Class/forName (read-utf8 s))
+              meth-sig (into-array Class [IPersistentMap])
+              method   ^Method (.getMethod class "create" meth-sig)]
+          (.invoke method class (into-array Object [(thaw-from-stream s)])))
 
-     (if-not (neg? type-id)
-       (throw (Exception. (str "Unknown type ID: " type-id)))
+        id-date  (Date. (.readLong s))
+        id-uuid  (UUID. (.readLong s) (.readLong s))
 
-       ;; Custom types
-       (if-let [reader (get @custom-readers type-id)]
-         (try (reader s)
-              (catch Exception e
-                (throw (Exception. (str "Reader exception for custom type ID: "
-                                        (- type-id)) e))))
-         (throw (Exception. (str "No reader provided for custom type ID: "
-                                 (- type-id)))))))))
+        ;;; DEPRECATED
+        id-old-reader (edn/read-string (.readUTF s))
+        id-old-string (.readUTF s)
+        id-old-map    (apply hash-map (utils/repeatedly-into []
+                        (* 2 (.readInt s)) (thaw-from-stream s)))
+        id-old-keyword (keyword (.readUTF s))
+
+        (if-not (neg? type-id)
+          (throw (Exception. (str "Unknown type ID: " type-id)))
+
+          ;; Custom types
+          (if-let [reader (get @custom-readers type-id)]
+            (try (reader s)
+                 (catch Exception e
+                   (throw (Exception. (str "Reader exception for custom type ID: "
+                                           (- type-id)) e))))
+            (throw (Exception. (str "No reader provided for custom type ID: "
+                                    (- type-id)))))))
+
+      (catch Exception e
+        (throw (Exception. (format "Thaw failed against type-id: %s" type-id) e))))))
 
 (defn thaw-from-stream!
   "Low-level API. Deserializes a frozen object from given DataInputStream to its
