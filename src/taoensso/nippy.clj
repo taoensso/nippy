@@ -294,11 +294,13 @@
                                    :type :reader})))
 
         id-serializable
-        (let [class-name (read-utf8 s)
-              object     (.readObject (ObjectInputStream. s))]
-          (try (let [class ^Class (Class/forName class-name)]
+        (let [class-name (read-utf8 s)]
+          (try (let [;; .readObject _before_ Class/forName: it'll always read
+                     ;; all data before throwing
+                     object (.readObject (ObjectInputStream. s))
+                     class ^Class (Class/forName class-name)]
                  (cast class object))
-               (catch Exception _ {:nippy/unthawable [class-name object]
+               (catch Exception _ {:nippy/unthawable class-name
                                    :type :serializable})))
 
         id-bytes   (read-bytes s)
