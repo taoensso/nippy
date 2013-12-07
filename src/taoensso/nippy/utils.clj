@@ -1,6 +1,9 @@
 (ns taoensso.nippy.utils
   {:author "Peter Taoussanis"}
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [clojure.tools.reader.edn :as edn])
+  (:import  [java.io ByteArrayInputStream ByteArrayOutputStream Serializable
+             ObjectOutputStream ObjectInputStream]))
 
 (defmacro case-eval
   "Like `case` but evaluates test constants for their compile-time value."
@@ -95,3 +98,49 @@
 (comment (String. (ba-concat (.getBytes "foo") (.getBytes "bar")))
          (let [[x y] (ba-split (.getBytes "foobar") 5)]
            [(String. x) (String. y)]))
+
+;;;; Fallback type tests
+;; Unfortunately the only reliable way we can tell if something's
+;; really serializable/readable is to actually try a full roundtrip.
+
+(defn- memoize-type-test [f-test]
+  (let [cache (atom {})] ; {<type> <type-okay?>}
+    (fn [x]
+      (let [t (type x)
+            ;; This is a bit hackish, but no other obvious solutions (?):
+            cacheable? (not (re-find #"__\d+" (str t))) ; gensym form
+            test (fn [] (try (f-test x) (catch Exception _ false)))]
+        (if-not cacheable? (test)
+          (if-let [dv (@cache t)] @dv
+          (locking cache ; For thread racing
+            (if-let [dv (@cache t)] @dv ; Retry after lock acquisition
+              (let [dv (delay (test))]
+                (swap! cache assoc t dv)
+                @dv)))))))))
+
+(def serializable?
+  (memoize-type-test
+   (fn [x]
+     (when (instance? Serializable x)
+       (let [class-name (.getName (class x))
+             class ^Class (Class/forName class-name) ; Try 1st (fail fast)
+             bas (ByteArrayOutputStream.)
+             _   (.writeObject (ObjectOutputStream. bas) x)
+             ba  (.toByteArray bas)
+             object (.readObject (ObjectInputStream.
+                                  (ByteArrayInputStream. ba)))]
+         (cast class object)
+         true)))))
+
+(def readable? (memoize-type-test (fn [x] (-> x pr-str (edn/read-string)) true)))
+
+(comment
+  (serializable? "Hello world")
+  (serializable? (fn []))
+  (readable? "Hello world")
+  (readable? (fn []))
+
+  (time (dotimes [_ 10000] (serializable? "Hello world")))
+  (time (dotimes [_ 10000] (serializable? (fn []))))
+  (time (dotimes [_ 10000] (readable? "Hello world")))
+  (time (dotimes [_ 10000] (readable? (fn [])))))

@@ -1,15 +1,13 @@
+## v2.5.2 / 2013-12-07
+ * Test Serializable objects at freeze time for better reliability.
+ * Don't cache `serializable?`/`readable?` for types with gensym-style names (e.g. as used for anonymous fns, etc.).
+ * Failed serialized/reader thaws will try return what they can (e.g. unreadable string) instead of just throwing.
+ * Thaw error messages now include failing type-id.
+
+
 ## v2.5.1 / 2013-12-03
-
-Improved `freeze` fallback handling. This is a recommended upgrade for all users and a necessary upgrade for Timbre v3 Carmine appender users.
-
-### Features
  * Added experimental `inspect-ba` fn for examining data possibly frozen by Nippy.
-
-### Changes
  * Now throw exception at freeze (rather than thaw) time when trying to serialize an unreadable object using the Clojure reader.
-
-### Fixes
- -
 
 
 ## v2.4.1 → v2.5.0
