@@ -111,6 +111,31 @@ Deserialize it:
 
 Couldn't be simpler!
 
+### Using streams
+
+For situations where you do not want to (or can) have redundant copies of your data in memory then you can use nippy's
+lower-level stream API.
+
+Serialize via streams:
+
+```clj
+(with-open [out (-> "data.npy" io/output-stream org.iq80.snappy.SnappyOutputStream. java.io.DataOutputStream.)]
+  (nippy/freeze-to-stream! out nippy/stress-data))
+```
+
+Deserialize via streams:
+
+```clj
+(with-open [in (-> "data.npy" io/input-stream org.iq80.snappy.SnappyInputStream. java.io.DataInputStream.)]
+  (nippy/thaw-from-stream! in))
+```
+
+Note, that when you use the stream API you responsible to setup your own compression. Encryption is also not supported
+in the stream API.
+
+*N.B.* If you intend to use Snappy and streams when thawing you *must* use `SnappyOutputStream` when freezing. Snappy
+looks for a particular header when reading which nippy does not write when called with `freeze`.
+
 ### Encryption (currently in **ALPHA**)
 
 Nippy v2+ also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
