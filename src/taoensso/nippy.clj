@@ -17,6 +17,15 @@
              PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList ; LazySeq
              IRecord ISeq]))
 
+;;;; TODO
+;;; Possible optimizations
+;; * Special case collections of the same type? Could strip extra type info?
+;; * Special id for byte-as-long, etc. - to avoid the ba size overhead?
+;; * OR (for backwards-compat), we could just special-case a few of the most
+;;   common cases - e.g. small maps (< 127 els), small vectors (< 127),
+;;   small strs + keywords (< 127 len), possibly compact-longs (as a new,
+;;   back-compatible type).
+
 ;;;; Nippy 2.x+ header spec (4 bytes)
 (def ^:private ^:const head-version 1)
 (def ^:private head-sig (.getBytes "NPY" "UTF-8"))
@@ -89,13 +98,33 @@
 
 (defmacro           write-id    [s id] `(.writeByte ~s ~id))
 (defmacro ^:private write-bytes [s ba]
-  `(let [s# ~s ba# ~ba]
-     (let [size# (alength ba#)]
-       (.writeInt s# size#)
-       (.write s# ba# 0 size#))))
+  `(let [s#  ~s
+         ba# ~ba
+         size# (alength ba#)]
+     ;; (.writeInt s# size#) ; Nippy < v2.6
+     (cond
+      (<= size# java.lang.Byte/MAX_VALUE) ; 1+0 byte size for <= 127 len
+      ;; (do (.writeByte  s# id-byte)
+      ;;     (.writeByte  s# size#)) ; 1+1 byte size
+      (.writeByte s# (- size#)) ; Further optimization for commonest case
+
+      (<= size# java.lang.Short/MAX_VALUE) ; 4+1 byte size for <= 32k len
+      (do (.writeByte  s# id-short)
+          (.writeShort s# size#))
+
+      (<= size# java.lang.Integer/MAX_VALUE) ; 8+1 byte size
+      (do (.writeByte  s# id-integer)
+          (.writeInt   s# size#)))
+
+     (.write s# ba# 0 size#)))
 
 (defmacro ^:private write-biginteger [s x] `(write-bytes ~s (.toByteArray ~x)))
 (defmacro ^:private write-utf8       [s x] `(write-bytes ~s (.getBytes ~x "UTF-8")))
+(defmacro write-compact-long ; Public, useful for custom type extension
+  "EXPERIMENTAL. Writes any integer (byte, short, int, long) as a compact byte
+  array. Helps to reduce overhead for things like `(long 10)`."
+  [s x] `(write-bytes ~s (.toByteArray (java.math.BigInteger/valueOf ~x))))
+
 (defmacro ^:private freeze-to-stream
   "Like `freeze-to-stream*` but with metadata support."
   [s x]
@@ -118,7 +147,7 @@
       (when (instance? ISeq ~type)
         (println (format "DEBUG - freezer-coll: %s for %s" ~type (type ~'x)))))
      (if (counted? ~'x)
-       (do (.writeInt ~'s (count ~'x))
+       (do (write-compact-long ~'s (count ~'x)) ; (.writeInt ~'s (count ~'x))
            (doseq [i# ~'x] (freeze-to-stream ~'s i#)))
        (let [bas# (ByteArrayOutputStream.)
              s#   (DataOutputStream. bas#)
@@ -127,12 +156,12 @@
                             (unchecked-inc cnt#))
                           0 ~'x)
              ba# (.toByteArray bas#)]
-         (.writeInt ~'s cnt#)
+         (write-compact-long ~'s cnt#) ; (.writeInt ~'s cnt#)
          (.write ~'s ba# 0 (alength ba#))))))
 
 (defmacro ^:private freezer-kvs [type id & body]
   `(freezer ~type ~id
-    (.writeInt ~'s (* 2 (count ~'x)))
+    (write-compact-long ~'s (* 2 (count ~'x))) ; (.writeInt ~'s (* 2 (count ~'x)))
     (doseq [kv# ~'x]
       (freeze-to-stream ~'s (key kv#))
       (freeze-to-stream ~'s (val kv#)))))
@@ -165,10 +194,10 @@
          (write-utf8 s (.getName (class x))) ; Reflect
          (freeze-to-stream s (into {} x)))
 
-(freezer Byte       id-byte    (.writeByte s x))
-(freezer Short      id-short   (.writeShort s x))
-(freezer Integer    id-integer (.writeInt s x))
-(freezer Long       id-long    (.writeLong s x))
+(freezer Byte       id-byte    (.writeByte  s x))
+(freezer Short      id-short   (write-compact-long s x)) ; (.writeShort s x))
+(freezer Integer    id-integer (write-compact-long s x)) ; (.writeInt   s x))
+(freezer Long       id-long    (write-compact-long s x)) ; (.writeLong  s x))
 (freezer BigInt     id-bigint  (write-biginteger s (.toBigInteger x)))
 (freezer BigInteger id-bigint  (write-biginteger s x))
 
@@ -176,7 +205,7 @@
 (freezer Double     id-double  (.writeDouble s x))
 (freezer BigDecimal id-bigdec
          (write-biginteger s (.unscaledValue x))
-         (.writeInt s (.scale x)))
+         (write-compact-long s (.scale x))) ; (.writeInt s (.scale x)))
 
 (freezer Ratio id-ratio
          (write-biginteger s (.numerator   x))
@@ -213,7 +242,7 @@
      (do (when-debug-mode
           (println (format "DEBUG - Reader fallback: %s" (type x))))
          (write-id s id-reader)
-         (write-bytes s (.getBytes (pr-str x) "UTF-8")))
+         (write-utf8 s (pr-str x)))
 
      :else ; Fallback #3: *final-freeze-fallback*
      (if-let [ffb *final-freeze-fallback*] (ffb x s)
@@ -262,18 +291,32 @@
 
 (defmacro ^:private read-bytes [s]
   `(let [s# ~s
-         size# (.readInt s#)
-         ba#   (byte-array size#)]
+         ;; size#      (.readInt s#) ; Nippy < v2.6
+         size-type-id# (.readByte s#)
+         size#         ;; (int (utils/case-eval size-type-id#
+                       ;;        id-byte    (.readByte  s#)
+                       ;;        id-short   (.readShort s#)
+                       ;;        id-integer (.readInt   s#)))
+         (cond
+          (neg? size-type-id#)            (- size-type-id#)
+          (=    size-type-id# id-short)   (.readShort s#)
+          (=    size-type-id# id-integer) (.readInt s#))
+
+         ba# (byte-array size#)]
      (.read s# ba# 0 size#) ba#))
 
 (defmacro ^:private read-biginteger [s] `(BigInteger. (read-bytes ~s)))
 (defmacro ^:private read-utf8       [s] `(String. (read-bytes ~s) "UTF-8"))
 
 (defmacro ^:private read-coll [s coll]
-  `(let [s# ~s] (utils/repeatedly-into ~coll (.readInt s#) (thaw-from-stream s#))))
+  `(let [s# ~s] (utils/repeatedly-into ~coll (int (read-biginteger s#))
+                                        ; (.readInt s#)
+                                       (thaw-from-stream s#))))
 
 (defmacro ^:private read-kvs [s coll]
-  `(let [s# ~s] (utils/repeatedly-into ~coll (/ (.readInt s#) 2)
+  `(let [s# ~s] (utils/repeatedly-into ~coll (/ (int (read-biginteger s#))
+                                        ; (.readInt s#)
+                                                2)
                   [(thaw-from-stream s#) (thaw-from-stream s#)])))
 
 (declare ^:private custom-readers)
@@ -323,15 +366,18 @@
 
         id-meta (let [m (thaw-from-stream s)] (with-meta (thaw-from-stream s) m))
 
-        id-byte    (.readByte s)
-        id-short   (.readShort s)
-        id-integer (.readInt s)
-        id-long    (.readLong s)
+        id-byte    (.readByte  s)
+        id-short   (short  (read-biginteger s)) ; (.readShort s)
+        id-integer (int    (read-biginteger s)) ; (.readInt   s)
+        id-long    (long   (read-biginteger s)) ; (.readLong  s)
         id-bigint  (bigint (read-biginteger s))
 
         id-float  (.readFloat s)
         id-double (.readDouble s)
-        id-bigdec (BigDecimal. (read-biginteger s) (.readInt s))
+        id-bigdec (BigDecimal. (read-biginteger s)
+                               (int (read-biginteger s))
+                               ;; (.readInt s)
+                               )
 
         id-ratio (/ (bigint (read-biginteger s))
                     (bigint (read-biginteger s)))
@@ -349,7 +395,8 @@
         id-old-reader (edn/read-string (.readUTF s))
         id-old-string (.readUTF s)
         id-old-map    (apply hash-map (utils/repeatedly-into []
-                        (* 2 (.readInt s)) (thaw-from-stream s)))
+                        (* 2 (int (read-biginteger s)) ; (.readInt s)
+                           ) (thaw-from-stream s)))
         id-old-keyword (keyword (.readUTF s))
 
         (if-not (neg? type-id)
@@ -485,16 +532,16 @@
         compress? (> ba-len 1024)]
     (.writeBoolean st compress?)
     (if-not compress?
-      (do (.writeLong st  ba-len)
+      (do (write-compact-long st ba-len) ; (.writeLong st  ba-len)
           (.write st ba 0 ba-len))
       (let [ba*     (compression/compress compression/lzma2-compressor ba)
             ba*-len (alength ba*)]
-        (.writeLong st   ba*-len)
+        (write-compact-long st ba*-len) ; (.writeLong st   ba*-len)
         (.write st ba* 0 ba*-len)))))
 
 (extend-thaw 128 [st]
   (let [compressed? (.readBoolean st)
-        ba-len      (.readLong    st)
+        ba-len      (long (read-biginteger st)) ; (.readLong    st)
         ba          (byte-array ba-len)]
     (.read st ba 0 ba-len)
     (thaw (wrap-header ba {:compressed? compressed? :encrypted? false})
@@ -612,3 +659,36 @@
          :or   {compressed? true}}]
   (thaw ba {:legacy-opts  {:compressed? compressed?}
             :password     nil}))
+
+(comment ; Dev
+
+  (count (freeze 42)) ; 10
+  (count (freeze (byte 42))) ; 10!
+
+  (seq (freeze (byte 42) {:compressor nil}))
+  ;; (78 80 89 1 , 40   -1,        42)
+  ;;  header     , byte byte+size  ba
+
+  (seq (freeze (byte 42) {:compressor nil :legacy-mode true}))
+  ;; (40     -1            42)
+  ;;  byte   byte+size     ba
+
+  (seq (freeze nil {:compressor nil}))
+  ;; (78 80 89 1,  3)
+  ;;  header    ,  nil
+
+  (seq (freeze nil {:legacy-mode true :compressor nil}))
+  ;; (1 0 3)
+  ;; 
+
+  ;; 4 - header
+  ;; 1 - id-byte
+  ;; 1 - id-byte (size)
+  ;; 1 - ba size
+  ;; 1 - ba (bigint)
+  ;; --
+  ;; 8
+  (count (.toByteArray (java.math.BigInteger/valueOf 42))) ; 1
+
+  (- 22481 21870) ; 611 ~ 3%
+  )
