@@ -75,6 +75,17 @@
 (def ^:const id-date       (int 90))
 (def ^:const id-uuid       (int 91))
 
+;;; Number optimizations ; v2.6+
+(def ^:const id-byte-as-long    (int 100))
+(def ^:const id-short-as-long   (int 101))
+(def ^:const id-int-as-long     (int 102))
+;;
+;; (def ^:const id-byte-as-int     (int 103))
+;; (def ^:const id-short-as-int    (int 104))
+;; (def ^:const id-byte-as-short   (int 105))
+;;
+;; (def ^:const id-float-as-double (int 106)) ; Not safe in general (precision)
+
 ;;; DEPRECATED (old types will be supported only for thawing)
 (def ^:const id-old-reader  (int 1))  ; as of 0.9.2, for +64k support
 (def ^:const id-old-string  (int 11)) ; as of 0.9.2, for +64k support
@@ -104,6 +115,10 @@
        (write-id  s# ~id-meta)
        (freeze-to-stream* m# s#))
      (freeze-to-stream* x# s#)))
+
+;;; Exposing these may be useful for custom freeze/thaw extensions
+(defmacro write-compact-long-with-id [s id]) ; TODO
+(defmacro write-compact-int-with-id  [s id]) ; TODO
 
 (defmacro ^:private freezer [type id & body]
   `(extend-type ~type
@@ -168,12 +183,34 @@
 (freezer Byte       id-byte    (.writeByte s x))
 (freezer Short      id-short   (.writeShort s x))
 (freezer Integer    id-integer (.writeInt s x))
-(freezer Long       id-long    (.writeLong s x))
+;; (freezer Long    id-long    (.writeLong s x))
+(extend-type Long ; Optimized common-type freezer
+  Freezable
+  (freeze-to-stream* [x ^DataOutputStream s]
+    (cond
+     (<= java.lang.Byte/MIN_VALUE x java.lang.Byte/MAX_VALUE)
+     (do (write-id s id-byte-as-long) (.writeByte s x))
+
+     (<= java.lang.Short/MIN_VALUE x java.lang.Short/MAX_VALUE)
+     (do (write-id s id-short-as-long) (.writeShort s x))
+
+     (<= java.lang.Integer/MIN_VALUE x java.lang.Integer/MAX_VALUE)
+     (do (write-id s id-int-as-long) (.writeInt s x))
+
+     :else (do (write-id s id-long) (.writeLong s x)))))
+
 (freezer BigInt     id-bigint  (write-biginteger s (.toBigInteger x)))
 (freezer BigInteger id-bigint  (write-biginteger s x))
 
 (freezer Float      id-float   (.writeFloat s x))
-(freezer Double     id-double  (.writeDouble s x))
+(freezer Double  id-double  (.writeDouble s x))
+;; (extend-type Double ; Optimized common-type freezer ; Not safe in general
+;;   Freezable
+;;   (freeze-to-stream* [x ^DataOutputStream s]
+;;     (if (<= java.lang.Float/MIN_VALUE x java.lang.Float/MAX_VALUE)
+;;       (do (write-id s id-float-as-double) (.writeFloat  s x))
+;;       (do (write-id s id-double)          (.writeDouble s x)))))
+
 (freezer BigDecimal id-bigdec
          (write-biginteger s (.unscaledValue x))
          (.writeInt s (.scale x)))
@@ -327,10 +364,16 @@
         id-short   (.readShort s)
         id-integer (.readInt s)
         id-long    (.readLong s)
+
+        id-byte-as-long  (long (.readByte  s))
+        id-short-as-long (long (.readShort s))
+        id-int-as-long   (long (.readInt   s))
+
         id-bigint  (bigint (read-biginteger s))
 
         id-float  (.readFloat s)
         id-double (.readDouble s)
+        ;; id-float-as-double (double (.readFloat s)) ; Not safe in general
         id-bigdec (BigDecimal. (read-biginteger s) (.readInt s))
 
         id-ratio (/ (bigint (read-biginteger s))
