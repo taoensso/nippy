@@ -383,67 +383,83 @@
 (defn- try-parse-header [ba]
   (when-let [[head-ba data-ba] (utils/ba-split ba 4)]
     (let [[head-sig* [meta-id]] (utils/ba-split head-ba 3)]
-      (when (utils/ba= head-sig* head-sig)
-        [data-ba (head-meta meta-id {:unrecognized-header? true})]))))
+      (when (utils/ba= head-sig* head-sig) ; Appears to be well-formed
+        [data-ba (head-meta meta-id {:unrecognized-meta? true})]))))
 
 (defn thaw
   "Deserializes a frozen object from given byte array to its original Clojure
-  data type. Supports data frozen with current and all previous versions of
-  Nippy. For custom types extend the Clojure reader or see `extend-thaw`."
-  [^bytes ba & [{:keys [password compressor encryptor headerless-opts]
-                 :or   {headerless-opts {:compressed? true}
-                        compressor  snappy-compressor
-                        encryptor   aes128-encryptor}
+  data type. By default[1] supports data frozen with current and all previous
+  versions of Nippy. For custom types extend the Clojure reader or see
+  `extend-thaw`.
+
+  [1] :headerless-meta provides a fallback facility for data frozen without a
+  standard Nippy header (notably all Nippy v1 data). A default is provided for
+  Nippy v1 thaw compatibility, but it's recommended that you _disable_ this
+  fallback (`{:headerless-meta nil}`) if you're certain you won't be thawing
+  headerless data."
+  [^bytes ba & [{:keys [password compressor encryptor headerless-meta]
+                 :or   {compressor snappy-compressor
+                        encryptor  aes128-encryptor
+                        headerless-meta ; Recommend set to nil when possible
+                        {:version     1
+                         :compressed? true
+                         :encrypted?  false}}
                  :as   opts}]]
 
-  (let [;; headerless-opts may be nil, or contain any head-meta keys:
-        headerless-opts (merge headerless-opts (:legacy-opts opts)) ; Deprecated
+  (let [headerless-meta (merge headerless-meta (:legacy-opts opts)) ; Deprecated
         ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
         try-thaw-data
-        (fn [data-ba {:keys [compressed? encrypted?] :as head-meta}]
-          (let [password   (when encrypted? password) ; => also head-meta
-                compressor (if head-meta
-                             (when compressed? compressor)
-                             (when (:compressed? headerless-opts) snappy-compressor))]
+        (fn [data-ba {:keys [compressed? encrypted?] :as _head-or-headerless-meta}]
+          (let [password   (when encrypted?  password)
+                compressor (when compressed? compressor)]
             (try
               (let [ba data-ba
                     ba (if password (encryption/decrypt encryptor password ba) ba)
-                    ba (if compressor (compression/decompress compressor ba) ba)
+                    ba (if compressor (compression/decompress compressor ba)   ba)
                     stream (DataInputStream. (ByteArrayInputStream. ba))]
-
                 (thaw-from-stream! stream))
 
               (catch Exception e
                 (cond
-                 password   (ex "Wrong password/encryptor?" e)
+                 password   (if head-meta (ex "Wrong password/encryptor?" e)
+                                          (ex "Unencrypted data?" e))
                  compressor (if head-meta (ex "Encrypted data or wrong compressor?" e)
                                           (ex "Uncompressed data?" e))
                  :else      (if head-meta (ex "Corrupt data?" e)
-                                          (ex "Compressed data?" e)))))))]
+                                          (ex "Data may be unfrozen, corrupt, compressed &/or encrypted.")))))))]
 
-    (if-let [[data-ba {:keys [unrecognized-header? compressed? encrypted?]
+    (if-let [[data-ba {:keys [unrecognized-meta? compressed? encrypted?]
                        :as   head-meta}] (try-parse-header ba)]
 
-      (cond ; Header _appears_ okay
-       (and (not headerless-opts) unrecognized-header?) ; Conservative
-       (ex "Unrecognized header. Data frozen with newer Nippy version?")
+      (cond ; A well-formed header _appears_ to be present
+       (and (not headerless-meta) ; Cautious. It's unlikely but possible the
+                                  ; header sig match was a fluke and not an
+                                  ; indication of a real, well-formed header.
+                                  ; May really be headerless.
+            unrecognized-meta?)
+       (ex "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?")
+
+       ;;; It's still possible below that the header match was a fluke, but it's
+       ;;; _very_ unlikely. Therefore _not_ going to incl.
+       ;;; `(not headerless-meta)` conditions below.
+
        (and compressed? (not compressor))
-       (ex "Compressed data. Try again with compressor.")
+       (ex "Compressed data? Try again with compressor.")
        (and encrypted? (not password))
        (if (::tools-thaw? opts) ::need-password
-           (ex "Encrypted data. Try again with password."))
+           (ex "Encrypted data? Try again with password."))
        :else (try (try-thaw-data data-ba head-meta)
                   (catch Exception e
-                    (if headerless-opts
-                      (try (try-thaw-data ba nil)
+                    (if headerless-meta
+                      (try (try-thaw-data ba headerless-meta)
                            (catch Exception _
                              (throw e)))
                       (throw e)))))
 
-      ;; Header definitely not okay
-      (if headerless-opts
-        (try-thaw-data ba nil)
-        (ex "Unfrozen or corrupt data?")))))
+      ;; Well-formed header definitely not present
+      (if headerless-meta
+        (try-thaw-data ba headerless-meta)
+        (ex "Data may be unfrozen, corrupt, compressed &/or encrypted.")))))
 
 (comment (thaw (freeze "hello"))
          (thaw (freeze "hello" {:compressor nil}))
@@ -624,4 +640,5 @@
   [ba & {:keys [compressed?]
          :or   {compressed? true}}]
   (thaw ba {:headerless-opts {:compressed? compressed?}
+            :compressor      snappy-compressor
             :password        nil}))
