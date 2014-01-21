@@ -18,6 +18,11 @@
              IRecord ISeq]))
 
 ;;;; Nippy 2.x+ header spec (4 bytes)
+;; Header is optional but recommended + enabled by default. Uses:
+;; * Sanity check (data appears to be Nippy data).
+;; * Nippy version check (=> supports changes to data schema over time).
+;; * Encrypted &/or compressed data identification.
+;;
 (def ^:private ^:const head-version 1)
 (def ^:private head-sig (.getBytes "NPY" "UTF-8"))
 (def ^:private ^:const head-meta "Final byte stores version-dependent metadata."
@@ -231,7 +236,7 @@
 (comment (wrap-header (.getBytes "foo") {:compressed? true
                                          :encrypted?  false}))
 
-(declare assert-legacy-args)
+(declare assert-legacy-args) ; Deprecated
 
 (defn freeze-to-stream!
   "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
@@ -239,20 +244,22 @@
   (freeze-to-stream data-output-stream x))
 
 (defn freeze
-  "Serializes arg (any Clojure data type) to a byte array. Set :legacy-mode to
-  true to produce bytes readable by Nippy < 2.x. For custom types extend the
-  Clojure reader or see `extend-freeze`."
-  ^bytes [x & [{:keys [password compressor encryptor legacy-mode]
+  "Serializes arg (any Clojure data type) to a byte array. For custom types
+  extend the Clojure reader or see `extend-freeze`."
+  ^bytes [x & [{:keys [password compressor encryptor skip-header?]
                 :or   {compressor snappy-compressor
-                       encryptor  aes128-encryptor}}]]
-  (when legacy-mode (assert-legacy-args compressor password))
-  (let [bas (ByteArrayOutputStream.)
+                       encryptor  aes128-encryptor}
+                :as   opts}]]
+  (when (:legacy-mode opts) ; Deprecated
+    (assert-legacy-args compressor password))
+  (let [skip-header? (or skip-header? (:legacy-mode opts)) ; Deprecated
+        bas (ByteArrayOutputStream.)
         ds  (DataOutputStream. bas)]
     (freeze-to-stream! ds x)
     (let [ba (.toByteArray bas)
           ba (if compressor (compression/compress compressor ba) ba)
           ba (if password   (encryption/encrypt encryptor password ba) ba)]
-      (if legacy-mode ba
+      (if skip-header? ba
         (wrap-header ba {:compressed? (boolean compressor)
                          :encrypted?  (boolean password)})))))
 
@@ -383,19 +390,21 @@
   "Deserializes a frozen object from given byte array to its original Clojure
   data type. Supports data frozen with current and all previous versions of
   Nippy. For custom types extend the Clojure reader or see `extend-thaw`."
-  [^bytes ba & [{:keys [password compressor encryptor legacy-opts]
-                 :or   {legacy-opts {:compressed? true}
+  [^bytes ba & [{:keys [password compressor encryptor headerless-opts]
+                 :or   {headerless-opts {:compressed? true}
                         compressor  snappy-compressor
                         encryptor   aes128-encryptor}
                  :as   opts}]]
 
-  (let [ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
+  (let [;; headerless-opts may be nil, or contain any head-meta keys:
+        headerless-opts (merge headerless-opts (:legacy-opts opts)) ; Deprecated
+        ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
         try-thaw-data
         (fn [data-ba {:keys [compressed? encrypted?] :as head-meta}]
           (let [password   (when encrypted? password) ; => also head-meta
                 compressor (if head-meta
                              (when compressed? compressor)
-                             (when (:compressed? legacy-opts) snappy-compressor))]
+                             (when (:compressed? headerless-opts) snappy-compressor))]
             (try
               (let [ba data-ba
                     ba (if password (encryption/decrypt encryptor password ba) ba)
@@ -416,7 +425,7 @@
                        :as   head-meta}] (try-parse-header ba)]
 
       (cond ; Header _appears_ okay
-       (and (not legacy-opts) unrecognized-header?) ; Conservative
+       (and (not headerless-opts) unrecognized-header?) ; Conservative
        (ex "Unrecognized header. Data frozen with newer Nippy version?")
        (and compressed? (not compressor))
        (ex "Compressed data. Try again with compressor.")
@@ -425,14 +434,14 @@
            (ex "Encrypted data. Try again with password."))
        :else (try (try-thaw-data data-ba head-meta)
                   (catch Exception e
-                    (if legacy-opts
+                    (if headerless-opts
                       (try (try-thaw-data ba nil)
                            (catch Exception _
                              (throw e)))
                       (throw e)))))
 
       ;; Header definitely not okay
-      (if legacy-opts
+      (if headerless-opts
         (try-thaw-data ba nil)
         (ex "Unfrozen or corrupt data?")))))
 
@@ -597,12 +606,12 @@
 (defn freeze-to-bytes "DEPRECATED: Use `freeze` instead."
   ^bytes [x & {:keys [compress?]
                :or   {compress? true}}]
-  (freeze x {:legacy-mode  true
+  (freeze x {:skip-header? true
              :compressor   (when compress? snappy-compressor)
              :password     nil}))
 
 (defn thaw-from-bytes "DEPRECATED: Use `thaw` instead."
   [ba & {:keys [compressed?]
          :or   {compressed? true}}]
-  (thaw ba {:legacy-opts  {:compressed? compressed?}
-            :password     nil}))
+  (thaw ba {:headerless-opts {:compressed? compressed?}
+            :password        nil}))
