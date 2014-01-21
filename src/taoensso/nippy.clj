@@ -484,19 +484,13 @@
         ba-len    (alength ba)
         compress? (> ba-len 1024)]
     (.writeBoolean st compress?)
-    (if-not compress?
-      (do (.writeLong st  ba-len)
-          (.write st ba 0 ba-len))
-      (let [ba*     (compression/compress compression/lzma2-compressor ba)
-            ba*-len (alength ba*)]
-        (.writeLong st   ba*-len)
-        (.write st ba* 0 ba*-len)))))
+    (if-not compress? (write-bytes st ba)
+      (let [ba* (compression/compress compression/lzma2-compressor ba)]
+        (write-bytes st ba*)))))
 
 (extend-thaw 128 [st]
   (let [compressed? (.readBoolean st)
-        ba-len      (.readLong    st)
-        ba          (byte-array ba-len)]
-    (.read st ba 0 ba-len)
+        ba          (read-bytes st)]
     (thaw (wrap-header ba {:compressed? compressed? :encrypted? false})
           {:compressor compression/lzma2-compressor})))
 
