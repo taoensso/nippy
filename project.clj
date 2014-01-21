@@ -11,7 +11,10 @@
              :1.5   {:dependencies [[org.clojure/clojure "1.5.1"]]}
              :1.6   {:dependencies [[org.clojure/clojure "1.6.0-alpha3"]]}
              :dev   {:dependencies []}
-             :test  {:dependencies [[expectations                  "1.4.56"]
+             :test  {:jvm-opts ["-Xms1024m" ; Initial heap size
+                                "-Xmx2048m" ; Max heap size
+                                ]
+                     :dependencies [[expectations                  "1.4.56"]
                                     [org.xerial.snappy/snappy-java "1.1.1-M1"]
                                     [reiddraper/simple-check       "0.5.3"]
                                     [org.clojure/data.fressian     "0.2.0"]]}

@@ -1,5 +1,8 @@
 (ns taoensso.nippy.tests.main
-  (:require [expectations   :as test :refer :all]
+  (:require [simple-check (core       :as sc)
+                          (generators :as sc-gen)
+                          (properties :as sc-prop)]
+            [expectations   :as test :refer :all]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
             [taoensso.nippy.compression :as compression]
             [taoensso.nippy.benchmarks  :as benchmarks]))
@@ -7,6 +10,8 @@
 (def test-data nippy/stress-data-comparable)
 (defn- before-run {:expectations-options :before-run} [])
 (defn- after-run  {:expectations-options :after-run}  [])
+
+;;;; Core
 
 (expect test-data ((comp thaw freeze) test-data))
 (expect test-data ((comp thaw #(freeze % {:legacy-mode true})) test-data))
@@ -37,6 +42,7 @@
       (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
       (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
 
+;;;; Custom types & records
 
 ;;; Extend to custom Type
 (defrecord MyType [data])
@@ -50,5 +56,58 @@
 (expect (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "fast-" (:data x))))
             (nippy/extend-thaw 2 [s] (->MyRec (.readUTF s)))
             (= (->MyRec "fast-val") (thaw (freeze (->MyRec "val"))))))
+
+;;;; Stable binary representation of vals ; EXPERIMENTAL
+
+(expect (seq (nippy/freeze test-data))
+        (seq (nippy/freeze test-data))) ; f(x)=f(y) | x=y
+
+;;; As above, but try multiple times (catch protocol interface races):
+(expect #(every? true? %)
+        (repeatedly 1000 (fn [] (= (seq (nippy/freeze test-data))
+                                   (seq (nippy/freeze test-data))))))
+
+(expect (seq (-> test-data nippy/freeze)) ; f(x)=f(f-1(f(x)))
+        (seq (-> test-data nippy/freeze nippy/thaw nippy/freeze)))
+
+;;; As above, but with repeated refreeze (catch protocol interface races):
+(expect (= (seq (nippy/freeze test-data))
+           (seq (reduce (fn [frozen _] (freeze (thaw frozen)))
+                  (freeze test-data) (range 1000)))))
+
+;;;
+
+(defn qc-prop-bijection [& [n]]
+  (let [bin->val (atom {})
+        val->bin (atom {})]
+    (merge
+     (sc/quick-check (or n 1)
+       (sc-prop/for-all [val sc-gen/any #_sc-gen/any-printable]
+         (let [;; Nb need `seq` for Clojure hash equality:
+               bin (hash (seq (freeze val)))]
+           (and
+            (if (contains? val->bin val)
+              (= (get val->bin val) bin) ; x=y => f(x)=f(y) by clj=
+              (do (swap! val->bin assoc val bin)
+                  true))
+
+            (if (contains? bin->val bin)
+              (= (get bin->val bin) val) ; f(x)=f(y) => x=y by clj=
+              (do (swap! bin->val assoc bin val)
+                  true))))))
+     #_ {:bin->val @bin->val
+         :val->bin @val->bin}
+     nil)))
+
+(comment
+  (sc-gen/sample sc-gen/any 10)
+  (:result (qc-prop-bijection 80))
+  (let [{:keys [result bin->val val->bin]} (qc-prop-bijection 10)]
+    [result (vals bin->val)]))
+
+;; (expect #(:result %) (qc-prop-bijection 120))  ; Time seems to be n-non-linear
+(expect #(:result %) (qc-prop-bijection 80))
+
+;;;; Benchmarks
 
 (expect (benchmarks/bench {})) ; Also tests :cached passwords
