@@ -29,10 +29,10 @@
 
     (println {:default   (bench1 #(freeze % {})
                                  #(thaw   % {}))})
-    (println {:encrypted (bench1 #(freeze % {:password [:cached "p"]})
-                                 #(thaw   % {:password [:cached "p"]}))})
     (println {:fast      (bench1 #(freeze % {:compressor nil})
                                  #(thaw   % {:compressor nil}))})
+    (println {:encrypted (bench1 #(freeze % {:password [:cached "p"]})
+                                 #(thaw   % {:password [:cached "p"]}))})
 
     (when lzma2? ; Slow as molasses
       (println {:lzma2 (bench1 #(freeze % {:compressor compression/lzma2-compressor})
