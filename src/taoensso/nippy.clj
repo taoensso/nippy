@@ -567,6 +567,15 @@
      :exception    (try (/ 1 0) (catch Exception e e))
      :ex-info      (ex-info "ExInfo" {:data "data"})}))
 
+(def stress-data-comparable
+  "Reference data with stuff removed that breaks roundtrip equality."
+  (dissoc stress-data :bytes :throwable :exception :ex-info))
+
+(def stress-data-benchable
+  "Reference data with stuff removed that breaks reader or other utils we'll
+  be benching against."
+  (dissoc stress-data :bytes :throwable :exception :ex-info :queue :queue-empty))
+
 ;;;; Data recovery/analysis
 
 (defn inspect-ba "Alpha - subject to change."

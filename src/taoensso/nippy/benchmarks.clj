@@ -5,8 +5,7 @@
             [taoensso.nippy.compression :as compression]
             [taoensso.nippy.utils       :as utils]))
 
-;; Remove stuff from stress-data that breaks reader
-(def data (dissoc nippy/stress-data :queue :queue-empty :bytes))
+(def data nippy/stress-data-benchable)
 
 (defmacro bench* [& body] `(utils/bench 10000 {:warmup-laps 20000} ~@body))
 (defn     bench1 [freezer thawer & [sizer]]
