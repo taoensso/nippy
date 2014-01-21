@@ -574,7 +574,8 @@
 (def stress-data-benchable
   "Reference data with stuff removed that breaks reader or other utils we'll
   be benching against."
-  (dissoc stress-data :bytes :throwable :exception :ex-info :queue :queue-empty))
+  (dissoc stress-data :bytes :throwable :exception :ex-info :queue :queue-empty
+                      :byte))
 
 ;;;; Data recovery/analysis
 

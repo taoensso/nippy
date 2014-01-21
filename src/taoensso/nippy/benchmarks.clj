@@ -1,11 +1,25 @@
 (ns taoensso.nippy.benchmarks
   {:author "Peter Taoussanis"}
   (:require [clojure.tools.reader.edn :as edn]
+            [clojure.data.fressian    :as fressian]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
             [taoensso.nippy.compression :as compression]
             [taoensso.nippy.utils       :as utils]))
 
 (def data nippy/stress-data-benchable)
+
+(defn fressian-freeze [value]
+  (let [^java.nio.ByteBuffer bb (fressian/write value)
+        len (.remaining bb)
+        ba  (byte-array len)]
+    (.get bb ba 0 len)
+    ba))
+
+(defn fressian-thaw [value]
+  (let [bb (java.nio.ByteBuffer/wrap value)]
+    (fressian/read bb)))
+
+(comment (fressian-thaw (fressian-freeze data)))
 
 (defmacro bench* [& body] `(utils/bench 10000 {:warmup-laps 20000} ~@body))
 (defn     bench1 [freezer thawer & [sizer]]
@@ -17,7 +31,7 @@
      :thaw   time-thaw
      :size   ((or sizer count) data-frozen)}))
 
-(defn bench [{:keys [reader? lzma2? laps] :or {laps 1}}]
+(defn bench [{:keys [reader? lzma2? fressian? laps] :or {laps 1}}]
   (println "\nBenching (this can take some time)")
   (println "----------------------------------")
   (dotimes [l laps]
@@ -36,13 +50,18 @@
 
     (when lzma2? ; Slow as molasses
       (println {:lzma2 (bench1 #(freeze % {:compressor compression/lzma2-compressor})
-                               #(thaw   % {:compressor compression/lzma2-compressor}))})))
+                               #(thaw   % {:compressor compression/lzma2-compressor}))}))
+
+    (when fressian?
+      (println {:fressian (bench1 fressian-freeze fressian-thaw)})))
 
   (println "\nDone! (Time for cake?)")
   true)
 
+(comment (bench1 fressian-freeze fressian-thaw))
+
 (comment
-  ;; (bench {:reader? true :lzma2? true :laps 1})
+  ;; (bench {:reader? true :lzma2? true :fressian? true :laps 1})
   ;; (bench {:laps 2})
 
   ;;; 19 Oct 2013: Nippy v2.3.0, with lzma2 & (nb!) round=freeze+thaw
