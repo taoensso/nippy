@@ -213,7 +213,7 @@
      (do (when-debug-mode
           (println (format "DEBUG - Reader fallback: %s" (type x))))
          (write-id s id-reader)
-         (write-bytes s (.getBytes (pr-str x) "UTF-8")))
+         (write-utf8 s (pr-str x)))
 
      :else ; Fallback #3: *final-freeze-fallback*
      (if-let [ffb *final-freeze-fallback*] (ffb x s)
