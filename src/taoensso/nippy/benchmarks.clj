@@ -58,11 +58,20 @@
   (println "\nDone! (Time for cake?)")
   true)
 
-(comment (bench1 fressian-freeze fressian-thaw))
+(comment (edn/read-string (pr-str data))
+         (bench1 fressian-freeze fressian-thaw))
 
 (comment
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 1})
   ;; (bench {:laps 2})
+
+  ;;; 2014 Jan 22: with common-type size optimizations, enlarged stress-data
+  ;; {:reader    {:round 109544, :freeze 39523, :thaw 70021, :size 27681}}
+  ;; {:default   {:round 9234,   :freeze 5128,  :thaw 4106,  :size 15989}}
+  ;; {:fast      {:round 7402,   :freeze 4021,  :thaw 3381,  :size 16957}}
+  ;; {:encrypted {:round 12594,  :freeze 6884,  :thaw 5710,  :size 16020}}
+  ;; {:lzma2     {:round 66759,  :freeze 44246, :thaw 22513, :size 11208}}
+  ;; {:fressian  {:round 13052,  :freeze 8694,  :thaw 4358,  :size 16942}}
 
   ;;; 19 Oct 2013: Nippy v2.3.0, with lzma2 & (nb!) round=freeze+thaw
   ;; {:reader    {:round 67798,  :freeze 23202,  :thaw 44596, :size 22971}}

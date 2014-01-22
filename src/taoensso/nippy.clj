@@ -81,6 +81,18 @@
   (def ^:const id-date       (int 90))
   (def ^:const id-uuid       (int 91))
 
+  ;;; Optimized, common-case types (v2.6+)
+  (def ^:const id-byte-as-long  (int 100)) ; 1 vs 8 byte storage
+  (def ^:const id-short-as-long (int 101)) ; 2 vs 8 byte storage
+  (def ^:const id-int-as-long   (int 102)) ; 4 vs 8 byte storage
+  ;;
+  (def ^:const id-string-small  (int 103)) ; 1 vs 4 byte overhead
+  (def ^:const id-keyword-small (int 104)) ; ''
+  ;;
+  ;; (def ^:const id-vector-small  (int 105)) ; ''
+  ;; (def ^:const id-set-small     (int 106)) ; ''
+  ;; (def ^:const id-map-small     (int 107)) ; ''
+
   ;;; DEPRECATED (old types will be supported only for thawing)
   (def ^:const id-old-reader  (int 1))  ; as of 0.9.2, for +64k support
   (def ^:const id-old-string  (int 11)) ; as of 0.9.2, for +64k support
@@ -95,14 +107,17 @@
  (freeze-to-out* [this out]))
 
 (defmacro           write-id    [out id] `(.writeByte ~out ~id))
-(defmacro ^:private write-bytes [out ba]
+(defmacro ^:private write-bytes [out ba & [small?]]
   `(let [out# ~out, ba# ~ba]
      (let [size# (alength ba#)]
-       (.writeInt out# size#)
+       (if ~small? ; Optimization, must be known before id's written
+         (.writeByte out# size#)
+         (.writeInt  out# size#))
        (.write out# ba# 0 size#))))
 
 (defmacro ^:private write-biginteger [out x] `(write-bytes ~out (.toByteArray ~x)))
 (defmacro ^:private write-utf8       [out x] `(write-bytes ~out (.getBytes ~x "UTF-8")))
+
 (defmacro ^:private freeze-to-out
   "Like `freeze-to-out*` but with metadata support."
   [out x]
@@ -149,10 +164,33 @@
 (freezer Boolean              id-boolean (.writeBoolean out x))
 
 (freezer Character id-char    (.writeChar out (int x)))
-(freezer String    id-string  (write-utf8 out x))
-(freezer Keyword   id-keyword (write-utf8 out (if-let [ns (namespace x)]
-                                                (str ns "/" (name x))
-                                                (name x))))
+;; (freezer String id-string  (write-utf8 out x))
+
+(extend-type String ; Optimized common-case type
+  Freezable
+  (freeze-to-out* [x ^DataOutput out]
+    (let [ba (.getBytes x)]
+      (if (<= (alength ^bytes ba) java.lang.Byte/MAX_VALUE)
+        (do (write-id    out id-string-small)
+            (write-bytes out ba :small))
+
+        (do (write-id    out id-string)
+            (write-bytes out ba))))))
+
+(extend-type Keyword ; Optimized common-case type
+  Freezable
+  (freeze-to-out* [x ^DataOutput out]
+    (let [s (if-let [ns (namespace x)]
+              (str ns "/" (name x))
+              (name x))
+          ba (.getBytes s "UTF-8")]
+
+      (if (<= (alength ^bytes ba) java.lang.Byte/MAX_VALUE)
+        (do (write-id    out id-keyword-small)
+            (write-bytes out ba :small))
+
+        (do (write-id    out id-keyword)
+            (write-bytes out ba))))))
 
 (freezer-coll PersistentQueue       id-queue)
 (freezer-coll PersistentTreeSet     id-sorted-set)
@@ -175,7 +213,23 @@
 (freezer Byte       id-byte    (.writeByte  out x))
 (freezer Short      id-short   (.writeShort out x))
 (freezer Integer    id-integer (.writeInt   out x))
-(freezer Long       id-long    (.writeLong  out x))
+;;(freezer Long    id-long    (.writeLong  out x))
+(extend-type Long ; Optimized common-case type
+  Freezable
+  (freeze-to-out* [x ^DataOutput out]
+    (cond
+     (<= java.lang.Byte/MIN_VALUE x java.lang.Byte/MAX_VALUE)
+     (do (write-id out id-byte-as-long) (.writeByte out x))
+
+     (<= java.lang.Short/MIN_VALUE x java.lang.Short/MAX_VALUE)
+     (do (write-id out id-short-as-long) (.writeShort out x))
+
+     (<= java.lang.Integer/MIN_VALUE x java.lang.Integer/MAX_VALUE)
+     (do (write-id out id-int-as-long) (.writeInt out x))
+
+     :else (do (write-id out id-long) (.writeLong out x)))))
+
+
 (freezer BigInt     id-bigint  (write-biginteger out (.toBigInteger x)))
 (freezer BigInteger id-bigint  (write-biginteger out x))
 
@@ -269,9 +323,11 @@
 
 (declare thaw-from-in)
 
-(defmacro ^:private read-bytes [in]
+(defmacro ^:private read-bytes [in & [small?]]
   `(let [in#   ~in
-         size# (.readInt in#)
+         size# (if ~small? ; Optimization, must be known before id's written
+                 (.readByte in#)
+                 (.readInt  in#))
          ba#   (byte-array size#)]
      (.readFully in# ba# 0 size#) ba#))
 
@@ -320,6 +376,10 @@
         id-string  (read-utf8 in)
         id-keyword (keyword (read-utf8 in))
 
+        ;;; Optimized, common-case types (v2.6+)
+        id-string-small           (String. (read-bytes in :small) "UTF-8")
+        id-keyword-small (keyword (String. (read-bytes in :small) "UTF-8"))
+
         id-queue      (read-coll in (PersistentQueue/EMPTY))
         id-sorted-set (read-coll in (sorted-set))
         id-sorted-map (read-kvs  in (sorted-map))
@@ -336,6 +396,12 @@
         id-short   (.readShort in)
         id-integer (.readInt   in)
         id-long    (.readLong  in)
+
+        ;;; Optimized, common-case types (v2.6+)
+        id-byte-as-long  (long (.readByte  in))
+        id-short-as-long (long (.readShort in))
+        id-int-as-long   (long (.readInt   in))
+
         id-bigint  (bigint (read-biginteger in))
 
         id-float  (.readFloat  in)
@@ -546,6 +612,14 @@
      :keyword      :keyword
      :keyword-ns   ::keyword
 
+     ;;; Try reflect real-world data:
+     :lotsa-small-numbers  (vec (range 200))
+     :lotsa-small-keywords (->> (java.util.Locale/getISOLanguages)
+                                (mapv keyword))
+     :lotsa-small-strings  (->> (java.util.Locale/getISOCountries)
+                                (mapv #(.getDisplayCountry
+                                        (java.util.Locale. "en" %))))
+
      :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
      :queue-empty  (PersistentQueue/EMPTY)
      :sorted-set   (sorted-set 1 2 3 4 5)
@@ -593,7 +667,7 @@
   "Reference data with stuff removed that breaks reader or other utils we'll
   be benching against."
   (dissoc stress-data :bytes :throwable :exception :ex-info :queue :queue-empty
-                      :byte))
+                      :byte :stress-record))
 
 ;;;; Data recovery/analysis
 
