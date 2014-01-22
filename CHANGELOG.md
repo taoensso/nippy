@@ -1,3 +1,23 @@
+## v2.6.0-alpha1 / 2014-Jan-22
+
+**WARNING**: This is an **EXPERIMENTAL early testing release** and **unsuitable for use in production**. Welcoming feedback on any issues, etc.!
+
+### Features
+ * Low-level fns added: `freeze-to-out!`, `thaw-from-in!` for operating directly on DataOutputs/DataInputs.
+ * Data size optimizations for some small, common data types (small strings+keywords, small integers).
+ * New test suite added to ensure a 1-to-1 value->binary representation mapping for all core data types. This will be a guarantee kept going forward.
+ * New `:skip-headers?` `freeze` option to freeze data without standard Nippy headers (can be useful in very performance sensitive environments).
+ * New benchmarks added, notably a Fressian comparison.
+
+### Changes
+ * **BREAKING**: the experimental `Compressable-LZMA2` type has changed (less overhead).
+ * **DEPRECATED**: `freeze-to-stream!`, `thaw-from-stream!` are deprecated in favor of the more general `freeze-to-out!`, `thaw-from-in!`.
+ * **DEPRECATED**: `:legacy-mode` options. This was being used mainly for headerless freezing, so a new headerless mode is taking its place.
+
+### Fixes
+ * None.
+
+
 ## v2.5.2 / 2013-12-07
  * Test Serializable objects at freeze time for better reliability.
  * Don't cache `serializable?`/`readable?` for types with gensym-style names (e.g. as used for anonymous fns, etc.).
