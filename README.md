@@ -111,6 +111,8 @@ Deserialize it:
 
 Couldn't be simpler!
 
+See also the lower-level `freeze-to-out!` and `thaw-from-in!` fns for operating on `DataOutput` and `DataInput` types directly. 
+
 ### Encryption (currently in **ALPHA**)
 
 Nippy v2+ also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
@@ -128,12 +130,12 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 (defrecord MyType [data])
 
 (nippy/extend-freeze MyType 1 ; A unique type id ∈[1, 128]
-  [x data-output-stream]
-  (.writeUTF data-output-stream (:data x)))
+  [x data-output]
+  (.writeUTF data-output (:data x)))
 
 (nippy/extend-thaw 1 ; Same type id
-  [data-input-stream]
-  (->MyType (.readUTF data-input-stream)))
+  [data-input]
+  (->MyType (.readUTF data-input)))
 
 (nippy/thaw (nippy/freeze (->MyType "Joe"))) => #taoensso.nippy.MyType{:data "Joe"}
 ```
