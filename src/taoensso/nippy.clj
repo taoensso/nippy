@@ -8,7 +8,8 @@
              (compression :as compression :refer (snappy-compressor))
              (encryption  :as encryption  :refer (aes128-encryptor))])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
-             DataOutputStream Serializable ObjectOutputStream ObjectInputStream]
+             DataOutputStream Serializable ObjectOutputStream ObjectInputStream
+             DataOutput DataInput]
             [java.lang.reflect Method]
             [java.util Date UUID]
             [clojure.lang Keyword BigInt Ratio
@@ -114,7 +115,7 @@
 (defmacro ^:private freezer [type id & body]
   `(extend-type ~type
      Freezable
-     (~'freeze-to-stream* [~'x ~(with-meta 's {:tag 'DataOutputStream})]
+     (~'freeze-to-stream* [~'x ~(with-meta 's {:tag 'DataOutput})]
        (write-id ~'s ~id)
        ~@body)))
 
@@ -206,7 +207,7 @@
 ;; interfering with higher-level implementations, Ref. http://goo.gl/6f7SKl
 (extend-type Object
   Freezable
-  (freeze-to-stream* [x ^DataOutputStream s]
+  (freeze-to-stream* [x ^DataOutput s]
     (cond
      (utils/serializable? x) ; Fallback #1: Java's Serializable interface
      (do (when-debug-mode
@@ -240,9 +241,9 @@
 (declare assert-legacy-args) ; Deprecated
 
 (defn freeze-to-stream!
-  "Low-level API. Serializes arg (any Clojure data type) to a DataOutputStream."
-  [^DataOutputStream data-output-stream x & _]
-  (freeze-to-stream data-output-stream x))
+  "Low-level API. Serializes arg (any Clojure data type) to a DataOutput."
+  [^DataOutput data-output x & _]
+  (freeze-to-stream data-output x))
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. For custom types
@@ -272,7 +273,7 @@
   `(let [s# ~s
          size# (.readInt s#)
          ba#   (byte-array size#)]
-     (.read s# ba# 0 size#) ba#))
+     (.readFully s# ba# 0 size#) ba#))
 
 (defmacro ^:private read-biginteger [s] `(BigInteger. (read-bytes ~s)))
 (defmacro ^:private read-utf8       [s] `(String. (read-bytes ~s) "UTF-8"))
@@ -287,7 +288,7 @@
 (declare ^:private custom-readers)
 
 (defn- thaw-from-stream
-  [^DataInputStream s]
+  [^DataInput s]
   (let [type-id (.readByte s)]
     (try
       (when-debug-mode
@@ -376,10 +377,10 @@
         (throw (Exception. (format "Thaw failed against type-id: %s" type-id) e))))))
 
 (defn thaw-from-stream!
-  "Low-level API. Deserializes a frozen object from given DataInputStream to its
+  "Low-level API. Deserializes a frozen object from given DataInput to its
   original Clojure data type."
-  [data-input-stream & _]
-  (thaw-from-stream data-input-stream))
+  [data-input & _]
+  (thaw-from-stream data-input))
 
 (defn- try-parse-header [ba]
   (when-let [[head-ba data-ba] (utils/ba-split ba 4)]
@@ -480,7 +481,7 @@
   (assert (and (>= custom-type-id 1) (<= custom-type-id 128)))
   `(extend-type ~type
      Freezable
-     (~'freeze-to-stream* [~x ~(with-meta stream {:tag 'java.io.DataOutputStream})]
+     (~'freeze-to-stream* [~x ~(with-meta stream {:tag 'java.io.DataOutput})]
        (write-id ~stream ~(int (- custom-type-id)))
        ~@body)))
 
@@ -493,7 +494,7 @@
   [custom-type-id [stream] & body]
   (assert (and (>= custom-type-id 1) (<= custom-type-id 128)))
   `(swap! custom-readers assoc ~(int (- custom-type-id))
-          (fn [~(with-meta stream {:tag 'java.io.DataInputStream})]
+          (fn [~(with-meta stream {:tag 'java.io.DataInput})]
             ~@body)))
 
 (comment (defrecord MyType [data])
