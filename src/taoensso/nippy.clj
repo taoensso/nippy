@@ -36,55 +36,56 @@
 ;;;; Data type IDs
 
 ;; **Negative ids reserved for user-defined types**
+(do ; Just for easier IDE collapsing
+  (def ^:const id-reserved   (int 0))
+  ;;                              1
+  (def ^:const id-bytes      (int 2))
+  (def ^:const id-nil        (int 3))
+  (def ^:const id-boolean    (int 4))
+  (def ^:const id-reader     (int 5)) ; Fallback #2: pr-str output
+  (def ^:const id-serializable (int 6)) ; Fallback #1
 
-(def ^:const id-reserved   (int 0))
-;;                              1
-(def ^:const id-bytes      (int 2))
-(def ^:const id-nil        (int 3))
-(def ^:const id-boolean    (int 4))
-(def ^:const id-reader     (int 5)) ; Fallback #2: pr-str output
-(def ^:const id-serializable (int 6)) ; Fallback #1
+  (def ^:const id-char       (int 10))
+  ;;                              11
+  ;;                              12
+  (def ^:const id-string     (int 13))
+  (def ^:const id-keyword    (int 14))
 
-(def ^:const id-char       (int 10))
-;;                              11
-;;                              12
-(def ^:const id-string     (int 13))
-(def ^:const id-keyword    (int 14))
+  (def ^:const id-list       (int 20))
+  (def ^:const id-vector     (int 21))
+  ;;                              22
+  (def ^:const id-set        (int 23))
+  (def ^:const id-seq        (int 24))
+  (def ^:const id-meta       (int 25))
+  (def ^:const id-queue      (int 26))
+  (def ^:const id-map        (int 27))
+  (def ^:const id-sorted-set (int 28))
+  (def ^:const id-sorted-map (int 29))
 
-(def ^:const id-list       (int 20))
-(def ^:const id-vector     (int 21))
-;;                              22
-(def ^:const id-set        (int 23))
-(def ^:const id-seq        (int 24))
-(def ^:const id-meta       (int 25))
-(def ^:const id-queue      (int 26))
-(def ^:const id-map        (int 27))
-(def ^:const id-sorted-set (int 28))
-(def ^:const id-sorted-map (int 29))
+  (def ^:const id-byte       (int 40))
+  (def ^:const id-short      (int 41))
+  (def ^:const id-integer    (int 42))
+  (def ^:const id-long       (int 43))
+  (def ^:const id-bigint     (int 44))
 
-(def ^:const id-byte       (int 40))
-(def ^:const id-short      (int 41))
-(def ^:const id-integer    (int 42))
-(def ^:const id-long       (int 43))
-(def ^:const id-bigint     (int 44))
+  (def ^:const id-float      (int 60))
+  (def ^:const id-double     (int 61))
+  (def ^:const id-bigdec     (int 62))
 
-(def ^:const id-float      (int 60))
-(def ^:const id-double     (int 61))
-(def ^:const id-bigdec     (int 62))
+  (def ^:const id-ratio      (int 70))
 
-(def ^:const id-ratio      (int 70))
+  (def ^:const id-record     (int 80))
+  ;; (def ^:const id-type    (int 81)) ; TODO
 
-(def ^:const id-record     (int 80))
-;; (def ^:const id-type    (int 81)) ; TODO
+  (def ^:const id-date       (int 90))
+  (def ^:const id-uuid       (int 91))
 
-(def ^:const id-date       (int 90))
-(def ^:const id-uuid       (int 91))
-
-;;; DEPRECATED (old types will be supported only for thawing)
-(def ^:const id-old-reader  (int 1))  ; as of 0.9.2, for +64k support
-(def ^:const id-old-string  (int 11)) ; as of 0.9.2, for +64k support
-(def ^:const id-old-map     (int 22)) ; as of 0.9.0, for more efficient thaw
-(def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
+  ;;; DEPRECATED (old types will be supported only for thawing)
+  (def ^:const id-old-reader  (int 1))  ; as of 0.9.2, for +64k support
+  (def ^:const id-old-string  (int 11)) ; as of 0.9.2, for +64k support
+  (def ^:const id-old-map     (int 22)) ; as of 0.9.0, for more efficient thaw
+  (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
+  )
 
 ;;;; Freezing
 
