@@ -24,13 +24,19 @@
 ;; * Nippy version check (=> supports changes to data schema over time).
 ;; * Encrypted &/or compressed data identification.
 ;;
-(def ^:private ^:const head-version 1)
+(def ^:private ^:const head-version 2)
+(def ^:private ^:dynamic *head-version* head-version)
 (def ^:private head-sig (.getBytes "NPY" "UTF-8"))
 (def ^:private ^:const head-meta "Final byte stores version-dependent metadata."
   {(byte 0) {:version 1 :compressed? false :encrypted? false}
    (byte 1) {:version 1 :compressed? true  :encrypted? false}
    (byte 2) {:version 1 :compressed? false :encrypted? true}
-   (byte 3) {:version 1 :compressed? true  :encrypted? true}})
+   (byte 3) {:version 1 :compressed? true  :encrypted? true}
+   ;;
+   (byte 4) {:version 2 :compressed? false :encrypted? false}
+   (byte 5) {:version 2 :compressed? true  :encrypted? false}
+   (byte 6) {:version 2 :compressed? false :encrypted? true}
+   (byte 7) {:version 2 :compressed? true  :encrypted? true}})
 
 (defmacro when-debug-mode [& body] (when #_true false `(do ~@body)))
 
@@ -96,10 +102,27 @@
 
 (defmacro           write-id    [out id] `(.writeByte ~out ~id))
 (defmacro ^:private write-bytes [out ba]
-  `(let [out# ~out, ba# ~ba]
-     (let [size# (alength ba#)]
-       (.writeInt out# size#)
-       (.write out# ba# 0 size#))))
+  `(let [out# ~out, ba# ~ba
+         size# (alength ba#)]
+     (case (int *head-version*)
+       1 (.writeInt out# size#)
+       2 (cond
+          ;; (<= size# java.lang.Byte/MAX_VALUE) ; 1+1 byte size for <= 127 len
+          ;; (do (.writeByte out# id-byte)
+          ;;     (.writeByte out# size#))
+
+          (<= size# java.lang.Byte/MAX_VALUE) ; 1+0 byte size for <= 127 len
+          (.writeByte out# (- size#)) ; Further optimization for commonest case
+
+          (<= size# java.lang.Short/MAX_VALUE) ; 2+1 byte size for <= 32k len
+          (do (.writeByte  out# id-short)
+              (.writeShort out# size#))
+
+          (<= size# java.lang.Integer/MAX_VALUE) ; 4+1 byte size
+          (do (.writeByte  out# id-integer)
+              (.writeInt   out# size#))))
+
+     (.write out# ba# 0 size#)))
 
 (defmacro ^:private write-biginteger [out x] `(write-bytes ~out (.toByteArray ~x)))
 (defmacro ^:private write-utf8       [out x] `(write-bytes ~out (.getBytes ~x "UTF-8")))
@@ -270,10 +293,19 @@
 (declare thaw-from-in)
 
 (defmacro ^:private read-bytes [in]
-  `(let [in#   ~in
-         size# (.readInt in#)
-         ba#   (byte-array size#)]
-     (.readFully in# ba# 0 size#) ba#))
+  `(let [in# ~in
+         size#
+         (case (int *head-version*)
+           1 (.readInt in#)
+           2 (let [size-prefix# (.readByte in#)]
+               (cond
+                (neg? size-prefix#)            (- size-prefix#)
+                (=    size-prefix# id-short)   (.readShort in#)
+                (=    size-prefix# id-integer) (.readInt   in#))))
+         ba# (byte-array size#)]
+
+     (.readFully in# ba# 0 size#)
+     ba#))
 
 (defmacro ^:private read-biginteger [in] `(BigInteger. (read-bytes ~in)))
 (defmacro ^:private read-utf8       [in] `(String. (read-bytes ~in) "UTF-8"))
@@ -411,7 +443,8 @@
   (let [headerless-meta (merge headerless-meta (:legacy-opts opts)) ; Deprecated
         ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
         try-thaw-data
-        (fn [data-ba {:keys [compressed? encrypted?] :as _head-or-headerless-meta}]
+        (fn [data-ba {:keys [version compressed? encrypted?]
+                     :as   _head-or-headerless-meta}]
           (let [password   (when encrypted?  password)
                 compressor (when compressed? compressor)]
             (try
@@ -419,7 +452,8 @@
                     ba (if password (encryption/decrypt encryptor password ba) ba)
                     ba (if compressor (compression/decompress compressor ba)   ba)
                     sin (DataInputStream. (ByteArrayInputStream. ba))]
-                (thaw-from-in! sin))
+                (binding [*head-version* version]
+                  (thaw-from-in! sin)))
 
               (catch Exception e
                 (cond
