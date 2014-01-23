@@ -1,4 +1,4 @@
-## v2.6.0-alpha1 / 2014-Jan-22
+## v2.6.0-alpha2 / 2014-Jan-23
 
 **WARNING**: This is an **EXPERIMENTAL early testing release** and **unsuitable for use in production**. Welcoming feedback on any issues, etc.!
 
@@ -13,6 +13,7 @@
  * **BREAKING**: the experimental `Compressable-LZMA2` type has changed (less overhead).
  * **DEPRECATED**: `freeze-to-stream!`, `thaw-from-stream!` are deprecated in favor of the more general `freeze-to-out!`, `thaw-from-in!`.
  * **DEPRECATED**: `:legacy-mode` options. This was being used mainly for headerless freezing, so a new headerless mode is taking its place.
+ * Public utils now available for custom type extension: `write-bytes`, `write-biginteger`, `write-utf8`, `write-compact-long`, and respective readers.
 
 ### Fixes
  * None.
