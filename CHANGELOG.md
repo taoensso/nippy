@@ -4,9 +4,9 @@
 
 ### Features
  * Low-level fns added: `freeze-to-out!`, `thaw-from-in!` for operating directly on DataOutputs/DataInputs.
- * Data size optimizations for some small, common data types (small strings+keywords, small integers).
+ * Data size optimizations for some common small data types (small strings/keywords, small integers).
  * New test suite added to ensure a 1-to-1 value->binary representation mapping for all core data types. This will be a guarantee kept going forward.
- * New `:skip-headers?` `freeze` option to freeze data without standard Nippy headers (can be useful in very performance sensitive environments).
+ * New `:skip-header?` `freeze` option to freeze data without standard Nippy headers (can be useful in very performance sensitive environments).
  * New benchmarks added, notably a Fressian comparison.
 
 ### Changes
