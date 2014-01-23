@@ -82,16 +82,17 @@
   (def ^:const id-uuid       (int 91))
 
   ;;; Optimized, common-case types (v2.6+)
-  (def ^:const id-byte-as-long  (int 100)) ; 1 vs 8 byte storage
-  (def ^:const id-short-as-long (int 101)) ; 2 vs 8 byte storage
-  (def ^:const id-int-as-long   (int 102)) ; 4 vs 8 byte storage
+  (def ^:const id-byte-as-long  (int 100)) ; 1 vs 8 bytes
+  (def ^:const id-short-as-long (int 101)) ; 2 vs 8 bytes
+  (def ^:const id-int-as-long   (int 102)) ; 4 vs 8 bytes
+  ;; (def ^:const id-compact-long  (int 103)) ; 6->7 vs 8 bytes
   ;;
-  (def ^:const id-string-small  (int 103)) ; 1 vs 4 byte overhead
-  (def ^:const id-keyword-small (int 104)) ; ''
+  (def ^:const id-string-small  (int 105)) ; 1 vs 4 byte length prefix
+  (def ^:const id-keyword-small (int 106)) ; ''
   ;;
-  ;; (def ^:const id-vector-small  (int 105)) ; ''
-  ;; (def ^:const id-set-small     (int 106)) ; ''
-  ;; (def ^:const id-map-small     (int 107)) ; ''
+  ;; (def ^:const id-vector-small  (int 110)) ; ''
+  ;; (def ^:const id-set-small     (int 111)) ; ''
+  ;; (def ^:const id-map-small     (int 112)) ; ''
 
   ;;; DEPRECATED (old types will be supported only for thawing)
   (def ^:const id-old-reader  (int 1))  ; as of 0.9.2, for +64k support
@@ -104,19 +105,33 @@
 
 (defprotocol Freezable
   "Be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU."
- (freeze-to-out* [this out]))
+  (freeze-to-out* [this out]))
 
-(defmacro           write-id    [out id] `(.writeByte ~out ~id))
-(defmacro ^:private write-bytes [out ba & [small?]]
-  `(let [out# ~out, ba# ~ba]
-     (let [size# (alength ba#)]
-       (if ~small? ; Optimization, must be known before id's written
-         (.writeByte out# size#)
-         (.writeInt  out# size#))
+(defmacro write-id    [out id] `(.writeByte ~out ~id))
+(defmacro write-bytes [out ba & [small?]]
+  (let [out (with-meta out {:tag 'java.io.DataOutput})
+        ba  (with-meta ba  {:tag 'bytes})]
+    `(let [out# ~out, ba# ~ba
+           size# (alength ba#)]
+       (if ~small?             ; Optimization, must be known before id's written
+         (.writeByte out# (byte size#))  ; `byte` to throw on range error
+         (.writeInt  out# (int  size#))  ; `int`  ''
+         )
        (.write out# ba# 0 size#))))
 
-(defmacro ^:private write-biginteger [out x] `(write-bytes ~out (.toByteArray ~x)))
-(defmacro ^:private write-utf8       [out x] `(write-bytes ~out (.getBytes ~x "UTF-8")))
+(defmacro write-biginteger [out x]
+  (let [x (with-meta x {:tag 'java.math.BigInteger})]
+    `(write-bytes ~out (.toByteArray ~x))))
+
+(defmacro write-utf8 [out x & [small?]]
+  (let [x (with-meta x {:tag 'String})]
+    `(write-bytes ~out (.getBytes ~x "UTF-8") ~small?)))
+
+(defmacro write-compact-long "EXPERIMENTAL! Uses 2->9 bytes." [out x]
+  `(write-bytes ~out (.toByteArray (java.math.BigInteger/valueOf (long ~x)))
+                :small))
+
+(comment (alength (.toByteArray (java.math.BigInteger/valueOf Long/MAX_VALUE))))
 
 (defmacro ^:private freeze-to-out
   "Like `freeze-to-out*` but with metadata support."
@@ -170,7 +185,7 @@
   Freezable
   (freeze-to-out* [x ^DataOutput out]
     (let [ba (.getBytes x)]
-      (if (<= (alength ^bytes ba) java.lang.Byte/MAX_VALUE)
+      (if (<= (alength ^bytes ba) Byte/MAX_VALUE)
         (do (write-id    out id-string-small)
             (write-bytes out ba :small))
 
@@ -185,7 +200,7 @@
               (name x))
           ba (.getBytes s "UTF-8")]
 
-      (if (<= (alength ^bytes ba) java.lang.Byte/MAX_VALUE)
+      (if (<= (alength ^bytes ba) Byte/MAX_VALUE)
         (do (write-id    out id-keyword-small)
             (write-bytes out ba :small))
 
@@ -218,17 +233,18 @@
   Freezable
   (freeze-to-out* [x ^DataOutput out]
     (cond
-     (<= java.lang.Byte/MIN_VALUE x java.lang.Byte/MAX_VALUE)
+     (<= Byte/MIN_VALUE x Byte/MAX_VALUE)
      (do (write-id out id-byte-as-long) (.writeByte out x))
 
-     (<= java.lang.Short/MIN_VALUE x java.lang.Short/MAX_VALUE)
+     (<= Short/MIN_VALUE x Short/MAX_VALUE)
      (do (write-id out id-short-as-long) (.writeShort out x))
 
-     (<= java.lang.Integer/MIN_VALUE x java.lang.Integer/MAX_VALUE)
+     (<= Integer/MIN_VALUE x Integer/MAX_VALUE)
      (do (write-id out id-int-as-long) (.writeInt out x))
 
      :else (do (write-id out id-long) (.writeLong out x)))))
 
+;;
 
 (freezer BigInt     id-bigint  (write-biginteger out (.toBigInteger x)))
 (freezer BigInteger id-bigint  (write-biginteger out x))
@@ -323,7 +339,7 @@
 
 (declare thaw-from-in)
 
-(defmacro ^:private read-bytes [in & [small?]]
+(defmacro read-bytes [in & [small?]]
   `(let [in#   ~in
          size# (if ~small? ; Optimization, must be known before id's written
                  (.readByte in#)
@@ -331,8 +347,12 @@
          ba#   (byte-array size#)]
      (.readFully in# ba# 0 size#) ba#))
 
-(defmacro ^:private read-biginteger [in] `(BigInteger. (read-bytes ~in)))
-(defmacro ^:private read-utf8       [in] `(String. (read-bytes ~in) "UTF-8"))
+(defmacro read-biginteger [in] `(BigInteger. (read-bytes ~in)))
+(defmacro read-utf8 [in & [small?]]
+  `(String. (read-bytes ~in ~small?) "UTF-8"))
+
+(defmacro read-compact-long "EXPERIMENTAL!" [in]
+  `(long (BigInteger. (read-bytes ~in :small))))
 
 (defmacro ^:private read-coll [in coll]
   `(let [in# ~in] (utils/repeatedly-into ~coll (.readInt in#) (thaw-from-in in#))))
@@ -401,6 +421,7 @@
         id-byte-as-long  (long (.readByte  in))
         id-short-as-long (long (.readShort in))
         id-int-as-long   (long (.readInt   in))
+        ;; id-compact-long  (read-compact-long in)
 
         id-bigint  (bigint (read-biginteger in))
 
