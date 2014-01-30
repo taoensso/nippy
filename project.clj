@@ -16,7 +16,7 @@
                                 ]
                      :dependencies [[expectations                  "1.4.56"]
                                     [org.xerial.snappy/snappy-java "1.1.1-M1"]
-                                    [reiddraper/simple-check       "0.5.3"]
+                                    [reiddraper/simple-check       "0.5.6"]
                                     [org.clojure/data.fressian     "0.2.0"]]}
              :bench {:dependencies [] :jvm-opts ^:replace ["-server"]}}
   :aliases {"test-all"    ["with-profile" "+test,+1.4:+test,+1.5:+test,+1.6" "expectations"]
