@@ -68,6 +68,7 @@
   (def ^:const id-integer    (int 42))
   (def ^:const id-long       (int 43))
   (def ^:const id-bigint     (int 44))
+  (def ^:const id-biginteger (int 45))
 
   (def ^:const id-float      (int 60))
   (def ^:const id-double     (int 61))
@@ -246,8 +247,8 @@
 
 ;;
 
-(freezer BigInt     id-bigint  (write-biginteger out (.toBigInteger x)))
-(freezer BigInteger id-bigint  (write-biginteger out x))
+(freezer BigInt     id-bigint     (write-biginteger out (.toBigInteger x)))
+(freezer BigInteger id-biginteger (write-biginteger out x))
 
 (freezer Float      id-float   (.writeFloat  out x))
 (freezer Double     id-double  (.writeDouble out x))
@@ -423,7 +424,8 @@
         id-int-as-long   (long (.readInt   in))
         ;; id-compact-long  (read-compact-long in)
 
-        id-bigint  (bigint (read-biginteger in))
+        id-bigint     (bigint (read-biginteger in))
+        id-biginteger (read-biginteger in)
 
         id-float  (.readFloat  in)
         id-double (.readDouble in)

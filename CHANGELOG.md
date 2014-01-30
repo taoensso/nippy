@@ -1,3 +1,7 @@
+## Pending
+ * Now distinguish between `BigInteger` and `BigInt` on thawing (previously both thawed to `BigInt`s). (mlacorte).
+
+
 ## v2.6.0-alpha2 / 2014-Jan-23
 
 **WARNING**: This is an **EXPERIMENTAL early testing release** and **unsuitable for use in production**. Welcoming feedback on any issues, etc.!
