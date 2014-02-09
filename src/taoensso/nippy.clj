@@ -498,6 +498,10 @@
                  :as   opts}]]
 
   (let [headerless-meta (merge headerless-meta (:legacy-opts opts)) ; Deprecated
+        _ (assert (or (nil? headerless-meta)
+                      (head-meta-id headerless-meta))
+                  "Bad :headerless-meta (should be nil or a valid `head-meta` value)")
+
         ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
         try-thaw-data
         (fn [data-ba {:keys [compressed? encrypted?] :as _head-or-headerless-meta}]
@@ -595,8 +599,7 @@
 
 (defrecord Compressable-LZMA2 [value])
 (extend-freeze Compressable-LZMA2 128 [x out]
-  (let [[_ ^bytes ba] (-> (freeze (:value x) {:compressor nil})
-                          (utils/ba-split 4))
+  (let [ba (freeze (:value x) {:skip-header? true :compressor nil})
         ba-len    (alength ba)
         compress? (> ba-len 1024)]
     (.writeBoolean out compress?)
@@ -607,8 +610,10 @@
 (extend-thaw 128 [in]
   (let [compressed? (.readBoolean in)
         ba          (read-bytes in)]
-    (thaw (wrap-header ba {:compressed? compressed? :encrypted? false})
-          {:compressor compression/lzma2-compressor})))
+    (thaw ba {:compressor compression/lzma2-compressor
+              :headerless-meta {:version     1
+                                :compressed? compressed?
+                                :encrypted?  false}})))
 
 (comment
   (->> (apply str (repeatedly 1000 rand))
