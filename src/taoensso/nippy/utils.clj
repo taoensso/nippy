@@ -5,6 +5,16 @@
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream Serializable
              ObjectOutputStream ObjectInputStream]))
 
+(defmacro defalias
+  "Defines an alias for a var, preserving metadata. Adapted from
+  clojure.contrib/def.clj, Ref. http://goo.gl/xpjeH"
+  [name target & [doc]]
+  `(let [^clojure.lang.Var v# (var ~target)]
+     (alter-meta! (def ~name (.getRawRoot v#))
+                  #(merge % (apply dissoc (meta v#) [:column :line :file :test :name])
+                            (when-let [doc# ~doc] {:doc doc#})))
+     (var ~name)))
+
 (defmacro case-eval
   "Like `case` but evaluates test constants for their compile-time value."
   [e & clauses]
@@ -144,3 +154,74 @@
   (time (dotimes [_ 10000] (serializable? (fn []))))
   (time (dotimes [_ 10000] (readable? "Hello world")))
   (time (dotimes [_ 10000] (readable? (fn [])))))
+
+;;;;
+
+(defn- is-coll?
+  "Checks for _explicit_ IPersistentCollection types with Nippy support."
+  [x]
+  (let [is? #(when (instance? % x) %)]
+    (or
+     (is? clojure.lang.APersistentVector)
+     (is? clojure.lang.APersistentMap)
+     (is? clojure.lang.APersistentSet)
+     (is? clojure.lang.PersistentList)
+     (is? clojure.lang.PersistentList$EmptyList) ; (type '())
+     (is? clojure.lang.PersistentQueue)
+     (is? clojure.lang.PersistentTreeSet)
+     (is? clojure.lang.PersistentTreeMap)
+     (is? clojure.lang.IRecord)
+     (is? clojure.lang.LazySeq)
+     ;; (is? clojure.lang.ISeq)
+     )))
+
+(defn freezable?
+  "Alpha - subject to change, may be buggy!
+  Returns truthy value iff Nippy supports de/serialization of given argument.
+  Conservative with default options.
+
+  `:allow-clojure-reader?` and `:allow-java-serializable?` options may be used
+  to also enable the relevant roundtrip fallback test(s). These tests are only
+  **moderately reliable** since they're cached by arg type and don't test for
+  pre/post serialization equality (there's no good general way of doing so)."
+  [x & [{:keys [allow-clojure-reader? allow-java-serializable?]}]]
+  (let [is? #(when (instance? % x) %)]
+    (if (is-coll? x)
+      (try
+        (when (every? freezable? x) (type x))
+        (catch Exception _ false))
+      (or
+       (is? clojure.lang.Keyword)
+       (is? java.lang.String)
+       (is? java.lang.Long)
+       (is? java.lang.Double)
+
+       (is? clojure.lang.BigInt)
+       (is? clojure.lang.Ratio)
+
+       (is? java.lang.Boolean)
+       (is? java.lang.Integer)
+       (is? java.lang.Short)
+       (is? java.lang.Byte)
+       (is? java.lang.Character)
+       (is? java.math.BigInteger)
+       (is? java.math.BigDecimal)
+       (is? #=(java.lang.Class/forName "[B"))
+
+       (is? java.util.Date)
+       (is? java.util.UUID)
+
+       (when (and allow-clojure-reader? (readable? x)) :clojure-reader)
+       (when (and allow-java-serializable?
+                  ;; Reports as true but is unreliable:
+                  (not (is? clojure.lang.Fn))
+                  (serializable? x)) :java-serializable)))))
+
+(comment
+  (time (dotimes [_ 10000] (freezable? "hello")))
+  (freezable? [:a :b])
+  (freezable? [:a (fn [x] (* x x))])
+  (freezable? (.getBytes "foo"))
+  (freezable? (java.util.Date.) {:allow-clojure-reader?    true})
+  (freezable? (Exception. "_")  {:allow-clojure-reader?    true})
+  (freezable? (Exception. "_")  {:allow-java-serializable? true}))

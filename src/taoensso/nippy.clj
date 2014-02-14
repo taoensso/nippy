@@ -697,7 +697,9 @@
   (dissoc stress-data :bytes :throwable :exception :ex-info :queue :queue-empty
                       :byte :stress-record))
 
-;;;; Data recovery/analysis
+;;;; Tools
+
+(utils/defalias freezeable? utils/freezable?)
 
 (defn inspect-ba "Alpha - subject to change."
   [ba & [thaw-opts]]
