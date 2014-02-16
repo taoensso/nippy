@@ -224,4 +224,6 @@
   (freezable? (.getBytes "foo"))
   (freezable? (java.util.Date.) {:allow-clojure-reader?    true})
   (freezable? (Exception. "_")  {:allow-clojure-reader?    true})
-  (freezable? (Exception. "_")  {:allow-java-serializable? true}))
+  (freezable? (Exception. "_")  {:allow-java-serializable? true})
+  (freezable? (atom {}) {:allow-clojure-reader?    true
+                         :allow-java-serializable? true}))
