@@ -27,6 +27,11 @@
                                      :password [:salted "p"]}))
                    test-data))
 
+(expect ; Try roundtrip anything that simple-check can dream up
+ (:result (sc/quick-check 80 ; Time is n-non-linear
+            (sc-prop/for-all [val sc-gen/any]
+              (= val (nippy/thaw (nippy/freeze val)))))))
+
 (expect AssertionError (thaw (freeze test-data {:password "malformed"})))
 (expect Exception (thaw (freeze test-data {:password [:salted "p"]})))
 (expect Exception (thaw (freeze test-data {:password [:salted "p"]})
@@ -105,7 +110,7 @@
   (let [{:keys [result bin->val val->bin]} (qc-prop-bijection 10)]
     [result (vals bin->val)]))
 
-;; (expect #(:result %) (qc-prop-bijection 120))  ; Time seems to be n-non-linear
+;; (expect #(:result %) (qc-prop-bijection 120)) ; Time is n-non-linear
 (expect #(:result %) (qc-prop-bijection 80))
 
 ;;;; Benchmarks

@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.6.0-alpha2"
+(defproject com.taoensso/nippy "2.6.0-alpha3"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
   :license {:name "Eclipse Public License"
@@ -9,14 +9,14 @@
                  [org.tukaani/xz           "1.4"]]
   :profiles {:1.4   {:dependencies [[org.clojure/clojure "1.4.0"]]}
              :1.5   {:dependencies [[org.clojure/clojure "1.5.1"]]}
-             :1.6   {:dependencies [[org.clojure/clojure "1.6.0-alpha3"]]}
+             :1.6   {:dependencies [[org.clojure/clojure "1.6.0-beta1"]]}
              :dev   {:dependencies []}
              :test  {:jvm-opts ["-Xms1024m" ; Initial heap size
                                 "-Xmx2048m" ; Max heap size
                                 ]
                      :dependencies [[expectations                  "1.4.56"]
                                     [org.xerial.snappy/snappy-java "1.1.1-M1"]
-                                    [reiddraper/simple-check       "0.5.3"]
+                                    [reiddraper/simple-check       "0.5.6"]
                                     [org.clojure/data.fressian     "0.2.0"]]}
              :bench {:dependencies [] :jvm-opts ^:replace ["-server"]}}
   :aliases {"test-all"    ["with-profile" "+test,+1.4:+test,+1.5:+test,+1.6" "expectations"]
@@ -27,7 +27,7 @@
   :plugins [[lein-expectations "0.0.8"]
             [lein-autoexpect   "1.2.1"]
             [lein-ancient      "0.5.4"]
-            [codox             "0.6.6"]]
+            [codox             "0.6.7"]]
   :min-lein-version "2.0.0"
   :global-vars {*warn-on-reflection* true}
   :repositories
