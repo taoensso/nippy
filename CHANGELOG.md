@@ -1,8 +1,9 @@
-## v2.6.0-alpha4 / 2014-Feb-16
+## v2.6.0-alpha4 / 2014 Feb 16
 
-**WARNING**: This is an **EXPERIMENTAL early testing release** and **unsuitable for use in production**. Welcoming feedback on any issues, etc.!
+> **WARNING**: This is an **EXPERIMENTAL early testing release** and **unsuitable for use in production**. Welcoming feedback on any issues, etc.!
 
-### Features
+### New
+
  * Low-level fns added: `freeze-to-out!`, `thaw-from-in!` for operating directly on DataOutputs/DataInputs.
  * Data size optimizations for some common small data types (small strings/keywords, small integers).
  * New test suite added to ensure a 1-to-1 value->binary representation mapping for all core data types. This will be a guarantee kept going forward.
@@ -11,8 +12,8 @@
  * Added experimental `freezable?` util fn to main ns.
  * Added some property-based [simple-check](https://github.com/reiddraper/simple-check) roundtrip tests.
 
-
 ### Changes
+
  * **BREAKING**: the experimental `Compressable-LZMA2` type has changed (less overhead).
  * **DEPRECATED**: `freeze-to-stream!`, `thaw-from-stream!` are deprecated in favor of the more general `freeze-to-out!`, `thaw-from-in!`.
  * **DEPRECATED**: `:legacy-mode` options. This was being used mainly for headerless freezing, so a new headerless mode is taking its place.
@@ -20,19 +21,27 @@
  * Now distinguish between `BigInteger` and `BigInt` on thawing (previously both thawed to `BigInt`s). (mlacorte).
 
 
-### Fixes
- * None.
+## v2.5.2 / 2013 Dec 7
 
+### New
 
-## v2.5.2 / 2013-12-07
  * Test Serializable objects at freeze time for better reliability.
- * Don't cache `serializable?`/`readable?` for types with gensym-style names (e.g. as used for anonymous fns, etc.).
- * Failed serialized/reader thaws will try return what they can (e.g. unreadable string) instead of just throwing.
  * Thaw error messages now include failing type-id.
 
+### Changes
 
-## v2.5.1 / 2013-12-03
+ * Don't cache `serializable?`/`readable?` for types with gensym-style names (e.g. as used for anonymous fns, etc.).
+ * Failed serialized/reader thaws will try return what they can (e.g. unreadable string) instead of just throwing.
+
+
+## v2.5.1 / 2013 Dec 3
+
+### New
+
  * Added experimental `inspect-ba` fn for examining data possibly frozen by Nippy.
+
+### Changes
+
  * Now throw exception at freeze (rather than thaw) time when trying to serialize an unreadable object using the Clojure reader.
 
 
@@ -102,13 +111,3 @@
     ```
 
     See the [README](https://github.com/ptaoussanis/nippy#encryption-currently-in-alpha) for an example using encryption.
-
-
-## For older versions please see the [commit history][]
-
-[commit history]: https://github.com/ptaoussanis/nippy/commits/master
-[API docs]: http://ptaoussanis.github.io/nippy
-[Taoensso libs]: https://www.taoensso.com/clojure-libraries
-[Nippy GitHub]: https://github.com/ptaoussanis/nippy
-[Nippy CHANGELOG]: https://github.com/ptaoussanis/carmine/blob/master/CHANGELOG.md
-[Nippy API docs]: http://ptaoussanis.github.io/nippy
