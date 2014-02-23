@@ -1,6 +1,6 @@
-## v2.6.0-alpha4 / 2014 Feb 16
+## v2.6.0-beta1 / 2014 Feb 23
 
-> **WARNING**: This is an **EXPERIMENTAL early testing release** and **unsuitable for use in production**. Welcoming feedback on any issues, etc.!
+> Welcoming feedback on any issues, etc.!
 
 ### New
 
@@ -19,6 +19,7 @@
  * **DEPRECATED**: `:legacy-mode` options. This was being used mainly for headerless freezing, so a new headerless mode is taking its place.
  * Public utils now available for custom type extension: `write-bytes`, `write-biginteger`, `write-utf8`, `write-compact-long`, and respective readers.
  * Now distinguish between `BigInteger` and `BigInt` on thawing (previously both thawed to `BigInt`s). (mlacorte).
+ * Moved most utils to external `encore` dependency.
 
 
 ## v2.5.2 / 2013 Dec 7
