@@ -44,7 +44,7 @@
    "test-auto"  ["with-profile" "+test" "autoexpect"]
    "start-dev"  ["with-profile" "+dev" "repl" ":headless"]
    "codox"      ["with-profile" "+test" "doc"]
-   "deploy-lib" ["with-profile" "+dev,+build" "deploy" "clojars"]}
+   "deploy-lib" ["with-profile" "+dev,+build" "do" "deploy" "clojars," "install"]}
 
   :repositories
   {"sonatype"

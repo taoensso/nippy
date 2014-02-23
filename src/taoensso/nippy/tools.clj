@@ -3,8 +3,7 @@
   Utilities for third-party tools that want to add fully-user-configurable Nippy
   support. Used by Carmine and Faraday."
   {:author "Peter Taoussanis"}
-  (:require [taoensso.nippy       :as nippy]
-            [taoensso.nippy.utils :as utils]))
+  (:require [taoensso.nippy :as nippy]))
 
 (defrecord WrappedForFreezing [value opts])
 (defn wrapped-for-freezing? [x] (instance? WrappedForFreezing x))

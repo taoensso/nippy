@@ -3,7 +3,7 @@
   Simple no-nonsense crypto with reasonable defaults. Because your Clojure data
   deserves some privacy."
   {:author "Peter Taoussanis"}
-  (:require [taoensso.nippy.utils :as utils]))
+  (:require [taoensso.encore :as encore]))
 
 ;;;; Interface
 
@@ -32,7 +32,7 @@
   (PBKDF2, bcrypt, scrypt, etc.). Decent security with multiple rounds."
   [salt-ba ^String pwd]
   (loop [^bytes ba (let [pwd-ba (.getBytes pwd "UTF-8")]
-                     (if salt-ba (utils/ba-concat salt-ba pwd-ba) pwd-ba))
+                     (if salt-ba (encore/ba-concat salt-ba pwd-ba) pwd-ba))
          n (* (int Short/MAX_VALUE) (if salt-ba 5 64))]
     (if-not (zero? n)
       (recur (.digest sha512-md ba) (dec n))
@@ -70,22 +70,22 @@
           salt?      (= type :salted)
           iv-ba      (rand-bytes aes128-block-size)
           salt-ba    (when salt? (rand-bytes salt-size))
-          prefix-ba  (if-not salt? iv-ba (utils/ba-concat iv-ba salt-ba))
-          key        (utils/memoized (when-not salt? (:key-cache this))
+          prefix-ba  (if-not salt? iv-ba (encore/ba-concat iv-ba salt-ba))
+          key        (encore/memoized (when-not salt? (:key-cache this))
                        sha512-key salt-ba pwd)
           iv         (javax.crypto.spec.IvParameterSpec. iv-ba)]
       (.init aes128-cipher javax.crypto.Cipher/ENCRYPT_MODE
              ^javax.crypto.spec.SecretKeySpec key iv)
-      (utils/ba-concat prefix-ba (.doFinal aes128-cipher data-ba))))
+      (encore/ba-concat prefix-ba (.doFinal aes128-cipher data-ba))))
 
   (decrypt [this typed-pwd ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
           salt?      (= type :salted)
           prefix-size (+ aes128-block-size (if salt? salt-size 0))
-          [prefix-ba data-ba] (utils/ba-split ba prefix-size)
+          [prefix-ba data-ba] (encore/ba-split ba prefix-size)
           [iv-ba salt-ba]     (if-not salt? [prefix-ba nil]
-                                (utils/ba-split prefix-ba aes128-block-size))
-          key (utils/memoized (when-not salt? (:key-cache this))
+                                (encore/ba-split prefix-ba aes128-block-size))
+          key (encore/memoized (when-not salt? (:key-cache this))
                 sha512-key salt-ba pwd)
           iv  (javax.crypto.spec.IvParameterSpec. iv-ba)]
       (.init aes128-cipher javax.crypto.Cipher/DECRYPT_MODE
