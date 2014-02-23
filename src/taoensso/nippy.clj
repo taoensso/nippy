@@ -3,6 +3,7 @@
   from Deep-Freeze."
   {:author "Peter Taoussanis"}
   (:require [clojure.tools.reader.edn :as edn]
+            [taoensso.encore :as encore]
             [taoensso.nippy
              (utils       :as utils)
              (compression :as compression :refer (snappy-compressor))
@@ -302,8 +303,8 @@
 
 (defn- wrap-header [data-ba metadata]
   (if-let [meta-id (head-meta-id (assoc metadata :version head-version))]
-    (let [head-ba (utils/ba-concat head-sig (byte-array [meta-id]))]
-      (utils/ba-concat head-ba data-ba))
+    (let [head-ba (encore/ba-concat head-sig (byte-array [meta-id]))]
+      (encore/ba-concat head-ba data-ba))
     (throw (Exception. (str "Unrecognized header metadata: " metadata)))))
 
 (comment (wrap-header (.getBytes "foo") {:compressed? true
@@ -356,10 +357,10 @@
   `(long (BigInteger. (read-bytes ~in :small))))
 
 (defmacro ^:private read-coll [in coll]
-  `(let [in# ~in] (utils/repeatedly-into ~coll (.readInt in#) (thaw-from-in in#))))
+  `(let [in# ~in] (encore/repeatedly-into* ~coll (.readInt in#) (thaw-from-in in#))))
 
 (defmacro ^:private read-kvs [in coll]
-  `(let [in# ~in] (utils/repeatedly-into ~coll (/ (.readInt in#) 2)
+  `(let [in# ~in] (encore/repeatedly-into* ~coll (/ (.readInt in#) 2)
                     [(thaw-from-in in#) (thaw-from-in in#)])))
 
 (declare ^:private custom-readers)
@@ -371,7 +372,7 @@
       (when-debug-mode
        (println (format "DEBUG - thawing type-id: %s" type-id)))
 
-      (utils/case-eval type-id
+      (encore/case-eval type-id
 
         id-reader
         (let [edn (read-utf8 in)]
@@ -446,7 +447,7 @@
         ;;; DEPRECATED
         id-old-reader (edn/read-string (.readUTF in))
         id-old-string (.readUTF in)
-        id-old-map    (apply hash-map (utils/repeatedly-into []
+        id-old-map    (apply hash-map (encore/repeatedly-into* []
                         (* 2 (.readInt in)) (thaw-from-in in)))
         id-old-keyword (keyword (.readUTF in))
 
@@ -472,9 +473,9 @@
   (thaw-from-in data-input))
 
 (defn- try-parse-header [ba]
-  (when-let [[head-ba data-ba] (utils/ba-split ba 4)]
-    (let [[head-sig* [meta-id]] (utils/ba-split head-ba 3)]
-      (when (utils/ba= head-sig* head-sig) ; Appears to be well-formed
+  (when-let [[head-ba data-ba] (encore/ba-split ba 4)]
+    (let [[head-sig* [meta-id]] (encore/ba-split head-ba 3)]
+      (when (encore/ba= head-sig* head-sig) ; Appears to be well-formed
         [data-ba (head-meta meta-id {:unrecognized-meta? true})]))))
 
 (defn thaw
@@ -699,16 +700,16 @@
 
 ;;;; Tools
 
-(utils/defalias freezeable? utils/freezable?)
+(encore/defalias freezeable? utils/freezable?)
 
 (defn inspect-ba "Alpha - subject to change."
   [ba & [thaw-opts]]
-  (if-not (utils/bytes? ba) :not-ba
-    (let [[first2bytes nextbytes] (utils/ba-split ba 2)
+  (if-not (encore/bytes? ba) :not-ba
+    (let [[first2bytes nextbytes] (encore/ba-split ba 2)
           known-wrapper
           (cond
-           (utils/ba= first2bytes (.getBytes "\u0000<" "UTF8")) :carmine/bin
-           (utils/ba= first2bytes (.getBytes "\u0000>" "UTF8")) :carmine/clj)
+           (encore/ba= first2bytes (.getBytes "\u0000<" "UTF8")) :carmine/bin
+           (encore/ba= first2bytes (.getBytes "\u0000>" "UTF8")) :carmine/clj)
 
           unwrapped-ba (if known-wrapper nextbytes ba)
           [data-ba nippy-header] (or (try-parse-header unwrapped-ba)

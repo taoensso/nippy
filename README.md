@@ -1,8 +1,8 @@
-**[API docs](http://ptaoussanis.github.io/nippy/)** | **[CHANGELOG](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md)** | [contact & contributing](#contact--contributing) | [other Clojure libs](https://www.taoensso.com/clojure-libraries) | [Twitter](https://twitter.com/#!/ptaoussanis) | current [semantic](http://semver.org/) version:
+**[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contributing](#contact--contributing) | current ([semantic][]) version:
 
 ```clojure
 [com.taoensso/nippy "2.5.2"] ; Stable
-[com.taoensso/nippy "2.6.0-alpha4"] ; EXPERIMENTAL early testing release, unsuitable for production
+[com.taoensso/nippy "2.6.0-beta1"] ; For early adopters
 ```
 
 v2.6 will be a backwards-compatible release with: improved performance (incl. frozen data size), a new low-level DataInput/DataOuput API, improved support for headerless freezing, and 1-to-1 binary-value representation guarantees. See the [Changelog](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md) for details.
@@ -32,7 +32,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 
 ### Dependencies
 
-Add the necessary dependency to your [Leiningen](http://leiningen.org/) `project.clj` and `require` the library in your ns:
+Add the necessary dependency to your [Leiningen][] `project.clj` and `require` the library in your ns:
 
 ```clojure
 [com.taoensso/nippy "2.5.2"] ; project.clj
@@ -151,16 +151,30 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 
 ## This project supports the CDS and ![ClojureWerkz](https://raw.github.com/clojurewerkz/clojurewerkz.org/master/assets/images/logos/clojurewerkz_long_h_50.png) goals
 
-  * [CDS](http://clojure-doc.org/), the **Clojure Documentation Site**, is a **contributer-friendly** community project aimed at producing top-notch, **beginner-friendly** Clojure tutorials and documentation. Awesome resource.
+  * [CDS][], the **Clojure Documentation Site**, is a **contributer-friendly** community project aimed at producing top-notch, **beginner-friendly** Clojure tutorials and documentation. Awesome resource.
 
-  * [ClojureWerkz](http://clojurewerkz.org/) is a growing collection of open-source, **batteries-included Clojure libraries** that emphasise modern targets, great documentation, and thorough testing. They've got a ton of great stuff, check 'em out!
+  * [ClojureWerkz][] is a growing collection of open-source, **batteries-included Clojure libraries** that emphasise modern targets, great documentation, and thorough testing. They've got a ton of great stuff, check 'em out!
 
 ## Contact & contributing
 
-Please use the [project's GitHub issues page](https://github.com/ptaoussanis/nippy/issues) for project questions/comments/suggestions/whatever **(pull requests welcome!)**. Am very open to ideas if you have any!
+Please use the project's GitHub [issues page][] for project questions/comments/suggestions/whatever **(pull requests welcome!)**. Am very open to ideas if you have any!
 
-Otherwise reach me (Peter Taoussanis) at [taoensso.com](https://www.taoensso.com) or on Twitter ([@ptaoussanis](https://twitter.com/#!/ptaoussanis)). Cheers!
+Otherwise reach me (Peter Taoussanis) at [taoensso.com][] or on [Twitter][]. Cheers!
 
 ## License
 
-Copyright &copy; 2012, 2013 Peter Taoussanis. Distributed under the [Eclipse Public License](http://www.eclipse.org/legal/epl-v10.html), the same as Clojure.
+Copyright &copy; 2012-2014 Peter Taoussanis. Distributed under the [Eclipse Public License][], the same as Clojure.
+
+
+[API docs]: <http://ptaoussanis.github.io/nippy/>
+[CHANGELOG]: <https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md>
+[other Clojure libs]: <https://www.taoensso.com/clojure-libraries>
+[Twitter]: <https://twitter.com/ptaoussanis>
+[semantic]: <http://semver.org/>
+[Leiningen]: <http://leiningen.org/>
+[CDS]: <http://clojure-doc.org/>
+[ClojureWerkz]: <http://clojurewerkz.org/>
+[issues page]: <https://github.com/ptaoussanis/nippy/issues>
+[commit history]: <https://github.com/ptaoussanis/nippy/commits/master>
+[taoensso.com]: <https://www.taoensso.com>
+[Eclipse Public License]: <https://raw2.github.com/ptaoussanis/nippy/master/LICENSE>

@@ -1,7 +1,6 @@
 (ns taoensso.nippy.compression
   "Alpha - subject to change."
   {:author "Peter Taoussanis"}
-  (:require [taoensso.nippy.utils :as utils])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
              DataOutputStream]))
 

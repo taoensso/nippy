@@ -7,6 +7,8 @@
             [taoensso.nippy.compression :as compression]
             [taoensso.nippy.benchmarks  :as benchmarks]))
 
+(comment (test/run-tests '[taoensso.nippy.tests.main]))
+
 (def test-data nippy/stress-data-comparable)
 (defn- before-run {:expectations-options :before-run} [])
 (defn- after-run  {:expectations-options :after-run}  [])

@@ -2,9 +2,9 @@
   {:author "Peter Taoussanis"}
   (:require [clojure.tools.reader.edn :as edn]
             [clojure.data.fressian    :as fressian]
+            [taoensso.encore          :as encore]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
-            [taoensso.nippy.compression :as compression]
-            [taoensso.nippy.utils       :as utils]))
+            [taoensso.nippy.compression :as compression]))
 
 (def data nippy/stress-data-benchable)
 
@@ -21,7 +21,7 @@
 
 (comment (fressian-thaw (fressian-freeze data)))
 
-(defmacro bench* [& body] `(utils/bench 10000 {:warmup-laps 20000} ~@body))
+(defmacro bench* [& body] `(encore/bench 10000 {:warmup-laps 20000} ~@body))
 (defn     bench1 [freezer thawer & [sizer]]
   (let [data-frozen (freezer data)
         time-freeze (bench* (freezer data))
