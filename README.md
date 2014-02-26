@@ -2,7 +2,7 @@
 
 ```clojure
 [com.taoensso/nippy "2.5.2"] ; Stable
-[com.taoensso/nippy "2.6.0-beta1"] ; For early adopters
+[com.taoensso/nippy "2.6.0-beta2"] ; For early adopters
 ```
 
 v2.6 will be a backwards-compatible release with: improved performance (incl. frozen data size), a new low-level DataInput/DataOuput API, improved support for headerless freezing, and 1-to-1 binary-value representation guarantees. See the [Changelog](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md) for details.
@@ -157,6 +157,8 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 
 ## Contact & contributing
 
+`lein start-dev` to get a (headless) development repl that you can connect to with [Cider][] (emacs) or your IDE.
+
 Please use the project's GitHub [issues page][] for project questions/comments/suggestions/whatever **(pull requests welcome!)**. Am very open to ideas if you have any!
 
 Otherwise reach me (Peter Taoussanis) at [taoensso.com][] or on [Twitter][]. Cheers!
@@ -176,5 +178,6 @@ Copyright &copy; 2012-2014 Peter Taoussanis. Distributed under the [Eclipse Publ
 [ClojureWerkz]: <http://clojurewerkz.org/>
 [issues page]: <https://github.com/ptaoussanis/nippy/issues>
 [commit history]: <https://github.com/ptaoussanis/nippy/commits/master>
+[Cider]: <https://github.com/clojure-emacs/cider>
 [taoensso.com]: <https://www.taoensso.com>
 [Eclipse Public License]: <https://raw2.github.com/ptaoussanis/nippy/master/LICENSE>
