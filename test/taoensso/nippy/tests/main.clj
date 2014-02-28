@@ -1,7 +1,7 @@
 (ns taoensso.nippy.tests.main
-  (:require [simple-check (core       :as sc)
-                          (generators :as sc-gen)
-                          (properties :as sc-prop)]
+  (:require [clojure.test.check            :as check]
+            [clojure.test.check.generators :as check-gen]
+            [clojure.test.check.properties :as check-props]
             [expectations   :as test :refer :all]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
             [taoensso.nippy.compression :as compression]
@@ -30,8 +30,8 @@
                    test-data))
 
 (expect ; Try roundtrip anything that simple-check can dream up
- (:result (sc/quick-check 80 ; Time is n-non-linear
-            (sc-prop/for-all [val sc-gen/any]
+ (:result (check/quick-check 80 ; Time is n-non-linear
+            (check-props/for-all [val check-gen/any]
               (= val (nippy/thaw (nippy/freeze val)))))))
 
 (expect AssertionError (thaw (freeze test-data {:password "malformed"})))
@@ -88,8 +88,8 @@
   (let [bin->val (atom {})
         val->bin (atom {})]
     (merge
-     (sc/quick-check (or n 1)
-       (sc-prop/for-all [val sc-gen/any #_sc-gen/any-printable]
+     (check/quick-check (or n 1)
+       (check-props/for-all [val check-gen/any #_check-gen/any-printable]
          (let [;; Nb need `seq` for Clojure hash equality:
                bin (hash (seq (freeze val)))]
            (and
@@ -107,7 +107,7 @@
      nil)))
 
 (comment
-  (sc-gen/sample sc-gen/any 10)
+  (check-gen/sample check-gen/any 10)
   (:result (qc-prop-bijection 80))
   (let [{:keys [result bin->val val->bin]} (qc-prop-bijection 10)]
     [result (vals bin->val)]))

@@ -23,7 +23,7 @@
    :1.6  {:dependencies [[org.clojure/clojure "1.6.0-beta1"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
           :dependencies [[expectations                  "1.4.56"]
-                         [reiddraper/simple-check       "0.5.6"]
+                         [org.clojure/test.check        "0.5.7"]
                          [org.clojure/data.fressian     "0.2.0"]
                          [org.xerial.snappy/snappy-java "1.1.1-M1"]]
           :plugins [[lein-expectations "0.0.8"]
