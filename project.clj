@@ -34,12 +34,9 @@
    :dev
    [:1.6 :test
     {:jvm-opts ^:replace ["-server" "-Xms1024m" "-Xmx2048m"]
-     :hooks []
      :dependencies []
-     :plugins []}]}
-
-  :plugins [[lein-ancient "0.5.4"]
-            [codox        "0.6.7"]]
+     :plugins [[lein-ancient "0.5.4"]
+               [codox        "0.6.7"]]}]}
 
   ;; :codox {:sources ["target/classes"]} ; cljx
   :aliases
