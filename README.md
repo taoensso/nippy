@@ -1,8 +1,8 @@
 **[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contributing](#contact--contributing) | current ([semantic][]) version:
 
 ```clojure
-[com.taoensso/nippy "2.5.2"] ; Stable
-[com.taoensso/nippy "2.6.0-beta2"] ; For early adopters
+[com.taoensso/nippy "2.5.2"]     ; Stable
+[com.taoensso/nippy "2.6.0-RC1"] ; Appropriate for staging, early production adopters
 ```
 
 v2.6 will be a backwards-compatible release with: improved performance (incl. frozen data size), a new low-level DataInput/DataOuput API, improved support for headerless freezing, and 1-to-1 binary-value representation guarantees. See the [Changelog](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md) for details.

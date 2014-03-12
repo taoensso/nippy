@@ -1,4 +1,4 @@
-## v2.6.0-beta2 / 2014 Feb 26
+## v2.6.0-RC1 / 2014 Mar 12
 
 > Welcoming feedback on any issues, etc.!
 
