@@ -1,5 +1,6 @@
 ## v2.6.0-RC1 / 2014 Mar 12
 
+> **Major release** with efficiency improvements, reliability improvements, and some new utils.
 > Welcoming feedback on any issues, etc.!
 
 ### New
@@ -11,13 +12,14 @@
  * New benchmarks added, notably a Fressian comparison.
  * Added experimental `freezable?` util fn to main ns.
  * Added some property-based [simple-check](https://github.com/reiddraper/simple-check) roundtrip tests.
+ * Public utils now available for custom type extension: `write-bytes`, `write-biginteger`, `write-utf8`, `write-compact-long`, and respective readers.
+
 
 ### Changes
 
  * **BREAKING**: the experimental `Compressable-LZMA2` type has changed (less overhead).
  * **DEPRECATED**: `freeze-to-stream!`, `thaw-from-stream!` are deprecated in favor of the more general `freeze-to-out!`, `thaw-from-in!`.
  * **DEPRECATED**: `:legacy-mode` options. This was being used mainly for headerless freezing, so a new headerless mode is taking its place.
- * Public utils now available for custom type extension: `write-bytes`, `write-biginteger`, `write-utf8`, `write-compact-long`, and respective readers.
  * Now distinguish between `BigInteger` and `BigInt` on thawing (previously both thawed to `BigInt`s). (mlacorte).
  * Moved most utils to external `encore` dependency.
 
