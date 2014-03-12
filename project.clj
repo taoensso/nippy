@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.6.0-beta2"
+(defproject com.taoensso/nippy "2.6.0-RC1"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
@@ -12,7 +12,7 @@
   :dependencies
   [[org.clojure/clojure      "1.4.0"]
    [org.clojure/tools.reader "0.8.3"]
-   [com.taoensso/encore      "0.9.2"]
+   [com.taoensso/encore      "0.9.8"]
    [org.iq80.snappy/snappy   "0.3"]
    [org.tukaani/xz           "1.4"]]
 
@@ -23,7 +23,7 @@
    :1.6  {:dependencies [[org.clojure/clojure "1.6.0-beta1"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
           :dependencies [[expectations                  "1.4.56"]
-                         [reiddraper/simple-check       "0.5.6"]
+                         [org.clojure/test.check        "0.5.7"]
                          [org.clojure/data.fressian     "0.2.0"]
                          [org.xerial.snappy/snappy-java "1.1.1-M1"]]
           :plugins [[lein-expectations "0.0.8"]
@@ -34,12 +34,9 @@
    :dev
    [:1.6 :test
     {:jvm-opts ^:replace ["-server" "-Xms1024m" "-Xmx2048m"]
-     :hooks []
      :dependencies []
-     :plugins []}]}
-
-  :plugins [[lein-ancient "0.5.4"]
-            [codox        "0.6.7"]]
+     :plugins [[lein-ancient "0.5.4"]
+               [codox        "0.6.7"]]}]}
 
   ;; :codox {:sources ["target/classes"]} ; cljx
   :aliases
