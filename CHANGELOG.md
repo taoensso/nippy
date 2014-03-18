@@ -1,3 +1,8 @@
+## Pending / unreleased
+
+ * Fix: `freezable?` fn name typo (mbossenbroek).
+
+
 ## v2.6.0-RC1 / 2014 Mar 12
 
 > **Major release** with efficiency improvements, reliability improvements, and some new utils.

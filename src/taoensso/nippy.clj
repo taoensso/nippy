@@ -700,7 +700,7 @@
 
 ;;;; Tools
 
-(encore/defalias freezeable? utils/freezable?)
+(encore/defalias freezable? utils/freezable?)
 
 (defn inspect-ba "Alpha - subject to change."
   [ba & [thaw-opts]]
