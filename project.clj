@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.6.0-RC1"
+(defproject com.taoensso/nippy "2.6.0"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
@@ -12,15 +12,15 @@
   :dependencies
   [[org.clojure/clojure      "1.4.0"]
    [org.clojure/tools.reader "0.8.3"]
-   [com.taoensso/encore      "0.9.8"]
+   [com.taoensso/encore      "1.1.0"]
    [org.iq80.snappy/snappy   "0.3"]
-   [org.tukaani/xz           "1.4"]]
+   [org.tukaani/xz           "1.5"]]
 
   :test-paths ["test" "src"]
   :profiles
   {;; :default [:base :system :user :provided :dev]
    :1.5  {:dependencies [[org.clojure/clojure "1.5.1"]]}
-   :1.6  {:dependencies [[org.clojure/clojure "1.6.0-beta1"]]}
+   :1.6  {:dependencies [[org.clojure/clojure "1.6.0"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
           :dependencies [[expectations                  "1.4.56"]
                          [org.clojure/test.check        "0.5.7"]
