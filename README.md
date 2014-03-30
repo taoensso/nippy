@@ -4,7 +4,7 @@
 [com.taoensso/nippy "2.6.0"] ; Stable
 ```
 
-v2.6 will be a backwards-compatible release with: improved performance (incl. frozen data size), a new low-level DataInput/DataOuput API, improved support for headerless freezing, and 1-to-1 binary-value representation guarantees. See the [Changelog](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md) for details.
+v2.6 is a **major, backwards-compatible release** with: improved performance (incl. frozen data size), a new low-level DataInput/DataOuput API, improved support for headerless freezing, and 1-to-1 binary-value representation guarantees. See the [CHANGELOG][] for details.
 
 # Nippy, a Clojure serialization library
 
