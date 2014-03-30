@@ -1,7 +1,6 @@
-## v2.6.0-RC1 / 2014 Mar 12
+## v2.6.0 / 2014 Mar 30
 
 > **Major release** with efficiency improvements, reliability improvements, and some new utils.
-> Welcoming feedback on any issues, etc.!
 
 ### New
 

@@ -1,8 +1,7 @@
 **[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contributing](#contact--contributing) | current ([semantic][]) version:
 
 ```clojure
-[com.taoensso/nippy "2.5.2"]     ; Stable
-[com.taoensso/nippy "2.6.0-RC1"] ; Appropriate for staging, production early adopters
+[com.taoensso/nippy "2.6.0"] ; Stable
 ```
 
 v2.6 will be a backwards-compatible release with: improved performance (incl. frozen data size), a new low-level DataInput/DataOuput API, improved support for headerless freezing, and 1-to-1 binary-value representation guarantees. See the [Changelog](https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md) for details.
@@ -35,7 +34,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your [Leiningen][] `project.clj` and `require` the library in your ns:
 
 ```clojure
-[com.taoensso/nippy "2.5.2"] ; project.clj
+[com.taoensso/nippy "2.6.0"] ; project.clj
 (ns my-app (:require [taoensso.nippy :as nippy])) ; ns
 ```
 
@@ -149,12 +148,6 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 
 [Detailed benchmark information](https://docs.google.com/spreadsheet/ccc?key=0AuSXb68FH4uhdE5kTTlocGZKSXppWG9sRzA5Y2pMVkE&pli=1#gid=0) is available on Google Docs.
 
-## This project supports the CDS and ![ClojureWerkz](https://raw.github.com/clojurewerkz/clojurewerkz.org/master/assets/images/logos/clojurewerkz_long_h_50.png) goals
-
-  * [CDS][], the **Clojure Documentation Site**, is a **contributer-friendly** community project aimed at producing top-notch, **beginner-friendly** Clojure tutorials and documentation. Awesome resource.
-
-  * [ClojureWerkz][] is a growing collection of open-source, **batteries-included Clojure libraries** that emphasise modern targets, great documentation, and thorough testing. They've got a ton of great stuff, check 'em out!
-
 ## Contact & contributing
 
 `lein start-dev` to get a (headless) development repl that you can connect to with [Cider][] (emacs) or your IDE.
@@ -169,7 +162,8 @@ Copyright &copy; 2012-2014 Peter Taoussanis. Distributed under the [Eclipse Publ
 
 
 [API docs]: <http://ptaoussanis.github.io/nippy/>
-[CHANGELOG]: <https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md>
+[CHANGELOG_]: <https://github.com/ptaoussanis/nippy/blob/master/CHANGELOG.md>
+[CHANGELOG]: <https://github.com/ptaoussanis/nippy/releases>
 [other Clojure libs]: <https://www.taoensso.com/clojure-libraries>
 [Twitter]: <https://twitter.com/ptaoussanis>
 [semantic]: <http://semver.org/>
