@@ -1,10 +1,11 @@
 **[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contributing](#contact--contributing) | current ([semantic][]) version:
 
 ```clojure
-[com.taoensso/nippy "2.6.3"] ; Stable (please upgrade from v2.6.0 ASAP)
+[com.taoensso/nippy "2.6.3"]        ; Stable
+[com.taoensso/nippy "2.7.0-alpha1"] ; EXPERIMENTAL! May irrevocably eat your data!!
 ```
 
-v2.6 is a **major, backwards-compatible release** with: improved performance (incl. frozen data size), a new low-level DataInput/DataOuput API, improved support for headerless freezing, and 1-to-1 binary-value representation guarantees. See the [CHANGELOG][] for details.
+v2.7 is a major, **mostly backwards-compatible** release focused on improved performance and a new default compression scheme (LZ4). See the [CHANGELOG][] for details. Thanks to [mpenet](https://github.com/mpenet) for his work on the LZ4 support!
 
 # Nippy, a Clojure serialization library
 

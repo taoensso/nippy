@@ -1,3 +1,23 @@
+## v2.7.0-alpha1 / 2014 Jul 6
+
+> **Major release** with significant performance improvements, a new default compression type ([LZ4](http://blog.jpountz.net/post/28092106032/wow-lz4-is-fast)), and better support for a variety of compression/encryption tools.
+>
+> The data format is fully **backwards-compatible**, the API is backwards compatible **unless** you are using the `:headerless-meta` thaw option.
+
+### Changes
+
+ * A number of internal performance improvements.
+ * Added [LZ4](http://blog.jpountz.net/post/28092106032/wow-lz4-is-fast) compressor, **replacing Snappy as the default** (often ~10+% faster with similar compression ratios). **Thanks to [mpenet](https://github.com/mpenet) for his work on this**!
+ * **BREAKING**: the `thaw` `:headerless-meta` option has been dropped. Its purpose was to provide Nippy v1 compatibility, which is now done automatically. To prevent any surprises, `thaw` calls with this option will now **throw an assertion error**.
+ * **IMPORTANT**: the `thaw` API has been improved (simplified). The default `:encryptor` and `:compressor` values are now both `:auto`, which'll choose intelligently based on data now included with the Nippy header. Behaviour remains the same for data written without a header: you must specify the correct `:compressor` and `:encryptor` values manually.
+ * Promoted from Alpha status: `taoensso.nippy.compression` ns, `taoensso.nippy.encryption` ns, `taoensso.nippy.tools` ns, `extend-freeze`, `extend-thaw`.
+ * All Nippy exceptions are now `ex-info`s.
+
+### NEW
+
+ * #50: `extend-freeze`, `extend-thaw` can now take arbitrary keyword type ids (see docstrings for more info).
+
+
 ## v2.6.3 / 2014 Apr 29
 
  * Fix #48: broken freeze/thaw identity for empty lazy seqs (@vgeshel).
