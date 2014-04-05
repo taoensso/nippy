@@ -6,7 +6,8 @@
             [taoensso.encore :as encore]
             [taoensso.nippy
              (utils       :as utils)
-             (compression :as compression :refer (snappy-compressor))
+             (compression :as compression :refer (lz4-compressor
+                                                  snappy-compressor))
              (encryption  :as encryption  :refer (aes128-encryptor))])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
              DataOutputStream Serializable ObjectOutputStream ObjectInputStream
@@ -25,13 +26,20 @@
 ;; * Nippy version check (=> supports changes to data schema over time).
 ;; * Encrypted &/or compressed data identification.
 ;;
-(def ^:private ^:const head-version 1)
+(def ^:private ^:const head-version 2)
 (def ^:private head-sig (.getBytes "NPY" "UTF-8"))
 (def ^:private ^:const head-meta "Final byte stores version-dependent metadata."
-  {(byte 0) {:version 1 :compressed? false :encrypted? false}
+  {;;; Nippy <= v2.6 with Snappy as default compressor
+   (byte 0) {:version 1 :compressed? false :encrypted? false}
    (byte 1) {:version 1 :compressed? true  :encrypted? false}
    (byte 2) {:version 1 :compressed? false :encrypted? true}
-   (byte 3) {:version 1 :compressed? true  :encrypted? true}})
+   (byte 3) {:version 1 :compressed? true  :encrypted? true}
+
+   ;;; EXPERIMENTAL: Nippy >= v2.7 with LZ4 as default compressor
+   (byte 4) {:version 2 :compressed? false :encrypted? false}
+   (byte 5) {:version 2 :compressed? true  :encrypted? false}
+   (byte 6) {:version 2 :compressed? false :encrypted? true}
+   (byte 7) {:version 2 :compressed? true  :encrypted? true}})
 
 (defmacro when-debug-mode [& body] (when #_true false `(do ~@body)))
 
@@ -310,8 +318,6 @@
 (comment (wrap-header (.getBytes "foo") {:compressed? true
                                          :encrypted?  false}))
 
-(declare assert-legacy-args) ; Deprecated
-
 (defn freeze-to-out!
   "Low-level API. Serializes arg (any Clojure data type) to a DataOutput."
   [^DataOutput data-output x & _]
@@ -321,12 +327,15 @@
   "Serializes arg (any Clojure data type) to a byte array. For custom types
   extend the Clojure reader or see `extend-freeze`."
   ^bytes [x & [{:keys [password compressor encryptor skip-header?]
-                :or   {compressor snappy-compressor
+                :or   {compressor lz4-compressor
                        encryptor  aes128-encryptor}
                 :as   opts}]]
-  (when (:legacy-mode opts) ; Deprecated
-    (assert-legacy-args compressor password))
-  (let [skip-header? (or skip-header? (:legacy-mode opts)) ; Deprecated
+  (let [;;; Legacy mode is deprecated
+        compressor (if-not (:legacy-mode opts) compressor snappy-compressor)
+        encryptor  (if-not (:legacy-mode opts) encryptor  nil)
+        ;;
+        skip-header? (or skip-header? (:legacy-mode opts) ; Deprecated
+                         )
         bas  (ByteArrayOutputStream.)
         sout (DataOutputStream. bas)]
     (freeze-to-out! sout x)
@@ -492,10 +501,10 @@
   fallback (`{:headerless-meta nil}`) if you're certain you won't be thawing
   headerless data."
   [^bytes ba & [{:keys [password compressor encryptor headerless-meta]
-                 :or   {compressor snappy-compressor
-                        encryptor  aes128-encryptor
+                 :or   {compressor :auto
+                        encryptor  :auto
                         headerless-meta ; Recommend set to nil when possible
-                        {:version     1
+                        {:version     2
                          :compressed? true
                          :encrypted?  false}}
                  :as   opts}]]
@@ -507,19 +516,26 @@
 
         ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
         try-thaw-data
-        (fn [data-ba {:keys [compressed? encrypted?] :as _head-or-headerless-meta}]
-          (let [password   (when encrypted?  password)
-                compressor (when compressed? compressor)]
+        (fn [data-ba {:keys [compressed? encrypted? version]
+                     :as _head-or-headerless-meta}]
+          (let [encryptor  (when (and password encrypted?)
+                             (if-not (identical? encryptor :auto) encryptor
+                               aes128-encryptor))
+                compressor (when compressed?
+                             (if-not (identical? compressor :auto) compressor
+                               (case (int version)
+                                 1 snappy-compressor
+                                 2 lz4-compressor)))]
             (try
               (let [ba data-ba
-                    ba (if password (encryption/decrypt encryptor password ba) ba)
-                    ba (if compressor (compression/decompress compressor ba)   ba)
+                    ba (if encryptor  (encryption/decrypt encryptor password ba) ba)
+                    ba (if compressor (compression/decompress compressor ba)     ba)
                     sin (DataInputStream. (ByteArrayInputStream. ba))]
                 (thaw-from-in! sin))
 
               (catch Exception e
                 (cond
-                 password   (if head-meta (ex "Wrong password/encryptor?" e)
+                 encryptor  (if head-meta (ex "Wrong password/encryptor?" e)
                                           (ex "Unencrypted data?" e))
                  compressor (if head-meta (ex "Encrypted data or wrong compressor?" e)
                                           (ex "Uncompressed data?" e))
@@ -614,7 +630,7 @@
   (let [compressed? (.readBoolean in)
         ba          (read-bytes in)]
     (thaw ba {:compressor compression/lzma2-compressor
-              :headerless-meta {:version     1
+              :headerless-meta {:version     2
                                 :compressed? compressed?
                                 :encrypted?  false}})))
 
@@ -738,12 +754,6 @@
 
 (def thaw-from-stream! "DEPRECATED: Use `thaw-from-in!` instead."
   thaw-from-in!)
-
-(defn- assert-legacy-args [compressor password]
-  (when password
-    (throw (AssertionError. "Encryption not supported in legacy mode.")))
-  (when (and compressor (not= compressor snappy-compressor))
-    (throw (AssertionError. "Only Snappy compressor supported in legacy mode."))))
 
 (defn freeze-to-bytes "DEPRECATED: Use `freeze` instead."
   ^bytes [x & {:keys [compress?]

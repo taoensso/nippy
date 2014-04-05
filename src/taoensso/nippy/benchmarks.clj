@@ -43,8 +43,12 @@
 
     (println {:default   (bench1 #(freeze % {})
                                  #(thaw   % {}))})
-    (println {:fast      (bench1 #(freeze % {:compressor nil})
-                                 #(thaw   % {:compressor nil}))})
+    (println {:fast      (bench1 #(freeze % {:compressor nil
+                                             :skip-header? true})
+                                 #(thaw   % {:headerless-meta
+                                             {:version 2
+                                              :compressed? false
+                                              :encrypted?  false}}))})
     (println {:encrypted (bench1 #(freeze % {:password [:cached "p"]})
                                  #(thaw   % {:password [:cached "p"]}))})
 
@@ -64,6 +68,11 @@
 (comment
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 1})
   ;; (bench {:laps 2})
+
+  ;;; 2014 Apr 5 w/ headerless :fast, LZ4 replacing Snappy as default compressor
+  ;; {:default   {:round 7669,  :freeze 4157, :thaw 3512, :size 16143}}
+  ;; {:fast      {:round 6918,  :freeze 3636, :thaw 3282, :size 16992}}
+  ;; {:encrypted {:round 11814, :freeze 6180, :thaw 5634, :size 16164}}
 
   ;;; 2014 Jan 22: with common-type size optimizations, enlarged stress-data
   ;; {:reader    {:round 109544, :freeze 39523, :thaw 70021, :size 27681}}

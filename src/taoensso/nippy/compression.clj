@@ -104,7 +104,8 @@
   (->LZ4Compressor (.fastCompressor   lz4-factory)
                    (.fastDecompressor lz4-factory)))
 
-(def lz4hc-compressor "Like `lz4-compressor` but trades some speed for ratio."
+(def lz4hc-compressor
+  "Like `lz4-compressor` but trades some write speed for ratio."
   (->LZ4Compressor (.highCompressor   lz4-factory)
                    (.fastDecompressor lz4-factory)))
 

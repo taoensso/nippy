@@ -16,7 +16,11 @@
 ;;;; Core
 
 (expect test-data ((comp thaw freeze) test-data))
-(expect test-data ((comp thaw #(freeze % {:legacy-mode true})) test-data))
+(expect test-data ((comp #(thaw   % {:headerless-meta {:version     1
+                                                       :compressed? true
+                                                       :encrypted?  false}})
+                         #(freeze % {:legacy-mode true}))
+                   test-data))
 (expect test-data ((comp #(thaw   % {:password [:salted "p"]})
                          #(freeze % {:password [:salted "p"]}))
                    test-data))
