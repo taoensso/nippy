@@ -14,7 +14,8 @@
    [org.clojure/tools.reader "0.8.4"]
    [com.taoensso/encore      "1.3.1"]
    [org.iq80.snappy/snappy   "0.3"]
-   [org.tukaani/xz           "1.5"]]
+   [org.tukaani/xz           "1.5"]
+   [net.jpountz.lz4/lz4      "1.2.0"]]
 
   :test-paths ["test" "src"]
   :profiles
