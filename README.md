@@ -115,9 +115,9 @@ Couldn't be simpler!
 
 See also the lower-level `freeze-to-out!` and `thaw-from-in!` fns for operating on `DataOutput` and `DataInput` types directly. 
 
-### Encryption (currently in **ALPHA**)
+### Encryption (v2+)
 
-Nippy v2+ also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
+Nippy also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
 
 ```clojure
 (nippy/freeze nippy/stress-data {:password [:salted "my-password"]}) ; Encrypt
@@ -126,7 +126,7 @@ Nippy v2+ also gives you **dead simple data encryption**. Add a single option to
 
 There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-encryptor` [docstring](http://ptaoussanis.github.io/nippy/taoensso.nippy.encryption.html) for a detailed explanation of why/when you'd want one or the other.
 
-### Custom types (v2.1+, ALPHA - subject to change)
+### Custom types (v2.1+)
 
 ```clojure
 (defrecord MyType [data])

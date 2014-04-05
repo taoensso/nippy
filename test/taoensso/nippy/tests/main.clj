@@ -4,7 +4,6 @@
             [clojure.test.check.properties :as check-props]
             [expectations   :as test :refer :all]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
-            [taoensso.nippy.compression :as compression]
             [taoensso.nippy.benchmarks  :as benchmarks]))
 
 (comment (test/run-tests '[taoensso.nippy.tests.main]))
@@ -16,21 +15,22 @@
 ;;;; Core
 
 (expect test-data ((comp thaw freeze) test-data))
-(expect test-data ((comp #(thaw   % {:headerless-meta {:version     1
-                                                       :compressed? true
-                                                       :encrypted?  false}})
+(expect test-data ((comp #(thaw   % {})
                          #(freeze % {:legacy-mode true}))
                    test-data))
 (expect test-data ((comp #(thaw   % {:password [:salted "p"]})
                          #(freeze % {:password [:salted "p"]}))
                    test-data))
-(expect test-data ((comp #(thaw   % {:compressor compression/lzma2-compressor})
-                         #(freeze % {:compressor compression/lzma2-compressor}))
+(expect test-data ((comp #(thaw   % {:compressor nippy/lzma2-compressor})
+                         #(freeze % {:compressor nippy/lzma2-compressor}))
                    test-data))
-(expect test-data ((comp #(thaw   % {:compressor compression/lzma2-compressor
+(expect test-data ((comp #(thaw   % {:compressor nippy/lzma2-compressor
                                      :password [:salted "p"]})
-                         #(freeze % {:compressor compression/lzma2-compressor
+                         #(freeze % {:compressor nippy/lzma2-compressor
                                      :password [:salted "p"]}))
+                   test-data))
+(expect test-data ((comp #(thaw   % {:compressor nippy/lz4-compressor})
+                         #(freeze % {:compressor nippy/lz4hc-compressor}))
                    test-data))
 
 (expect ; Try roundtrip anything that simple-check can dream up
@@ -38,7 +38,7 @@
             (check-props/for-all [val check-gen/any]
               (= val (nippy/thaw (nippy/freeze val)))))))
 
-(expect AssertionError (thaw (freeze test-data {:password "malformed"})))
+(expect Exception (thaw (freeze test-data {:password "malformed"})))
 (expect Exception (thaw (freeze test-data {:password [:salted "p"]})))
 (expect Exception (thaw (freeze test-data {:password [:salted "p"]})
                         {:compressor nil}))

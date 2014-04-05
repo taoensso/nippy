@@ -1,4 +1,4 @@
-(ns taoensso.nippy.compression "Alpha - subject to change."
+(ns taoensso.nippy.compression
   {:author "Peter Taoussanis"}
   (:require [taoensso.encore :as encore])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
@@ -7,13 +7,17 @@
 ;;;; Interface
 
 (defprotocol ICompressor
+  (header-id         [compressor])
   (compress   ^bytes [compressor ba])
   (decompress ^bytes [compressor ba]))
 
 ;;;; Default implementations
 
+(def standard-header-ids "These'll support :auto thaw." #{:snappy :lzma2 :lz4})
+
 (deftype SnappyCompressor []
   ICompressor
+  (header-id  [_] :snappy)
   (compress   [_ ba] (org.iq80.snappy.Snappy/compress   ba))
   (decompress [_ ba] (org.iq80.snappy.Snappy/uncompress ba 0 (alength ^bytes ba))))
 
@@ -29,30 +33,34 @@
 (deftype LZMA2Compressor [compression-level]
   ;; Compression level ∈ℕ[0,9] (low->high) with 6 LZMA2 default (we use 0)
   ICompressor
-  (compress [_ ba]
-    (let [ba-len (alength ^bytes ba)
-          ba-os  (ByteArrayOutputStream.)
+  (header-id [_] :lzma2)
+  (compress  [_ ba]
+    (let [baos (ByteArrayOutputStream.)
+          dos  (DataOutputStream. baos)
+          ;;
+          len-decomp (alength ^bytes ba)
           ;; Prefix with uncompressed length:
-          _      (.writeInt (DataOutputStream. ba-os) ba-len)
-          xzs    (org.tukaani.xz.XZOutputStream. ba-os
-                   (org.tukaani.xz.LZMA2Options. compression-level))]
+          _   (.writeInt dos len-decomp)
+          xzs (org.tukaani.xz.XZOutputStream. baos
+                (org.tukaani.xz.LZMA2Options. compression-level))]
       (.write xzs ^bytes ba)
       (.close xzs)
-      (.toByteArray ba-os)))
+      (.toByteArray baos)))
 
   (decompress [_ ba]
-    (let [ba-is  (ByteArrayInputStream. ba)
-          ba-len (.readInt (DataInputStream. ba-is))
-          ba     (byte-array ba-len)
-          xzs    (org.tukaani.xz.XZInputStream. ba-is)]
-      (.read xzs ba 0 ba-len)
+    (let [bais (ByteArrayInputStream. ba)
+          dis  (DataInputStream. bais)
+          ;;
+          len-decomp (.readInt dis)
+          ba         (byte-array len-decomp)
+          xzs        (org.tukaani.xz.XZInputStream. bais)]
+      (.read xzs ba 0 len-decomp)
       (when (not= -1 (.read xzs)) ; Good practice as extra safety measure
-        (throw (Exception. "LZMA2 Decompress failed: corrupt data?")))
+        (throw (ex-info "LZMA2 Decompress failed: corrupt data?" {:ba ba})))
       ba)))
 
 (def lzma2-compressor
-  "Alpha - subject to change.
-  Default org.tukaani.xz.LZMA2 compressor:
+  "Default org.tukaani.xz.LZMA2 compressor:
         Ratio: high.
   Write speed: _very_ slow (also currently single-threaded).
    Read speed: slow.
@@ -64,7 +72,8 @@
 (deftype LZ4Compressor [^net.jpountz.lz4.LZ4Compressor   compressor
                         ^net.jpountz.lz4.LZ4Decompressor decompressor]
   ICompressor
-  (compress [_ ba]
+  (header-id [_] :lz4)
+  (compress  [_ ba]
     (let [len-decomp   (alength ^bytes ba)
           max-len-comp (.maxCompressedLength compressor len-decomp)
           ba-comp*     (byte-array max-len-comp) ; Over-sized
@@ -82,10 +91,10 @@
           ;;
           len-decomp (.readInt dis)
           len-comp   (- (alength ^bytes ba) 4)
-          ba-comp    (byte-array len-comp)
-          _          (.readFully dis ba-comp 0 len-comp)
+          ;; ba-comp (byte-array len-comp)
+          ;; _       (.readFully dis ba-comp 0 len-comp)
           ba-decomp  (byte-array len-decomp)
-          _          (.decompress decompressor ba-comp 0 ba-decomp 0 len-decomp)]
+          _          (.decompress decompressor ba 4 ba-decomp 0 len-decomp)]
       ba-decomp)))
 
 (def ^:private ^net.jpountz.lz4.LZ4Factory lz4-factory
@@ -118,13 +127,13 @@
                               (count ba-bench)))})
 
   (println
-   {:snappy  (bench1 snappy-compressor)
-    ;; :lzma (bench1 lzma2-compressor) ; Slow!
-    :lz4     (bench1 lz4-compressor)
-    :lz4hc   (bench1 lz4hc-compressor)})
+   {:snappy (bench1 snappy-compressor)
+    ;:lzma2  (bench1 lzma2-compressor) ; Slow!
+    :lz4    (bench1 lz4-compressor)
+    :lz4hc  (bench1 lz4hc-compressor)})
 
-  ;;; 2014 April 5, initial benchmarks
-  {:snappy   {:time 2214  :ratio 0.848}
-   :lzma     {:time 46684 :ratio 0.494}
-   :lz4      {:time 1363  :ratio 0.819}
-   :lz4hc    {:time 6045  :ratio 0.763}})
+  ;;; 2014 April 7
+  {:snappy {:time 2251, :ratio 0.852},
+   :lzma2  {:time 46684 :ratio 0.494}
+   :lz4    {:time 1184, :ratio 0.819},
+   :lz4hc  {:time 5422, :ratio 0.761}})
