@@ -11,7 +11,7 @@
                 *assert* true}
   :dependencies
   [[org.clojure/clojure      "1.4.0"]
-   [org.clojure/tools.reader "0.8.3"]
+   [org.clojure/tools.reader "0.8.4"]
    [com.taoensso/encore      "1.3.1"]
    [org.iq80.snappy/snappy   "0.3"]
    [org.tukaani/xz           "1.5"]]
