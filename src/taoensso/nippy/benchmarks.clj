@@ -66,10 +66,15 @@
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 1})
   ;; (bench {:laps 2})
 
+  ;;; 2014 Apr 7 w/ some additional implementation tuning
+  {:default   {:round 6533,  :freeze 3618, :thaw 2915, :size 16139}}
+  {:fast      {:round 6250,  :freeze 3376, :thaw 2874, :size 16992}}
+  {:encrypted {:round 10583, :freeze 5581, :thaw 5002, :size 16164}}
+
   ;;; 2014 Apr 5 w/ headerless :fast, LZ4 replacing Snappy as default compressor
-  {:default   {:round 7669,  :freeze 4157, :thaw 3512, :size 16143}}
-  {:fast      {:round 6918,  :freeze 3636, :thaw 3282, :size 16992}}
-  {:encrypted {:round 11814, :freeze 6180, :thaw 5634, :size 16164}}
+  {:default   {:round 7039,  :freeze 3865, :thaw 3174, :size 16123}}
+  {:fast      {:round 6394,  :freeze 3379, :thaw 3015, :size 16992}}
+  {:encrypted {:round 11035, :freeze 5860, :thaw 5175, :size 16148}}
 
   ;;; 2014 Jan 22: with common-type size optimizations, enlarged stress-data
   {:reader    {:round 109544, :freeze 39523, :thaw 70021, :size 27681}}
