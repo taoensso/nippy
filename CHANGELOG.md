@@ -1,3 +1,9 @@
+## v2.6.1 / 2014 Apr 8
+
+> **CRITICAL FIX** for v2.6.0 released 9 days ago. Please upgrade ASAP!
+
+
+
 ## v2.6.0 / 2014 Mar 30
 
 > **Major release** with efficiency improvements, reliability improvements, and some new utils.

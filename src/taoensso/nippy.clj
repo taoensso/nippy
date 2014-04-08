@@ -186,7 +186,7 @@
 (extend-type String ; Optimized common-case type
   Freezable
   (freeze-to-out* [x ^DataOutput out]
-    (let [ba (.getBytes x)]
+    (let [ba (.getBytes x "UTF-8")]
       (if (<= (alength ^bytes ba) Byte/MAX_VALUE)
         (do (write-id    out id-string-small)
             (write-bytes out ba :small))
