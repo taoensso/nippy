@@ -1,7 +1,24 @@
 ## v2.6.1 / 2014 Apr 8
 
-> **CRITICAL FIX** for v2.6.0 released 9 days ago. Please upgrade ASAP!
+**CRITICAL FIX** for v2.6.0 released 9 days ago. **Please upgrade ASAP!**
 
+### Problem
+
+Small strings weren't getting a proper UTF-8 encoding:
+`(.getBytes <string>)` was being used here instead of
+`(.getBytes <string> "UTF-8")` as is correct and done elsewhere.
+
+This means that small UTF-8 _strings may have been incorrectly stored_
+in environments where UTF-8 is not the default JVM character encoding.
+
+Bug was introduced in Nippy v2.6.0, released 9 days ago (2014 Mar 30).
+
+*********************************************************************
+Please check for possible errors in Unicode text written using Nippy
+v2.6.0 if your JVM uses an alternative character encoding by default
+*********************************************************************
+
+Really sorry about this! Thanks to @xkihzew for the bug report.
 
 
 ## v2.6.0 / 2014 Mar 30
