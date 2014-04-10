@@ -8,6 +8,8 @@ v2.6 is a **major, backwards-compatible release** with: improved performance (in
 
 # Nippy, a Clojure serialization library
 
+[![Build Status](https://secure.travis-ci.org/ptaoussanis/nippy.png)](http://travis-ci.org/ptaoussanis/nippy)
+
 Clojure's [rich data types](http://clojure.org/datatypes) are *awesome*. And its [reader](http://clojure.org/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
 Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**. It's used, among others, as the [Carmine Redis client](https://github.com/ptaoussanis/carmine) and [Faraday DynamoDB client](https://github.com/ptaoussanis/faraday) serializer.
