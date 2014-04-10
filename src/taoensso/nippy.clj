@@ -436,8 +436,9 @@
         id-reader
         (let [edn (read-utf8 in)]
           (try (edn/read-string {:readers *data-readers*} edn)
-               (catch Exception _ {:nippy/unthawable edn
-                                   :type :reader})))
+               (catch Exception e {:nippy/unthawable edn
+                                   :type :reader
+                                   :throwable e})))
 
         id-serializable
         (let [class-name (read-utf8 in)]
@@ -446,8 +447,9 @@
                      object (.readObject (ObjectInputStream. in))
                      class ^Class (Class/forName class-name)]
                  (cast class object))
-               (catch Exception _ {:nippy/unthawable class-name
-                                   :type :serializable})))
+               (catch Exception e {:nippy/unthawable class-name
+                                   :type :serializable
+                                   :throwable e})))
 
         id-bytes   (read-bytes in)
         id-nil     nil
@@ -551,7 +553,7 @@
     nil            nil
     :aes128-sha512 aes128-encryptor
     :no-header     (throw (ex-info ":auto not supported on headerless data." {}))
-    :else (throw (ex-info ":auto not supported for non-standard encryptors."))
+    :else (throw (ex-info ":auto not supported for non-standard encryptors." {}))
     (throw (ex-info (format "Unrecognized :auto encryptor id: %s" encryptor-id)
                     {:encryptor-id encryptor-id}))))
 
