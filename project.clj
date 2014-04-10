@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.6.1"
+(defproject com.taoensso/nippy "2.6.2"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
@@ -12,7 +12,7 @@
   :dependencies
   [[org.clojure/clojure      "1.4.0"]
    [org.clojure/tools.reader "0.8.3"]
-   [com.taoensso/encore      "1.1.0"]
+   [com.taoensso/encore      "1.3.1"]
    [org.iq80.snappy/snappy   "0.3"]
    [org.tukaani/xz           "1.5"]]
 

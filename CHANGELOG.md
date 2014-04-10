@@ -1,3 +1,8 @@
+## v2.6.2 / 2014 Apr 10
+
+Fix #46: broken support for Clojure <1.5.0 (@kul).
+
+
 ## v2.6.1 / 2014 Apr 8
 
 **CRITICAL FIX** for v2.6.0 released 9 days ago. **Please upgrade ASAP!**
