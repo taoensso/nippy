@@ -436,8 +436,9 @@
         id-reader
         (let [edn (read-utf8 in)]
           (try (edn/read-string {:readers *data-readers*} edn)
-               (catch Exception _ {:nippy/unthawable edn
-                                   :type :reader})))
+               (catch Exception e {:nippy/unthawable edn
+                                   :type :reader
+                                   :throwable e})))
 
         id-serializable
         (let [class-name (read-utf8 in)]
@@ -446,8 +447,9 @@
                      object (.readObject (ObjectInputStream. in))
                      ^Class class (Class/forName class-name)]
                  (cast class object))
-               (catch Exception _ {:nippy/unthawable class-name
-                                   :type :serializable})))
+               (catch Exception e {:nippy/unthawable class-name
+                                   :type :serializable
+                                   :throwable e})))
 
         id-bytes   (read-bytes in)
         id-nil     nil
