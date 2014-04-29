@@ -1,6 +1,11 @@
+## v2.6.3 / 2014 Apr 29
+
+ * Fix #48: broken freeze/thaw identity for empty lazy seqs (@vgeshel).
+
+
 ## v2.6.2 / 2014 Apr 10
 
-Fix #46: broken support for Clojure <1.5.0 (@kul).
+ * Fix #46: broken support for Clojure <1.5.0 (@kul).
 
 
 ## v2.6.1 / 2014 Apr 8
