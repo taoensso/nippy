@@ -410,7 +410,9 @@
         id-vector  (read-coll in  [])
         id-set     (read-coll in #{})
         id-map     (read-kvs  in  {})
-        id-seq     (seq (read-coll in []))
+        id-seq     (or (seq (read-coll in []))
+                       (lazy-seq nil) ; Empty coll
+                       )
 
         id-meta (let [m (thaw-from-in in)] (with-meta (thaw-from-in in) m))
 
@@ -666,6 +668,7 @@
      :meta         (with-meta {:a :A} {:metakey :metaval})
 
      :lazy-seq     (repeatedly 1000 rand)
+     :lazy-seq-empty (map identity '())
 
      :byte         (byte 16)
      :short        (short 42)
