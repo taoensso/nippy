@@ -11,8 +11,8 @@
                 *assert* true}
   :dependencies
   [[org.clojure/clojure      "1.4.0"]
-   [org.clojure/tools.reader "0.8.4"]
-   [com.taoensso/encore      "1.3.1"]
+   [org.clojure/tools.reader "0.8.5"]
+   [com.taoensso/encore      "1.7.0"]
    [org.iq80.snappy/snappy   "0.3"]
    [org.tukaani/xz           "1.5"]
    [net.jpountz.lz4/lz4      "1.2.0"]]
@@ -24,9 +24,9 @@
    :1.6  {:dependencies [[org.clojure/clojure "1.6.0"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
           :dependencies [[expectations                  "1.4.56"]
-                         [org.clojure/test.check        "0.5.7"]
+                         [org.clojure/test.check        "0.5.8"]
                          [org.clojure/data.fressian     "0.2.0"]
-                         [org.xerial.snappy/snappy-java "1.1.1-M1"]]
+                         [org.xerial.snappy/snappy-java "1.1.1"]]
           :plugins [[lein-expectations "0.0.8"]
                     [lein-autoexpect   "1.2.2"]]}
    :dev* [:dev {:jvm-opts ^:replace ["-server"]
