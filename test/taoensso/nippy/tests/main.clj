@@ -57,16 +57,22 @@
 
 ;;; Extend to custom Type
 (defrecord MyType [data])
-(nippy/extend-freeze MyType 1 [x s] (.writeUTF s (:data x)))
-(expect Exception (thaw (freeze (->MyType "val"))))
+(expect Exception (do (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (:data x)))
+                      (thaw (freeze (->MyType "val")))))
 (expect (do (nippy/extend-thaw 1 [s] (->MyType (.readUTF s)))
             (let [type (->MyType "val")] (= type (thaw (freeze type))))))
 
 ;;; Extend to custom Record
 (defrecord MyRec [data])
-(expect (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "fast-" (:data x))))
+(expect (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "foo-" (:data x))))
             (nippy/extend-thaw 2 [s] (->MyRec (.readUTF s)))
-            (= (->MyRec "fast-val") (thaw (freeze (->MyRec "val"))))))
+            (= (->MyRec "foo-val") (thaw (freeze (->MyRec "val"))))))
+
+;;; Keyword (prefixed) extensions
+(expect
+  (do (nippy/extend-freeze MyType :nippy-tests/MyType [x s] (.writeUTF s (:data x)))
+      (nippy/extend-thaw :nippy-tests/MyType [s] (->MyType (.readUTF s)))
+      (let [type (->MyType "val")] (= type (thaw (freeze type))))))
 
 ;;;; Stable binary representation of vals ; EXPERIMENTAL
 

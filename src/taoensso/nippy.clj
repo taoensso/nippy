@@ -19,11 +19,15 @@
              PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList ; LazySeq
              IRecord ISeq]))
 
-;;;; Nippy 2.x+ header spec (4 bytes)
-;; Header is optional but recommended + enabled by default. Purpose:
-;; * Sanity check (data appears to be Nippy data).
-;; * Nippy version check (=> supports changes to data schema over time).
-;; * Supports :auto thaw compressor, encryptor.
+;;;; Nippy data format
+;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1].
+;; { * 1-byte type id.
+;;   * Arb-length payload. } ...
+;;
+;; [1] Inclusion of header is strongly recommended. Purpose:
+;;   * Sanity check (confirm that data appears to be Nippy data).
+;;   * Nippy version check (=> supports changes to data schema over time).
+;;   * Supports :auto thaw compressor, encryptor.
 ;;
 (def ^:private ^:const head-version 1)
 (def ^:private head-sig (.getBytes "NPY" "UTF-8"))
@@ -51,8 +55,10 @@
 
 ;;;; Data type IDs
 
-;; **Negative ids reserved for user-defined types**
 (do ; Just for easier IDE collapsing
+
+  ;; ** Negative ids reserved for user-defined types **
+  ;;
   (def ^:const id-reserved   (int 0))
   ;;                              1
   (def ^:const id-bytes      (int 2))
@@ -93,6 +99,7 @@
 
   (def ^:const id-record     (int 80))
   ;; (def ^:const id-type    (int 81)) ; TODO?
+  (def ^:const id-prefixed-custom (int 82))
 
   (def ^:const id-date       (int 90))
   (def ^:const id-uuid       (int 91))
@@ -402,6 +409,20 @@
                     [(thaw-from-in in#) (thaw-from-in in#)])))
 
 (declare ^:private custom-readers)
+(defn- read-custom! [type-id in]
+  (if-let [custom-reader (get @custom-readers type-id)]
+    (try
+      (custom-reader in)
+      (catch Exception e
+        (throw
+          (ex-info
+            (format "Reader exception for custom type with internal id: %s"
+              type-id) {:internal-type-id type-id} e))))
+    (throw
+      (ex-info
+        (format "No reader provided for custom type with internal id: %s"
+          type-id)
+        {:internal-type-id type-id}))))
 
 (defn- thaw-from-in
   [^DataInput in]
@@ -491,22 +512,12 @@
                         (* 2 (.readInt in)) (thaw-from-in in)))
         id-old-keyword (keyword (.readUTF in))
 
-        (if-not (neg? type-id)
-          (throw (ex-info (format "Unknown type ID: %s" type-id)
-                   {:type-id type-id}))
+        id-prefixed-custom ; Prefixed custom type
+        (let [hash-id (.readShort in)]
+          (read-custom! hash-id in))
 
-          ;; Custom types
-          (if-let [reader (get @custom-readers type-id)]
-            (try (reader in)
-                 (catch Exception e
-                   (throw (ex-info
-                           (format "Reader exception for custom type ID: %s"
-                                   (- type-id))
-                           {:type-id (- type-id)} e))))
-            (throw (ex-info
-                    (format "No reader provided for custom type ID: %s"
-                            (- type-id))
-                    {:type-id (- type-id)})))))
+        (read-custom! type-id in) ; Unprefixed custom type (catchall)
+        )
 
       (catch Exception e
         (throw (ex-info (format "Thaw failed against type-id: %s" type-id)
@@ -617,29 +628,67 @@
 
 ;;;; Custom types
 
+(defn- assert-custom-type-id [custom-type-id]
+  (assert (or      (keyword? custom-type-id)
+              (and (integer? custom-type-id) (<= 1 custom-type-id 128)))))
+
+(defn coerce-custom-type-id
+  "* +ive byte id -> -ive byte id (for unprefixed custom types).
+   * Keyword id   -> Short hash id (for prefixed custom types)."
+  [custom-type-id]
+  (assert-custom-type-id custom-type-id)
+  (if-not (keyword? custom-type-id)
+    (int (- custom-type-id))
+    (let [hash-id       (hash custom-type-id)
+          short-hash-id (if (pos? hash-id)
+                          (mod hash-id Short/MAX_VALUE)
+                          (mod hash-id Short/MIN_VALUE))]
+      ;; Make sure hash ids can't collide with byte ids (unlikely anyway):
+      (assert (not (<= -128 short-hash-id -1))
+        "Custom type id hash collision; please choose a different id")
+      (int short-hash-id))))
+
+(comment (coerce-custom-type-id 77)
+         (coerce-custom-type-id :foo/bar))
+
 (defmacro extend-freeze
   "Extends Nippy to support freezing of a custom type (ideally concrete) with
-  id ∈[1, 128]:
+  given id of form:
+    * Keyword        - 2 byte overhead, resistent to id collisions.
+    * Byte ∈[1, 128] - no overhead, subject to id collisions.
+
   (defrecord MyType [data])
-  (extend-freeze MyType 1 [x data-output]
+  (extend-freeze MyType :foo/my-type [x data-output] ; Keyword id
+    (.writeUTF [data-output] (:data x)))
+  ;; or
+  (extend-freeze MyType 1 [x data-output] ; Byte id
     (.writeUTF [data-output] (:data x)))"
   [type custom-type-id [x out] & body]
-  (assert (and (>= custom-type-id 1) (<= custom-type-id 128)))
+  (assert-custom-type-id custom-type-id)
   `(extend-type ~type Freezable
      (~'freeze-to-out* [~x ~(with-meta out {:tag 'java.io.DataOutput})]
-       (write-id ~out ~(int (- custom-type-id)))
+       (if-not ~(keyword? custom-type-id)
+         ;; Unprefixed [cust byte id][payload]:
+         (write-id ~out ~(coerce-custom-type-id custom-type-id))
+         ;; Prefixed [const byte id][cust hash id][payload]:
+         (do (write-id    ~out id-prefixed-custom)
+             (.writeShort ~out ~(coerce-custom-type-id custom-type-id))))
        ~@body)))
 
-(defonce custom-readers (atom {})) ; {<custom-type-id> (fn [data-input]) ...}
+(defonce custom-readers (atom {})) ; {<hash-or-byte-id> (fn [data-input]) ...}
 (defmacro extend-thaw
-  "Extends Nippy to support thawing of a custom type with id ∈[1, 128]:
-  (extend-thaw 1 [data-input]
+  "Extends Nippy to support thawing of a custom type with given id:
+  (extend-thaw :foo/my-type [data-input] ; Keyword id
+    (->MyType (.readUTF data-input)))
+  ;; or
+  (extend-thaw 1 [data-input] ; Byte id
     (->MyType (.readUTF data-input)))"
   [custom-type-id [in] & body]
-  (assert (and (>= custom-type-id 1) (<= custom-type-id 128)))
-  `(swap! custom-readers assoc ~(int (- custom-type-id))
-          (fn [~(with-meta in {:tag 'java.io.DataInput})]
-            ~@body)))
+  (assert-custom-type-id custom-type-id)
+  `(swap! custom-readers assoc
+     ~(coerce-custom-type-id custom-type-id)
+     (fn [~(with-meta in {:tag 'java.io.DataInput})]
+       ~@body)))
 
 (comment (defrecord MyType [data])
          (extend-freeze MyType 1 [x out] (.writeUTF out (:data x)))

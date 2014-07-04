@@ -131,11 +131,11 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 ```clojure
 (defrecord MyType [data])
 
-(nippy/extend-freeze MyType 1 ; A unique type id ∈[1, 128]
+(nippy/extend-freeze MyType :my-type/foo ; A unique (namespaced) type identifier
   [x data-output]
   (.writeUTF data-output (:data x)))
 
-(nippy/extend-thaw 1 ; Same type id
+(nippy/extend-thaw :my-type/foo ; Same type id
   [data-input]
   (->MyType (.readUTF data-input)))
 
