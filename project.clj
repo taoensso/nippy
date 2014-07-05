@@ -24,7 +24,7 @@
    :1.5  {:dependencies [[org.clojure/clojure "1.5.1"]]}
    :1.6  {:dependencies [[org.clojure/clojure "1.6.0"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
-          :dependencies [[expectations                  "2.0.7"]
+          :dependencies [[expectations                  "1.4.56"]
                          [org.clojure/test.check        "0.5.8"]
                          ;; [com.cemerick/double-check  "0.5.7"]
                          [org.clojure/data.fressian     "0.2.0"]
