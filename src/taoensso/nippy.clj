@@ -632,7 +632,7 @@
   (assert (or      (keyword? custom-type-id)
               (and (integer? custom-type-id) (<= 1 custom-type-id 128)))))
 
-(defn coerce-custom-type-id
+(defn- coerce-custom-type-id
   "* +ive byte id -> -ive byte id (for unprefixed custom types).
    * Keyword id   -> Short hash id (for prefixed custom types)."
   [custom-type-id]
