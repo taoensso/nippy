@@ -1,3 +1,10 @@
+## v2.7.0-SNAPSHOT / Unreleased
+
+### Changes
+
+ * `extend-thaw` now prints a warning when replacing a pre-existing type id.
+
+
 ## v2.7.0-alpha1 / 2014 Jul 6
 
 > **Major release** with significant performance improvements, a new default compression type ([LZ4](http://blog.jpountz.net/post/28092106032/wow-lz4-is-fast)), and better support for a variety of compression/encryption tools.
