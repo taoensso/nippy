@@ -685,6 +685,9 @@
     (->MyType (.readUTF data-input)))"
   [custom-type-id [in] & body]
   (assert-custom-type-id custom-type-id)
+  (when (contains? @custom-readers (coerce-custom-type-id custom-type-id))
+    (println (format "Warning: resetting Nippy thaw for custom type with id: %s"
+               custom-type-id)))
   `(swap! custom-readers assoc
      ~(coerce-custom-type-id custom-type-id)
      (fn [~(with-meta in {:tag 'java.io.DataInput})]
