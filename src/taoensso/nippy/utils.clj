@@ -1,7 +1,8 @@
 (ns taoensso.nippy.utils
   {:author "Peter Taoussanis"}
   (:require [clojure.string           :as str]
-            [clojure.tools.reader.edn :as edn])
+            [clojure.tools.reader.edn :as edn]
+            [taoensso.encore          :as encore])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream Serializable
              ObjectOutputStream ObjectInputStream]))
 
@@ -17,12 +18,7 @@
             cacheable? (not (re-find #"__\d+" (str t))) ; gensym form
             test (fn [] (try (f-test x) (catch Exception _ false)))]
         (if-not cacheable? (test)
-          (if-let [dv (@cache t)] @dv
-          (locking cache ; For thread racing
-            (if-let [dv (@cache t)] @dv ; Retry after lock acquisition
-              (let [dv (delay (test))]
-                (swap! cache assoc t dv)
-                @dv)))))))))
+          @(encore/swap-val! cache t #(if % % (delay (test)))))))))
 
 (def serializable?
   (memoize-type-test
@@ -46,10 +42,10 @@
   (readable? "Hello world")
   (readable? (fn []))
 
-  (time (dotimes [_ 10000] (serializable? "Hello world")))
-  (time (dotimes [_ 10000] (serializable? (fn []))))
-  (time (dotimes [_ 10000] (readable? "Hello world")))
-  (time (dotimes [_ 10000] (readable? (fn [])))))
+  (time (dotimes [_ 10000] (serializable? "Hello world"))) ; Cacheable
+  (time (dotimes [_ 10000] (serializable? (fn []))))        ; Uncacheable
+  (time (dotimes [_ 10000] (readable? "Hello world")))     ; Cacheable
+  (time (dotimes [_ 10000] (readable? (fn [])))))           ; Uncacheable
 
 ;;;;
 

@@ -1,10 +1,11 @@
-**[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contributing](#contact--contributing) | current ([semantic][]) version:
+**[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contrib](#contact--contributing) | current [Break Version][]:
 
 ```clojure
-[com.taoensso/nippy "2.6.3"] ; Stable (please upgrade from v2.6.0 ASAP)
+[com.taoensso/nippy "2.6.3"]     ; Stable
+[com.taoensso/nippy "2.7.0-RC1"] ; Development
 ```
 
-v2.6 is a **major, backwards-compatible release** with: improved performance (incl. frozen data size), a new low-level DataInput/DataOuput API, improved support for headerless freezing, and 1-to-1 binary-value representation guarantees. See the [CHANGELOG][] for details.
+v2.7 is a major, **mostly backwards-compatible** release focused on improved performance and a new default compression scheme (LZ4). See the [CHANGELOG][] for details. Thanks to [mpenet](https://github.com/mpenet) for his work on the LZ4 support!
 
 # Nippy, a Clojure serialization library
 
@@ -115,9 +116,9 @@ Couldn't be simpler!
 
 See also the lower-level `freeze-to-out!` and `thaw-from-in!` fns for operating on `DataOutput` and `DataInput` types directly. 
 
-### Encryption (currently in **ALPHA**)
+### Encryption (v2+)
 
-Nippy v2+ also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
+Nippy also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
 
 ```clojure
 (nippy/freeze nippy/stress-data {:password [:salted "my-password"]}) ; Encrypt
@@ -126,16 +127,16 @@ Nippy v2+ also gives you **dead simple data encryption**. Add a single option to
 
 There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-encryptor` [docstring](http://ptaoussanis.github.io/nippy/taoensso.nippy.encryption.html) for a detailed explanation of why/when you'd want one or the other.
 
-### Custom types (v2.1+, ALPHA - subject to change)
+### Custom types (v2.1+)
 
 ```clojure
 (defrecord MyType [data])
 
-(nippy/extend-freeze MyType 1 ; A unique type id ∈[1, 128]
+(nippy/extend-freeze MyType :my-type/foo ; A unique (namespaced) type identifier
   [x data-output]
   (.writeUTF data-output (:data x)))
 
-(nippy/extend-thaw 1 ; Same type id
+(nippy/extend-thaw :my-type/foo ; Same type id
   [data-input]
   (->MyType (.readUTF data-input)))
 
@@ -166,7 +167,8 @@ Copyright &copy; 2012-2014 Peter Taoussanis. Distributed under the [Eclipse Publ
 [CHANGELOG]: <https://github.com/ptaoussanis/nippy/releases>
 [other Clojure libs]: <https://www.taoensso.com/clojure-libraries>
 [Twitter]: <https://twitter.com/ptaoussanis>
-[semantic]: <http://semver.org/>
+[SemVer]: <http://semver.org/>
+[Break Version]: <https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md>
 [Leiningen]: <http://leiningen.org/>
 [CDS]: <http://clojure-doc.org/>
 [ClojureWerkz]: <http://clojurewerkz.org/>

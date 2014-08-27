@@ -4,7 +4,6 @@
             [clojure.test.check.properties :as check-props]
             [expectations   :as test :refer :all]
             [taoensso.nippy :as nippy :refer (freeze thaw)]
-            [taoensso.nippy.compression :as compression]
             [taoensso.nippy.benchmarks  :as benchmarks]))
 
 (comment (test/run-tests '[taoensso.nippy.tests.main]))
@@ -16,17 +15,22 @@
 ;;;; Core
 
 (expect test-data ((comp thaw freeze) test-data))
-(expect test-data ((comp thaw #(freeze % {:legacy-mode true})) test-data))
+(expect test-data ((comp #(thaw   % {})
+                         #(freeze % {:legacy-mode true}))
+                   test-data))
 (expect test-data ((comp #(thaw   % {:password [:salted "p"]})
                          #(freeze % {:password [:salted "p"]}))
                    test-data))
-(expect test-data ((comp #(thaw   % {:compressor compression/lzma2-compressor})
-                         #(freeze % {:compressor compression/lzma2-compressor}))
+(expect test-data ((comp #(thaw   % {:compressor nippy/lzma2-compressor})
+                         #(freeze % {:compressor nippy/lzma2-compressor}))
                    test-data))
-(expect test-data ((comp #(thaw   % {:compressor compression/lzma2-compressor
+(expect test-data ((comp #(thaw   % {:compressor nippy/lzma2-compressor
                                      :password [:salted "p"]})
-                         #(freeze % {:compressor compression/lzma2-compressor
+                         #(freeze % {:compressor nippy/lzma2-compressor
                                      :password [:salted "p"]}))
+                   test-data))
+(expect test-data ((comp #(thaw   % {:compressor nippy/lz4-compressor})
+                         #(freeze % {:compressor nippy/lz4hc-compressor}))
                    test-data))
 
 (expect ; Try roundtrip anything that simple-check can dream up
@@ -34,7 +38,7 @@
             (check-props/for-all [val check-gen/any]
               (= val (nippy/thaw (nippy/freeze val)))))))
 
-(expect AssertionError (thaw (freeze test-data {:password "malformed"})))
+(expect Exception (thaw (freeze test-data {:password "malformed"})))
 (expect Exception (thaw (freeze test-data {:password [:salted "p"]})))
 (expect Exception (thaw (freeze test-data {:password [:salted "p"]})
                         {:compressor nil}))
@@ -53,16 +57,22 @@
 
 ;;; Extend to custom Type
 (defrecord MyType [data])
-(nippy/extend-freeze MyType 1 [x s] (.writeUTF s (:data x)))
-(expect Exception (thaw (freeze (->MyType "val"))))
+(expect Exception (do (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (:data x)))
+                      (thaw (freeze (->MyType "val")))))
 (expect (do (nippy/extend-thaw 1 [s] (->MyType (.readUTF s)))
             (let [type (->MyType "val")] (= type (thaw (freeze type))))))
 
 ;;; Extend to custom Record
 (defrecord MyRec [data])
-(expect (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "fast-" (:data x))))
+(expect (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "foo-" (:data x))))
             (nippy/extend-thaw 2 [s] (->MyRec (.readUTF s)))
-            (= (->MyRec "fast-val") (thaw (freeze (->MyRec "val"))))))
+            (= (->MyRec "foo-val") (thaw (freeze (->MyRec "val"))))))
+
+;;; Keyword (prefixed) extensions
+(expect
+  (do (nippy/extend-freeze MyType :nippy-tests/MyType [x s] (.writeUTF s (:data x)))
+      (nippy/extend-thaw :nippy-tests/MyType [s] (->MyType (.readUTF s)))
+      (let [type (->MyType "val")] (= type (thaw (freeze type))))))
 
 ;;;; Stable binary representation of vals ; EXPERIMENTAL
 

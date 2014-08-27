@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.6.3"
+(defproject com.taoensso/nippy "2.7.0-SNAPSHOT"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
@@ -9,44 +9,42 @@
   :min-lein-version "2.3.3"
   :global-vars {*warn-on-reflection* true
                 *assert* true}
+
   :dependencies
   [[org.clojure/clojure      "1.4.0"]
-   [org.clojure/tools.reader "0.8.3"]
-   [com.taoensso/encore      "1.3.1"]
+   [org.clojure/tools.reader "0.8.7"]
+   [com.taoensso/encore      "1.7.1"]
    [org.iq80.snappy/snappy   "0.3"]
-   [org.tukaani/xz           "1.5"]]
+   [org.tukaani/xz           "1.5"]
+   [net.jpountz.lz4/lz4      "1.2.0"]]
 
-  :test-paths ["test" "src"]
   :profiles
   {;; :default [:base :system :user :provided :dev]
+   :server-jvm {:jvm-opts ^:replace ["-server" "-Xms1024m" "-Xmx2048m"]}
    :1.5  {:dependencies [[org.clojure/clojure "1.5.1"]]}
    :1.6  {:dependencies [[org.clojure/clojure "1.6.0"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
-          :dependencies [[expectations                  "1.4.56"]
-                         [org.clojure/test.check        "0.5.7"]
+          :dependencies [[expectations                  "2.0.9"]
+                         [org.clojure/test.check        "0.5.9"]
+                         ;; [com.cemerick/double-check  "0.5.7"]
                          [org.clojure/data.fressian     "0.2.0"]
-                         [org.xerial.snappy/snappy-java "1.1.1-M1"]]
-          :plugins [[lein-expectations "0.0.8"]
-                    [lein-autoexpect   "1.2.2"]]}
-   :dev* [:dev {:jvm-opts ^:replace ["-server"]
-                ;; :hooks [cljx.hooks leiningen.cljsbuild] ; cljx
-                }]
-   :dev
-   [:1.6 :test
-    {:jvm-opts ^:replace ["-server" "-Xms1024m" "-Xmx2048m"]
-     :dependencies []
-     :plugins [[lein-ancient "0.5.4"]
-               [codox        "0.6.7"]]}]}
+                         [org.xerial.snappy/snappy-java "1.1.1.3"]]}
+   :dev [:1.6 :test
+         {:plugins
+          [[lein-pprint       "1.1.1"]
+           [lein-ancient      "0.5.5"]
+           [lein-expectations "0.0.8"]
+           [lein-autoexpect   "1.2.2"]
+           [codox             "0.8.10"]]}]}
 
-  ;; :codox {:sources ["target/classes"]} ; cljx
+  :test-paths ["test" "src"]
+
   :aliases
   {"test-all"   ["with-profile" "default:+1.5:+1.6" "expectations"]
    ;; "test-all"   ["with-profile" "default:+1.6" "expectations"]
    "test-auto"  ["with-profile" "+test" "autoexpect"]
-   ;; "build-once" ["do" "cljx" "once," "cljsbuild" "once"] ; cljx
-   ;; "deploy-lib" ["do" "build-once," "deploy" "clojars," "install"] ; cljx
    "deploy-lib" ["do" "deploy" "clojars," "install"]
-   "start-dev"  ["with-profile" "+dev*" "repl" ":headless"]}
+   "start-dev"  ["with-profile" "+server-jvm" "repl" ":headless"]}
 
   :repositories
   {"sonatype"

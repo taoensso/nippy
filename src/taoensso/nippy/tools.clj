@@ -1,7 +1,6 @@
 (ns taoensso.nippy.tools
-  "Alpha - subject to change.
-  Utilities for third-party tools that want to add fully-user-configurable Nippy
-  support. Used by Carmine and Faraday."
+  "Utilities for third-party tools that want to add fully-user-configurable
+  Nippy support. Used by Carmine and Faraday."
   {:author "Peter Taoussanis"}
   (:require [taoensso.nippy :as nippy]))
 
@@ -23,26 +22,12 @@
 (comment (freeze (wrap-for-freezing "wrapped"))
          (freeze "unwrapped"))
 
-(defrecord EncryptedFrozen [ba])
-(defn encrypted-frozen? [x] (instance? EncryptedFrozen x))
-
 (def ^:dynamic *thaw-opts* nil)
 (defmacro with-thaw-opts
   "Evaluates body using given options for any automatic deserialization in
   context."
   [opts & body] `(binding [*thaw-opts* ~opts] ~@body))
 
-(defn thaw
-  "Like `nippy/thaw` but takes options from *thaw-opts* binding, and wraps
-  encrypted bytes for easy identification when no password has been provided
-  for decryption."
+(defn thaw "Like `nippy/thaw` but takes options from *thaw-opts* binding."
   [ba & [{:keys [default-opts]}]]
-  (let [result (nippy/thaw ba (merge default-opts *thaw-opts*
-                                     {:taoensso.nippy/tools-thaw? true}))]
-    (if (= result :taoensso.nippy/need-password)
-      (EncryptedFrozen. ba)
-      result)))
-
-(comment (thaw (nippy/freeze "c" {:password [:cached "p"]}))
-         (with-thaw-opts {:password [:cached "p"]}
-           (thaw (nippy/freeze "c" {:password [:cached "p"]}))))
+  (nippy/thaw ba (merge default-opts *thaw-opts*)))

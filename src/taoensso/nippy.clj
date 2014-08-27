@@ -6,8 +6,8 @@
             [taoensso.encore :as encore]
             [taoensso.nippy
              (utils       :as utils)
-             (compression :as compression :refer (snappy-compressor))
-             (encryption  :as encryption  :refer (aes128-encryptor))])
+             (compression :as compression)
+             (encryption  :as encryption)])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
              DataOutputStream Serializable ObjectOutputStream ObjectInputStream
              DataOutput DataInput]
@@ -19,26 +19,46 @@
              PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList ; LazySeq
              IRecord ISeq]))
 
-;;;; Nippy 2.x+ header spec (4 bytes)
-;; Header is optional but recommended + enabled by default. Uses:
-;; * Sanity check (data appears to be Nippy data).
-;; * Nippy version check (=> supports changes to data schema over time).
-;; * Encrypted &/or compressed data identification.
+;;;; Nippy data format
+;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1].
+;; { * 1-byte type id.
+;;   * Arb-length payload. } ...
+;;
+;; [1] Inclusion of header is strongly recommended. Purpose:
+;;   * Sanity check (confirm that data appears to be Nippy data).
+;;   * Nippy version check (=> supports changes to data schema over time).
+;;   * Supports :auto thaw compressor, encryptor.
 ;;
 (def ^:private ^:const head-version 1)
 (def ^:private head-sig (.getBytes "NPY" "UTF-8"))
 (def ^:private ^:const head-meta "Final byte stores version-dependent metadata."
-  {(byte 0) {:version 1 :compressed? false :encrypted? false}
-   (byte 1) {:version 1 :compressed? true  :encrypted? false}
-   (byte 2) {:version 1 :compressed? false :encrypted? true}
-   (byte 3) {:version 1 :compressed? true  :encrypted? true}})
+  {(byte 0)  {:version 1 :compressor-id nil     :encryptor-id nil}
+   (byte 4)  {:version 1 :compressor-id nil     :encryptor-id :else}
+   (byte 5)  {:version 1 :compressor-id :else   :encryptor-id nil}
+   (byte 6)  {:version 1 :compressor-id :else   :encryptor-id :else}
+   ;;
+   (byte 2)  {:version 1 :compressor-id nil     :encryptor-id :aes128-sha512}
+   ;;
+   (byte 1)  {:version 1 :compressor-id :snappy :encryptor-id nil}
+   (byte 3)  {:version 1 :compressor-id :snappy :encryptor-id :aes128-sha512}
+   (byte 7)  {:version 1 :compressor-id :snappy :encryptor-id :else}
+   ;;
+   (byte 8)  {:version 1 :compressor-id :lz4    :encryptor-id nil}
+   (byte 9)  {:version 1 :compressor-id :lz4    :encryptor-id :aes128-sha512}
+   (byte 10) {:version 1 :compressor-id :lz4    :encryptor-id :else}
+   ;;
+   (byte 11) {:version 1 :compressor-id :lzma2  :encryptor-id nil}
+   (byte 12) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-sha512}
+   (byte 13) {:version 1 :compressor-id :lzma2  :encryptor-id :else}})
 
 (defmacro when-debug-mode [& body] (when #_true false `(do ~@body)))
 
 ;;;; Data type IDs
 
-;; **Negative ids reserved for user-defined types**
 (do ; Just for easier IDE collapsing
+
+  ;; ** Negative ids reserved for user-defined types **
+  ;;
   (def ^:const id-reserved   (int 0))
   ;;                              1
   (def ^:const id-bytes      (int 2))
@@ -78,7 +98,8 @@
   (def ^:const id-ratio      (int 70))
 
   (def ^:const id-record     (int 80))
-  ;; (def ^:const id-type    (int 81)) ; TODO
+  ;; (def ^:const id-type    (int 81)) ; TODO?
+  (def ^:const id-prefixed-custom (int 82))
 
   (def ^:const id-date       (int 90))
   (def ^:const id-uuid       (int 91))
@@ -102,6 +123,21 @@
   (def ^:const id-old-map     (int 22)) ; as of 0.9.0, for more efficient thaw
   (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
   )
+
+;;;; Ns imports (mostly for convenience of lib consumers)
+
+(encore/defalias compress          compression/compress)
+(encore/defalias decompress        compression/decompress)
+(encore/defalias snappy-compressor compression/snappy-compressor)
+(encore/defalias lzma2-compressor  compression/lzma2-compressor)
+(encore/defalias lz4-compressor    compression/lz4-compressor)
+(encore/defalias lz4hc-compressor  compression/lz4hc-compressor)
+
+(encore/defalias encrypt           encryption/encrypt)
+(encore/defalias decrypt           encryption/decrypt)
+(encore/defalias aes128-encryptor  encryption/aes128-encryptor)
+
+(encore/defalias freezable?        utils/freezable?)
 
 ;;;; Freezing
 
@@ -129,7 +165,7 @@
   (let [x (with-meta x {:tag 'String})]
     `(write-bytes ~out (.getBytes ~x "UTF-8") ~small?)))
 
-(defmacro write-compact-long "EXPERIMENTAL! Uses 2->9 bytes." [out x]
+(defmacro write-compact-long "Uses 2->9 bytes." [out x]
   `(write-bytes ~out (.toByteArray (java.math.BigInteger/valueOf (long ~x)))
                 :small))
 
@@ -296,21 +332,25 @@
 
      :else ; Fallback #3: *final-freeze-fallback*
      (if-let [ffb *final-freeze-fallback*] (ffb x out)
-       (throw (Exception. (format "Unfreezable type: %s %s"
-                                  (type x) (str x))))))))
+       (throw (ex-info (format "Unfreezable type: %s %s" (type x) (str x))
+                {:type   (type x)
+                 :as-str (pr-str x)}))))))
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
+(def ^:private get-head-ba
+  (memoize
+   (fn [head-meta]
+     (when-let [meta-id (get head-meta-id (assoc head-meta :version head-version))]
+       (encore/ba-concat head-sig (byte-array [meta-id]))))))
 
-(defn- wrap-header [data-ba metadata]
-  (if-let [meta-id (head-meta-id (assoc metadata :version head-version))]
-    (let [head-ba (encore/ba-concat head-sig (byte-array [meta-id]))]
-      (encore/ba-concat head-ba data-ba))
-    (throw (Exception. (str "Unrecognized header metadata: " metadata)))))
+(defn- wrap-header [data-ba head-meta]
+  (if-let [head-ba (get-head-ba head-meta)]
+    (encore/ba-concat head-ba data-ba)
+    (throw (ex-info (format "Unrecognized header meta: %s" head-meta)
+             {:head-meta head-meta}))))
 
-(comment (wrap-header (.getBytes "foo") {:compressed? true
-                                         :encrypted?  false}))
-
-(declare assert-legacy-args) ; Deprecated
+(comment (wrap-header (.getBytes "foo") {:compressor-id :lz4
+                                         :encryptor-id  nil}))
 
 (defn freeze-to-out!
   "Low-level API. Serializes arg (any Clojure data type) to a DataOutput."
@@ -318,24 +358,30 @@
   (freeze-to-out data-output x))
 
 (defn freeze
-  "Serializes arg (any Clojure data type) to a byte array. For custom types
-  extend the Clojure reader or see `extend-freeze`."
-  ^bytes [x & [{:keys [password compressor encryptor skip-header?]
-                :or   {compressor snappy-compressor
+  "Serializes arg (any Clojure data type) to a byte array. To freeze custom
+  types, extend the Clojure reader or see `extend-freeze`."
+  ^bytes [x & [{:keys [compressor encryptor password skip-header?]
+                :or   {compressor lz4-compressor
                        encryptor  aes128-encryptor}
                 :as   opts}]]
-  (when (:legacy-mode opts) ; Deprecated
-    (assert-legacy-args compressor password))
-  (let [skip-header? (or skip-header? (:legacy-mode opts)) ; Deprecated
-        bas  (ByteArrayOutputStream.)
-        sout (DataOutputStream. bas)]
-    (freeze-to-out! sout x)
-    (let [ba (.toByteArray bas)
-          ba (if compressor (compression/compress compressor ba) ba)
-          ba (if password   (encryption/encrypt encryptor password ba) ba)]
+  (let [legacy-mode? (:legacy-mode opts) ; DEPRECATED Nippy v1-compatible freeze
+        compressor   (if-not legacy-mode? compressor snappy-compressor)
+        encryptor    (when password (if-not legacy-mode? encryptor nil))
+        skip-header? (or skip-header? legacy-mode?)
+        baos (ByteArrayOutputStream.)
+        dos  (DataOutputStream. baos)]
+    (freeze-to-out! dos x)
+    (let [ba (.toByteArray baos)
+          ba (if-not compressor ba (compress compressor ba))
+          ba (if-not encryptor  ba (encrypt encryptor password ba))]
       (if skip-header? ba
-        (wrap-header ba {:compressed? (boolean compressor)
-                         :encrypted?  (boolean password)})))))
+        (wrap-header ba
+          {:compressor-id (when-let [c compressor]
+                            (or (compression/standard-header-ids
+                                 (compression/header-id c)) :else))
+           :encryptor-id  (when-let [e encryptor]
+                            (or (encryption/standard-header-ids
+                                 (encryption/header-id e)) :else))})))))
 
 ;;;; Thawing
 
@@ -353,8 +399,7 @@
 (defmacro read-utf8 [in & [small?]]
   `(String. (read-bytes ~in ~small?) "UTF-8"))
 
-(defmacro read-compact-long "EXPERIMENTAL!" [in]
-  `(long (BigInteger. (read-bytes ~in :small))))
+(defmacro read-compact-long [in] `(long (BigInteger. (read-bytes ~in :small))))
 
 (defmacro ^:private read-coll [in coll]
   `(let [in# ~in] (encore/repeatedly-into* ~coll (.readInt in#) (thaw-from-in in#))))
@@ -364,6 +409,20 @@
                     [(thaw-from-in in#) (thaw-from-in in#)])))
 
 (declare ^:private custom-readers)
+(defn- read-custom! [type-id in]
+  (if-let [custom-reader (get @custom-readers type-id)]
+    (try
+      (custom-reader in)
+      (catch Exception e
+        (throw
+          (ex-info
+            (format "Reader exception for custom type with internal id: %s"
+              type-id) {:internal-type-id type-id} e))))
+    (throw
+      (ex-info
+        (format "No reader provided for custom type with internal id: %s"
+          type-id)
+        {:internal-type-id type-id}))))
 
 (defn- thaw-from-in
   [^DataInput in]
@@ -453,20 +512,16 @@
                         (* 2 (.readInt in)) (thaw-from-in in)))
         id-old-keyword (keyword (.readUTF in))
 
-        (if-not (neg? type-id)
-          (throw (Exception. (str "Unknown type ID: " type-id)))
+        id-prefixed-custom ; Prefixed custom type
+        (let [hash-id (.readShort in)]
+          (read-custom! hash-id in))
 
-          ;; Custom types
-          (if-let [reader (get @custom-readers type-id)]
-            (try (reader in)
-                 (catch Exception e
-                   (throw (Exception. (str "Reader exception for custom type ID: "
-                                           (- type-id)) e))))
-            (throw (Exception. (str "No reader provided for custom type ID: "
-                                    (- type-id)))))))
+        (read-custom! type-id in) ; Unprefixed custom type (catchall)
+        )
 
       (catch Exception e
-        (throw (Exception. (format "Thaw failed against type-id: %s" type-id) e))))))
+        (throw (ex-info (format "Thaw failed against type-id: %s" type-id)
+                 {:type-id type-id} e))))))
 
 (defn thaw-from-in!
   "Low-level API. Deserializes a frozen object from given DataInput to its
@@ -477,121 +532,166 @@
 (defn- try-parse-header [ba]
   (when-let [[head-ba data-ba] (encore/ba-split ba 4)]
     (let [[head-sig* [meta-id]] (encore/ba-split head-ba 3)]
-      (when (encore/ba= head-sig* head-sig) ; Appears to be well-formed
-        [data-ba (head-meta meta-id {:unrecognized-meta? true})]))))
+      (when (encore/ba= head-sig* head-sig) ; Header appears to be well-formed
+        [data-ba (get head-meta meta-id {:unrecognized-meta? true})]))))
+
+(defn- get-auto-compressor [compressor-id]
+  (case compressor-id
+    nil        nil
+    :snappy    snappy-compressor
+    :lzma2     lzma2-compressor
+    :lz4       lz4-compressor
+    :no-header (throw (ex-info ":auto not supported on headerless data." {}))
+    :else (throw (ex-info ":auto not supported for non-standard compressors." {}))
+    (throw (ex-info (format "Unrecognized :auto compressor id: %s" compressor-id)
+                    {:compressor-id compressor-id}))))
+
+(defn- get-auto-encryptor [encryptor-id]
+  (case encryptor-id
+    nil            nil
+    :aes128-sha512 aes128-encryptor
+    :no-header     (throw (ex-info ":auto not supported on headerless data." {}))
+    :else (throw (ex-info ":auto not supported for non-standard encryptors."))
+    (throw (ex-info (format "Unrecognized :auto encryptor id: %s" encryptor-id)
+                    {:encryptor-id encryptor-id}))))
 
 (defn thaw
   "Deserializes a frozen object from given byte array to its original Clojure
-  data type. By default[1] supports data frozen with current and all previous
-  versions of Nippy. For custom types extend the Clojure reader or see
-  `extend-thaw`.
+  data type. Supports data frozen with current and all previous versions of
+  Nippy. To thaw custom types, extend the Clojure reader or see `extend-thaw`.
 
-  [1] :headerless-meta provides a fallback facility for data frozen without a
-  standard Nippy header (notably all Nippy v1 data). A default is provided for
-  Nippy v1 thaw compatibility, but it's recommended that you _disable_ this
-  fallback (`{:headerless-meta nil}`) if you're certain you won't be thawing
-  headerless data."
-  [^bytes ba & [{:keys [password compressor encryptor headerless-meta]
-                 :or   {compressor snappy-compressor
-                        encryptor  aes128-encryptor
-                        headerless-meta ; Recommend set to nil when possible
-                        {:version     1
-                         :compressed? true
-                         :encrypted?  false}}
+  Options include:
+    :compressor - An ICompressor, :auto (requires Nippy header), or nil.
+    :encryptor  - An IEncryptor,  :auto (requires Nippy header), or nil."
+  [^bytes ba & [{:keys [compressor encryptor password]
+                 :or   {compressor :auto
+                        encryptor  :auto}
                  :as   opts}]]
 
-  (let [headerless-meta (merge headerless-meta (:legacy-opts opts)) ; Deprecated
-        _ (assert (or (nil? headerless-meta)
-                      (head-meta-id headerless-meta))
-                  "Bad :headerless-meta (should be nil or a valid `head-meta` value)")
+  (assert (not (contains? opts :headerless-meta))
+    ":headerless-meta `thaw` option removed as of Nippy v2.7.")
 
-        ex (fn [msg & [e]] (throw (Exception. (str "Thaw failed: " msg) e)))
-        try-thaw-data
-        (fn [data-ba {:keys [compressed? encrypted?] :as _head-or-headerless-meta}]
-          (let [password   (when encrypted?  password)
-                compressor (when compressed? compressor)]
+  (let [ex (fn [msg & [e]] (throw (ex-info (format "Thaw failed: %s" msg)
+                                   {:opts (merge opts
+                                            {:compressor compressor
+                                             :encryptor  encryptor})}
+                                   e)))
+        thaw-data
+        (fn [data-ba compressor-id encryptor-id]
+          (let [compressor (if-not (identical? compressor :auto) compressor
+                             (get-auto-compressor compressor-id))
+                encryptor  (if-not (identical? encryptor :auto) encryptor
+                             (get-auto-encryptor encryptor-id))]
+
+            (when (and encryptor (not password))
+              (ex "Password required for decryption."))
+
             (try
               (let [ba data-ba
-                    ba (if password (encryption/decrypt encryptor password ba) ba)
-                    ba (if compressor (compression/decompress compressor ba)   ba)
-                    sin (DataInputStream. (ByteArrayInputStream. ba))]
-                (thaw-from-in! sin))
+                    ba (if-not encryptor  ba (decrypt encryptor password ba))
+                    ba (if-not compressor ba (decompress compressor ba))
+                    dis (DataInputStream. (ByteArrayInputStream. ba))]
+                (thaw-from-in! dis))
 
               (catch Exception e
-                (cond
-                 password   (if head-meta (ex "Wrong password/encryptor?" e)
-                                          (ex "Unencrypted data?" e))
-                 compressor (if head-meta (ex "Encrypted data or wrong compressor?" e)
-                                          (ex "Uncompressed data?" e))
-                 :else      (if head-meta (ex "Corrupt data?" e)
-                                          (ex "Data may be unfrozen, corrupt, compressed &/or encrypted.")))))))]
+                (ex "Decryption/decompression failure, or data unfrozen/damaged.")))))
 
-    (if-let [[data-ba {:keys [unrecognized-meta? compressed? encrypted?]
+        thaw-nippy-v1-data ; A little hackish, but necessary
+        (fn [data-ba]
+          (try (thaw-data data-ba :snappy nil)
+               (catch Exception _
+                 (thaw-data data-ba nil nil))))]
+
+    (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
                        :as   head-meta}] (try-parse-header ba)]
 
-      (cond ; A well-formed header _appears_ to be present
-       (and (not headerless-meta) ; Cautious. It's unlikely but possible the
-                                  ; header sig match was a fluke and not an
-                                  ; indication of a real, well-formed header.
-                                  ; May really be headerless.
-            unrecognized-meta?)
-       (ex "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?")
-
-       ;;; It's still possible below that the header match was a fluke, but it's
-       ;;; _very_ unlikely. Therefore _not_ going to incl.
-       ;;; `(not headerless-meta)` conditions below.
-
-       (and compressed? (not compressor))
-       (ex "Compressed data? Try again with compressor.")
-       (and encrypted? (not password))
-       (if (::tools-thaw? opts) ::need-password
-           (ex "Encrypted data? Try again with password."))
-       :else (try (try-thaw-data data-ba head-meta)
-                  (catch Exception e
-                    (if headerless-meta
-                      (try (try-thaw-data ba headerless-meta)
-                           (catch Exception _
-                             (throw e)))
-                      (throw e)))))
+      ;; A well-formed header _appears_ to be present (it's possible though
+      ;; unlikely that this is a fluke and data is actually headerless):
+      (try (thaw-data data-ba compressor-id encryptor-id)
+           (catch Exception e
+             (try (thaw-nippy-v1-data)
+                  (catch Exception _
+                    (if unrecognized-meta?
+                      (ex "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?"
+                          e)
+                      (throw e))))))
 
       ;; Well-formed header definitely not present
-      (if headerless-meta
-        (try-thaw-data ba headerless-meta)
-        (ex "Data may be unfrozen, corrupt, compressed &/or encrypted.")))))
+      (try (thaw-nippy-v1-data ba)
+           (catch Exception _
+             (thaw-data ba :no-header :no-header))))))
 
 (comment (thaw (freeze "hello"))
          (thaw (freeze "hello" {:compressor nil}))
-         (thaw (freeze "hello" {:password [:salted "p"]})) ; ex
+         (thaw (freeze "hello" {:password [:salted "p"]})) ; ex: no pwd
          (thaw (freeze "hello") {:password [:salted "p"]}))
 
 ;;;; Custom types
 
+(defn- assert-custom-type-id [custom-type-id]
+  (assert (or      (keyword? custom-type-id)
+              (and (integer? custom-type-id) (<= 1 custom-type-id 128)))))
+
+(defn- coerce-custom-type-id
+  "* +ive byte id -> -ive byte id (for unprefixed custom types).
+   * Keyword id   -> Short hash id (for prefixed custom types)."
+  [custom-type-id]
+  (assert-custom-type-id custom-type-id)
+  (if-not (keyword? custom-type-id)
+    (int (- custom-type-id))
+    (let [hash-id       (hash custom-type-id)
+          short-hash-id (if (pos? hash-id)
+                          (mod hash-id Short/MAX_VALUE)
+                          (mod hash-id Short/MIN_VALUE))]
+      ;; Make sure hash ids can't collide with byte ids (unlikely anyway):
+      (assert (not (<= -128 short-hash-id -1))
+        "Custom type id hash collision; please choose a different id")
+      (int short-hash-id))))
+
+(comment (coerce-custom-type-id 77)
+         (coerce-custom-type-id :foo/bar))
+
 (defmacro extend-freeze
-  "Alpha - subject to change.
-  Extends Nippy to support freezing of a custom type (ideally concrete) with
-  id ∈[1, 128]:
+  "Extends Nippy to support freezing of a custom type (ideally concrete) with
+  given id of form:
+    * Keyword        - 2 byte overhead, resistent to id collisions.
+    * Byte ∈[1, 128] - no overhead, subject to id collisions.
+
   (defrecord MyType [data])
-  (extend-freeze MyType 1 [x data-output]
+  (extend-freeze MyType :foo/my-type [x data-output] ; Keyword id
+    (.writeUTF [data-output] (:data x)))
+  ;; or
+  (extend-freeze MyType 1 [x data-output] ; Byte id
     (.writeUTF [data-output] (:data x)))"
   [type custom-type-id [x out] & body]
-  (assert (and (>= custom-type-id 1) (<= custom-type-id 128)))
-  `(extend-type ~type
-     Freezable
+  (assert-custom-type-id custom-type-id)
+  `(extend-type ~type Freezable
      (~'freeze-to-out* [~x ~(with-meta out {:tag 'java.io.DataOutput})]
-       (write-id ~out ~(int (- custom-type-id)))
+       (if-not ~(keyword? custom-type-id)
+         ;; Unprefixed [cust byte id][payload]:
+         (write-id ~out ~(coerce-custom-type-id custom-type-id))
+         ;; Prefixed [const byte id][cust hash id][payload]:
+         (do (write-id    ~out id-prefixed-custom)
+             (.writeShort ~out ~(coerce-custom-type-id custom-type-id))))
        ~@body)))
 
-(defonce custom-readers (atom {})) ; {<custom-type-id> (fn [data-input]) ...}
+(defonce custom-readers (atom {})) ; {<hash-or-byte-id> (fn [data-input]) ...}
 (defmacro extend-thaw
-  "Alpha - subject to change.
-  Extends Nippy to support thawing of a custom type with id ∈[1, 128]:
-  (extend-thaw 1 [data-input]
+  "Extends Nippy to support thawing of a custom type with given id:
+  (extend-thaw :foo/my-type [data-input] ; Keyword id
+    (->MyType (.readUTF data-input)))
+  ;; or
+  (extend-thaw 1 [data-input] ; Byte id
     (->MyType (.readUTF data-input)))"
   [custom-type-id [in] & body]
-  (assert (and (>= custom-type-id 1) (<= custom-type-id 128)))
-  `(swap! custom-readers assoc ~(int (- custom-type-id))
-          (fn [~(with-meta in {:tag 'java.io.DataInput})]
-            ~@body)))
+  (assert-custom-type-id custom-type-id)
+  (when (contains? @custom-readers (coerce-custom-type-id custom-type-id))
+    (println (format "Warning: resetting Nippy thaw for custom type with id: %s"
+               custom-type-id)))
+  `(swap! custom-readers assoc
+     ~(coerce-custom-type-id custom-type-id)
+     (fn [~(with-meta in {:tag 'java.io.DataInput})]
+       ~@body)))
 
 (comment (defrecord MyType [data])
          (extend-freeze MyType 1 [x out] (.writeUTF out (:data x)))
@@ -607,16 +707,14 @@
         compress? (> ba-len 1024)]
     (.writeBoolean out compress?)
     (if-not compress? (write-bytes out ba)
-      (let [ba* (compression/compress compression/lzma2-compressor ba)]
+      (let [ba* (compress lzma2-compressor ba)]
         (write-bytes out ba*)))))
 
 (extend-thaw 128 [in]
   (let [compressed? (.readBoolean in)
-        ba          (read-bytes in)]
-    (thaw ba {:compressor compression/lzma2-compressor
-              :headerless-meta {:version     1
-                                :compressed? compressed?
-                                :encrypted?  false}})))
+        ba          (read-bytes   in)]
+    (thaw ba {:compressor (when compressed? lzma2-compressor)
+              :encryptor  nil})))
 
 (comment
   (->> (apply str (repeatedly 1000 rand))
@@ -703,8 +801,6 @@
 
 ;;;; Tools
 
-(encore/defalias freezable? utils/freezable?)
-
 (defn inspect-ba "Alpha - subject to change."
   [ba & [thaw-opts]]
   (if-not (encore/bytes? ba) :not-ba
@@ -718,15 +814,15 @@
           [data-ba nippy-header] (or (try-parse-header unwrapped-ba)
                                      [unwrapped-ba :no-header])]
 
-      {:known-wrapper  known-wrapper
-       :nippy2-header  nippy-header ; Nippy v1.x didn't have a header
-       :thawable?      (try (thaw unwrapped-ba thaw-opts) true
-                            (catch Exception _ false))
-       :unwrapped-ba   unwrapped-ba
-       :data-ba        data-ba
-       :unwrapped-size (alength ^bytes unwrapped-ba)
-       :ba-size        (alength ^bytes ba)
-       :data-size      (alength ^bytes data-ba)})))
+      {:known-wrapper   known-wrapper
+       :nippy-v2-header nippy-header ; Nippy v1.x didn't have a header
+       :thawable?       (try (thaw unwrapped-ba thaw-opts) true
+                             (catch Exception _ false))
+       :unwrapped-ba    unwrapped-ba
+       :data-ba         data-ba
+       :unwrapped-size  (alength ^bytes unwrapped-ba)
+       :ba-size         (alength ^bytes ba)
+       :data-size       (alength ^bytes data-ba)})))
 
 (comment (inspect-ba (freeze "hello"))
          (seq (:data-ba (inspect-ba (freeze "hello")))))
@@ -738,23 +834,3 @@
 
 (def thaw-from-stream! "DEPRECATED: Use `thaw-from-in!` instead."
   thaw-from-in!)
-
-(defn- assert-legacy-args [compressor password]
-  (when password
-    (throw (AssertionError. "Encryption not supported in legacy mode.")))
-  (when (and compressor (not= compressor snappy-compressor))
-    (throw (AssertionError. "Only Snappy compressor supported in legacy mode."))))
-
-(defn freeze-to-bytes "DEPRECATED: Use `freeze` instead."
-  ^bytes [x & {:keys [compress?]
-               :or   {compress? true}}]
-  (freeze x {:skip-header? true
-             :compressor   (when compress? snappy-compressor)
-             :password     nil}))
-
-(defn thaw-from-bytes "DEPRECATED: Use `thaw` instead."
-  [ba & {:keys [compressed?]
-         :or   {compressed? true}}]
-  (thaw ba {:headerless-opts {:compressed? compressed?}
-            :compressor      snappy-compressor
-            :password        nil}))
