@@ -1,13 +1,6 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
-## v2.7.0-SNAPSHOT / Unreleased
-
-### Changes
-
- * `extend-thaw` now prints a warning when replacing a pre-existing type id.
-
-
-## v2.7.0-alpha1 / 2014 Jul 6
+## v2.7.0-RC1 / 2014 Aug 27
 
 > **Major release** with significant performance improvements, a new default compression type ([LZ4](http://blog.jpountz.net/post/28092106032/wow-lz4-is-fast)), and better support for a variety of compression/encryption tools.
 >
@@ -21,6 +14,7 @@
  * **IMPORTANT**: the `thaw` API has been improved (simplified). The default `:encryptor` and `:compressor` values are now both `:auto`, which'll choose intelligently based on data now included with the Nippy header. Behaviour remains the same for data written without a header: you must specify the correct `:compressor` and `:encryptor` values manually.
  * Promoted from Alpha status: `taoensso.nippy.compression` ns, `taoensso.nippy.encryption` ns, `taoensso.nippy.tools` ns, `extend-freeze`, `extend-thaw`.
  * All Nippy exceptions are now `ex-info`s.
+ * `extend-thaw` now prints a warning when replacing a pre-existing type id.
 
 ### NEW
 

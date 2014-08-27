@@ -1,8 +1,8 @@
 **[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contrib](#contact--contributing) | current [Break Version][]:
 
 ```clojure
-[com.taoensso/nippy "2.6.3"]        ; Stable
-[com.taoensso/nippy "2.7.0-alpha1"] ; EXPERIMENTAL! May irrevocably eat your data!!
+[com.taoensso/nippy "2.6.3"]     ; Stable
+[com.taoensso/nippy "2.7.0-RC1"] ; Development
 ```
 
 v2.7 is a major, **mostly backwards-compatible** release focused on improved performance and a new default compression scheme (LZ4). See the [CHANGELOG][] for details. Thanks to [mpenet](https://github.com/mpenet) for his work on the LZ4 support!
