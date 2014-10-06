@@ -444,7 +444,7 @@
           (try (let [;; .readObject _before_ Class/forName: it'll always read
                      ;; all data before throwing
                      object (.readObject (ObjectInputStream. in))
-                     class ^Class (Class/forName class-name)]
+                     ^Class class (Class/forName class-name)]
                  (cast class object))
                (catch Exception _ {:nippy/unthawable class-name
                                    :type :serializable})))
