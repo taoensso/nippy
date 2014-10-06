@@ -1,8 +1,7 @@
 **[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contrib](#contact--contributing) | current [Break Version][]:
 
 ```clojure
-[com.taoensso/nippy "2.6.3"]     ; Stable
-[com.taoensso/nippy "2.7.0-RC1"] ; Development
+[com.taoensso/nippy "2.7.0"] ; Please see CHANGELOG for details
 ```
 
 v2.7 is a major, **mostly backwards-compatible** release focused on improved performance and a new default compression scheme (LZ4). See the [CHANGELOG][] for details. Thanks to [mpenet](https://github.com/mpenet) for his work on the LZ4 support!
@@ -35,7 +34,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your [Leiningen][] `project.clj` and `require` the library in your ns:
 
 ```clojure
-[com.taoensso/nippy "2.6.3"] ; project.clj
+[com.taoensso/nippy "2.7.0"] ; project.clj
 (ns my-app (:require [taoensso.nippy :as nippy])) ; ns
 ```
 

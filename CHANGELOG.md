@@ -1,5 +1,10 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.7.0 / 2014 Oct 6
+
+No changes from `v2.7.0-RC1`.
+
+
 ## v2.7.0-RC1 / 2014 Aug 27
 
 > **Major release** with significant performance improvements, a new default compression type ([LZ4](http://blog.jpountz.net/post/28092106032/wow-lz4-is-fast)), and better support for a variety of compression/encryption tools.
