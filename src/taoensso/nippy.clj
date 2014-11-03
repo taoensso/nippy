@@ -551,7 +551,7 @@
     nil            nil
     :aes128-sha512 aes128-encryptor
     :no-header     (throw (ex-info ":auto not supported on headerless data." {}))
-    :else (throw (ex-info ":auto not supported for non-standard encryptors."))
+    :else (throw (ex-info ":auto not supported for non-standard encryptors." {}))
     (throw (ex-info (format "Unrecognized :auto encryptor id: %s" encryptor-id)
                     {:encryptor-id encryptor-id}))))
 
