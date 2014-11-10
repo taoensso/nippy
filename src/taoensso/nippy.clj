@@ -611,7 +611,7 @@
       ;; unlikely that this is a fluke and data is actually headerless):
       (try (thaw-data data-ba compressor-id encryptor-id)
            (catch Exception e
-             (try (thaw-nippy-v1-data)
+             (try (thaw-nippy-v1-data data-ba)
                   (catch Exception _
                     (if unrecognized-meta?
                       (ex "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?"
