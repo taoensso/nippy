@@ -77,7 +77,8 @@
     (let [len-decomp   (alength ^bytes ba)
           max-len-comp (.maxCompressedLength compressor len-decomp)
           ba-comp*     (byte-array max-len-comp) ; Over-sized
-          len-comp     (.compress compressor ba 0 len-decomp ba-comp* 0 max-len-comp)
+          len-comp     (.compress compressor ^bytes ba 0 len-decomp
+                         ba-comp* 0 max-len-comp)
           ;;
           baos (ByteArrayOutputStream. (+ len-comp 4))
           dos  (DataOutputStream. baos)]
