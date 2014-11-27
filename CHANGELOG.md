@@ -1,5 +1,14 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.7.1 / 2014 Nov 27
+
+> This is a **minor maintenance release** & should be a safe upgrade for users of v2.7.0/RC-1.
+
+ * **CHANGE**: Improve some error messages by exposing trapped throwables when possible (@kul).
+ * **FIX**: Nippy v1 thaw compatibility was broken in some cases.
+ * Bumped dependencies.
+
+
 ## v2.7.0 / 2014 Oct 6
 
 No changes from `v2.7.0-RC1`.
