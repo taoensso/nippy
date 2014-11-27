@@ -565,10 +565,13 @@
   Options include:
     :compressor - An ICompressor, :auto (requires Nippy header), or nil.
     :encryptor  - An IEncryptor,  :auto (requires Nippy header), or nil."
-  [^bytes ba & [{:keys [compressor encryptor password]
-                 :or   {compressor :auto
-                        encryptor  :auto}
-                 :as   opts}]]
+  [^bytes ba
+   & [{:keys [compressor encryptor password v1-compatibility?]
+       :or   {compressor        :auto
+              encryptor         :auto
+              v1-compatibility? true ; Recommend disabling when possible
+              }
+       :as   opts}]]
 
   (assert (not (contains? opts :headerless-meta))
     ":headerless-meta `thaw` option removed as of Nippy v2.7.")
@@ -598,11 +601,15 @@
               (catch Exception e
                 (ex "Decryption/decompression failure, or data unfrozen/damaged.")))))
 
-        thaw-nippy-v1-data ; A little hackish, but necessary
+        ;; This is hackish and can actually currently result in JVM core dumps
+        ;; due to buggy Snappy behaviour, Ref. http://goo.gl/mh7Rpy.
+        thaw-nippy-v1-data
         (fn [data-ba]
-          (try (thaw-data data-ba :snappy nil)
-               (catch Exception _
-                 (thaw-data data-ba nil nil))))]
+          (if-not v1-compatibility?
+            (throw (Exception. "v1 compatibility disabled"))
+            (try (thaw-data data-ba :snappy nil)
+                 (catch Exception _
+                   (thaw-data data-ba nil nil)))))]
 
     (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
                        :as   head-meta}] (try-parse-header ba)]
