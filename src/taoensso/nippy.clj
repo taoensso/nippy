@@ -436,18 +436,20 @@
         id-reader
         (let [edn (read-utf8 in)]
           (try (edn/read-string {:readers *data-readers*} edn)
-               (catch Exception _ {:nippy/unthawable edn
-                                   :type :reader})))
+               (catch Exception e {:nippy/unthawable edn
+                                   :type :reader
+                                   :throwable e})))
 
         id-serializable
         (let [class-name (read-utf8 in)]
           (try (let [;; .readObject _before_ Class/forName: it'll always read
                      ;; all data before throwing
                      object (.readObject (ObjectInputStream. in))
-                     class ^Class (Class/forName class-name)]
+                     ^Class class (Class/forName class-name)]
                  (cast class object))
-               (catch Exception _ {:nippy/unthawable class-name
-                                   :type :serializable})))
+               (catch Exception e {:nippy/unthawable class-name
+                                   :type :serializable
+                                   :throwable e})))
 
         id-bytes   (read-bytes in)
         id-nil     nil
@@ -551,7 +553,7 @@
     nil            nil
     :aes128-sha512 aes128-encryptor
     :no-header     (throw (ex-info ":auto not supported on headerless data." {}))
-    :else (throw (ex-info ":auto not supported for non-standard encryptors."))
+    :else (throw (ex-info ":auto not supported for non-standard encryptors." {}))
     (throw (ex-info (format "Unrecognized :auto encryptor id: %s" encryptor-id)
                     {:encryptor-id encryptor-id}))))
 
@@ -563,10 +565,13 @@
   Options include:
     :compressor - An ICompressor, :auto (requires Nippy header), or nil.
     :encryptor  - An IEncryptor,  :auto (requires Nippy header), or nil."
-  [^bytes ba & [{:keys [compressor encryptor password]
-                 :or   {compressor :auto
-                        encryptor  :auto}
-                 :as   opts}]]
+  [^bytes ba
+   & [{:keys [compressor encryptor password v1-compatibility?]
+       :or   {compressor        :auto
+              encryptor         :auto
+              v1-compatibility? true ; Recommend disabling when possible
+              }
+       :as   opts}]]
 
   (assert (not (contains? opts :headerless-meta))
     ":headerless-meta `thaw` option removed as of Nippy v2.7.")
@@ -596,11 +601,15 @@
               (catch Exception e
                 (ex "Decryption/decompression failure, or data unfrozen/damaged.")))))
 
-        thaw-nippy-v1-data ; A little hackish, but necessary
+        ;; This is hackish and can actually currently result in JVM core dumps
+        ;; due to buggy Snappy behaviour, Ref. http://goo.gl/mh7Rpy.
+        thaw-nippy-v1-data
         (fn [data-ba]
-          (try (thaw-data data-ba :snappy nil)
-               (catch Exception _
-                 (thaw-data data-ba nil nil))))]
+          (if-not v1-compatibility?
+            (throw (Exception. "v1 compatibility disabled"))
+            (try (thaw-data data-ba :snappy nil)
+                 (catch Exception _
+                   (thaw-data data-ba nil nil)))))]
 
     (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
                        :as   head-meta}] (try-parse-header ba)]
@@ -609,7 +618,7 @@
       ;; unlikely that this is a fluke and data is actually headerless):
       (try (thaw-data data-ba compressor-id encryptor-id)
            (catch Exception e
-             (try (thaw-nippy-v1-data)
+             (try (thaw-nippy-v1-data data-ba)
                   (catch Exception _
                     (if unrecognized-meta?
                       (ex "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?"
