@@ -1,5 +1,13 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.8.0 / 2015 Feb 18
+
+> This is a **maintenance release** with some minor fixes and some dependency updates.
+
+ * **CHANGE**: Throw a clear error message on insufficient Encore dependency.
+ * **FIX** [#59]: `freezable?` should return true for clojure.lang.PersistentVector (@chairmanwow).
+ * **FIX** [#63]: Missing thaw exception cause (@cespare).
+
 ## v2.7.1 / 2014 Nov 27
 
 > This is a **minor maintenance release** & should be a safe upgrade for users of v2.7.0/RC-1.
