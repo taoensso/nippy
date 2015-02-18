@@ -50,7 +50,9 @@
 ;;;;
 
 (defn- is-coll?
-  "Checks for _explicit_ IPersistentCollection types with Nippy support."
+  "Checks for _explicit_ IPersistentCollection types with Nippy support.
+  Checking for explicit concrete types is tedious but preferable since a
+  `freezable?` false positive would be much worse than a false negative."
   [x]
   (let [is? #(when (instance? % x) %)]
     (or
@@ -62,13 +64,21 @@
      (is? clojure.lang.PersistentQueue)
      (is? clojure.lang.PersistentTreeSet)
      (is? clojure.lang.PersistentTreeMap)
-     (is? clojure.lang.IRecord)
+     (is? clojure.lang.PersistentVector$ChunkedSeq)
+
+     (is? clojure.lang.IRecord) ; TODO Possible to avoid the interface check?
      (is? clojure.lang.LazySeq)
+
+     ;; Too non-specific: could result in false positives (which would be a
+     ;; serious problem here):
      ;; (is? clojure.lang.ISeq)
+
      )))
 
+(comment (is-coll? (clojure.lang.PersistentVector$ChunkedSeq. [1 2 3] 0 0)))
+
 (defn freezable?
-  "Alpha - subject to change, may be buggy!
+  "Alpha - subject to change, MAY BE BUGGY!
   Returns truthy value iff Nippy supports de/serialization of given argument.
   Conservative with default options.
 
