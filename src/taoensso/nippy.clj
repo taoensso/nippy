@@ -19,6 +19,18 @@
              PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList ; LazySeq
              IRecord ISeq]))
 
+;;;; Encore version check
+
+(let [min-encore-version 1.21] ; Let's get folks on newer versions here
+  (if-let [assert! (ns-resolve 'taoensso.encore 'assert-min-encore-version)]
+    (assert! min-encore-version)
+    (throw
+      (ex-info
+        (format
+          "Insufficient com.taoensso/encore version (< %s). You may have a Leiningen dependency conflict (see http://goo.gl/qBbLvC for solution)."
+          min-encore-version)
+        {:min-version min-encore-version}))))
+
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1].
 ;; { * 1-byte type id.
