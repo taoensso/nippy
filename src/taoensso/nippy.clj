@@ -599,7 +599,8 @@
                 (thaw-from-in! dis))
 
               (catch Exception e
-                (ex "Decryption/decompression failure, or data unfrozen/damaged.")))))
+                (ex "Decryption/decompression failure, or data unfrozen/damaged."
+                  e)))))
 
         ;; This is hackish and can actually currently result in JVM core dumps
         ;; due to buggy Snappy behaviour, Ref. http://goo.gl/mh7Rpy.
