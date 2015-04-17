@@ -209,7 +209,7 @@
            (doseq [i# ~'x] (freeze-to-out ~'out i#)))
        (let [bas#  (ByteArrayOutputStream.)
              sout# (DataOutputStream. bas#)
-             cnt#  (reduce (fn [cnt# i#]
+             cnt#  (reduce (fn [^long cnt# i#]
                              (freeze-to-out sout# i#)
                              (unchecked-inc cnt#))
                            0 ~'x)
@@ -441,8 +441,10 @@
   `(let [in# ~in] (encore/repeatedly-into* ~coll (.readInt in#) (thaw-from-in in#))))
 
 (defmacro ^:private read-kvs [in coll]
-  `(let [in# ~in] (encore/repeatedly-into* ~coll (/ (.readInt in#) 2)
-                    [(thaw-from-in in#) (thaw-from-in in#)])))
+  `(let [in# ~in]
+     (encore/repeatedly-into* ~coll (quot (.readInt in#) 2)
+       [(thaw-from-in in#) (thaw-from-in in#)])))
+
 
 (declare ^:private custom-readers)
 (defn- read-custom! [type-id in]
@@ -681,11 +683,11 @@
 (defn- coerce-custom-type-id
   "* +ive byte id -> -ive byte id (for unprefixed custom types).
    * Keyword id   -> Short hash id (for prefixed custom types)."
-  [custom-type-id]
+  [^long custom-type-id]
   (assert-custom-type-id custom-type-id)
   (if-not (keyword? custom-type-id)
     (int (- custom-type-id))
-    (let [hash-id       (hash custom-type-id)
+    (let [^long hash-id (hash custom-type-id)
           short-hash-id (if (pos? hash-id)
                           (mod hash-id Short/MAX_VALUE)
                           (mod hash-id Short/MIN_VALUE))]
