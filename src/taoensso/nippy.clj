@@ -369,11 +369,24 @@
   [^DataOutput data-output x & _]
   (freeze-to-out data-output x))
 
+(defn default-freeze-compression-selector [^bytes ba]
+  (let [ba-len (alength ba)]
+    (cond
+      ;; (> ba-len 1024) lzma2-compressor
+      ;; (> ba-len 512)  lz4hc-compressor
+      (> ba-len 128)     lz4-compressor
+      :else nil)))
+
+;; Allows easy global override of default (e.g. to enable lzma2 choices, etc.):
+(encore/defonce* default-freeze-compression-selector_
+  "EXPERIMENTAL, undocumented."
+  (atom default-freeze-compression-selector))
+
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
   types, extend the Clojure reader or see `extend-freeze`."
   ^bytes [x & [{:keys [compressor encryptor password skip-header?]
-                :or   {compressor lz4-compressor
+                :or   {compressor :auto ; or (fn [^bytes ba]) -> compressor
                        encryptor  aes128-encryptor}
                 :as   opts}]]
   (let [legacy-mode? (:legacy-mode opts) ; DEPRECATED Nippy v1-compatible freeze
@@ -384,8 +397,19 @@
         dos  (DataOutputStream. baos)]
     (freeze-to-out! dos x)
     (let [ba (.toByteArray baos)
+
+          compressor
+          (if (identical? compressor :auto)
+            (if skip-header?
+              lz4-compressor
+              (@default-freeze-compression-selector_ ba))
+            (if (fn? compressor)
+              (compressor ba)
+              compressor))
+
           ba (if-not compressor ba (compress compressor ba))
           ba (if-not encryptor  ba (encrypt encryptor password ba))]
+
       (if skip-header? ba
         (wrap-header ba
           {:compressor-id (when-let [c compressor]
@@ -722,6 +746,7 @@
 
 ;;; Some useful custom types - EXPERIMENTAL
 
+;; DEPRECATED in favour of smart compressor selection
 (defrecord Compressable-LZMA2 [value])
 (extend-freeze Compressable-LZMA2 128 [x out]
   (let [ba (freeze (:value x) {:skip-header? true :compressor nil})
