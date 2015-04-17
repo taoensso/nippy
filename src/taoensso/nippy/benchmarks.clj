@@ -64,7 +64,12 @@
 
 (comment
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 1})
-  ;; (bench {:laps 2})
+  ;; (bench {:laps 4})
+
+  ;;; 2015 Apr 17 w/ smart compressor selection, Clojure 1.7.0-beta1
+  {:default   {:round 6163,  :freeze 4095, :thaw 2068, :size 16121}}
+  {:fast      {:round 5417,  :freeze 3480, :thaw 1937, :size 17013}}
+  {:encrypted {:round 10950, :freeze 6400, :thaw 4550, :size 16148}}
 
   ;;; 2014 Apr 7 w/ some additional implementation tuning
   {:default   {:round 6533,  :freeze 3618, :thaw 2915, :size 16139}}
