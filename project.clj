@@ -34,7 +34,7 @@
    :dev [:1.7 :test
          {:plugins
           [[lein-pprint       "1.1.1"]
-           [lein-ancient      "0.5.5"]
+           [lein-ancient      "0.6.7"]
            [lein-expectations "0.0.8"]
            [lein-autoexpect   "1.2.2"]
            [codox             "0.8.10"]]}]}

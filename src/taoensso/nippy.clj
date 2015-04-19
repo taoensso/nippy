@@ -1,6 +1,6 @@
 (ns taoensso.nippy
-  "Simple, high-performance Clojure serialization library. Originally adapted
-  from Deep-Freeze."
+  "High-performance JVM Clojure serialization library. Originally adapted from
+   Deep-Freeze."
   {:author "Peter Taoussanis"}
   (:require [clojure.tools.reader.edn :as edn]
             [taoensso.encore :as encore]
@@ -21,7 +21,7 @@
 
 ;;;; Encore version check
 
-(let [min-encore-version 1.21] ; Let's get folks on newer versions here
+(let [min-encore-version 1.21]
   (if-let [assert! (ns-resolve 'taoensso.encore 'assert-min-encore-version)]
     (assert! min-encore-version)
     (throw
@@ -40,6 +40,8 @@
 ;;   * Sanity check (confirm that data appears to be Nippy data).
 ;;   * Nippy version check (=> supports changes to data schema over time).
 ;;   * Supports :auto thaw compressor, encryptor.
+;;   * Supports :auto freeze compressor (since this depends on :auto thaw
+;;     compressor).
 ;;
 (def ^:private ^:const head-version 1)
 (def ^:private head-sig (.getBytes "NPY" "UTF-8"))
@@ -55,6 +57,7 @@
    (byte 3)  {:version 1 :compressor-id :snappy :encryptor-id :aes128-sha512}
    (byte 7)  {:version 1 :compressor-id :snappy :encryptor-id :else}
    ;;
+   ;;; :lz4 used for both lz4 and lz4hc compressor (the two are compatible)
    (byte 8)  {:version 1 :compressor-id :lz4    :encryptor-id nil}
    (byte 9)  {:version 1 :compressor-id :lz4    :encryptor-id :aes128-sha512}
    (byte 10) {:version 1 :compressor-id :lz4    :encryptor-id :else}
@@ -369,24 +372,30 @@
   [^DataOutput data-output x & _]
   (freeze-to-out data-output x))
 
-(defn default-freeze-compression-selector [^bytes ba]
+(defn default-freeze-compressor-selector
+  "Strategy:
+    * Prioritize speed, but allow lz4.
+    * Skip lz4 unless it's likely that lz4's space benefit will outweigh its
+      space overhead."
+  [^bytes ba]
   (let [ba-len (alength ba)]
     (cond
       ;; (> ba-len 1024) lzma2-compressor
       ;; (> ba-len 512)  lz4hc-compressor
       (> ba-len 128)     lz4-compressor
-      :else nil)))
+      :else              nil)))
 
-;; Allows easy global override of default (e.g. to enable lzma2 choices, etc.):
-(encore/defonce* default-freeze-compression-selector_
-  "EXPERIMENTAL, undocumented."
-  (atom default-freeze-compression-selector))
+(encore/defonce* default-freeze-compressor-selector_
+  "EXPERIMENTAL.
+  Determines the global default default compressor selector
+  (fn [^bytes ba])->compressor used by `(freeze <x> {:compressor :auto <...>})."
+  (atom default-freeze-compressor-selector))
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
   types, extend the Clojure reader or see `extend-freeze`."
   ^bytes [x & [{:keys [compressor encryptor password skip-header?]
-                :or   {compressor :auto ; or (fn [^bytes ba]) -> compressor
+                :or   {compressor :auto
                        encryptor  aes128-encryptor}
                 :as   opts}]]
   (let [legacy-mode? (:legacy-mode opts) ; DEPRECATED Nippy v1-compatible freeze
@@ -402,10 +411,11 @@
           (if (identical? compressor :auto)
             (if skip-header?
               lz4-compressor
-              (@default-freeze-compression-selector_ ba))
+              (@default-freeze-compressor-selector_ ba))
             (if (fn? compressor)
-              (compressor ba)
-              compressor))
+              (compressor ba) ; Assume compressor selector fn
+              compressor      ; Assume compressor
+              ))
 
           ba (if-not compressor ba (compress compressor ba))
           ba (if-not encryptor  ba (encrypt encryptor password ba))]
@@ -683,10 +693,10 @@
 (defn- coerce-custom-type-id
   "* +ive byte id -> -ive byte id (for unprefixed custom types).
    * Keyword id   -> Short hash id (for prefixed custom types)."
-  [^long custom-type-id]
+  [custom-type-id]
   (assert-custom-type-id custom-type-id)
   (if-not (keyword? custom-type-id)
-    (int (- custom-type-id))
+    (int (- ^long custom-type-id))
     (let [^long hash-id (hash custom-type-id)
           short-hash-id (if (pos? hash-id)
                           (mod hash-id Short/MAX_VALUE)
@@ -748,8 +758,8 @@
 
 ;;; Some useful custom types - EXPERIMENTAL
 
-;; DEPRECATED in favour of smart compressor selection
-(defrecord Compressable-LZMA2 [value])
+;; Mostly deprecated by :auto compressor selection
+(defrecord Compressable-LZMA2 [value]) ; Why was this `LZMA2`, not `lzma2`?
 (extend-freeze Compressable-LZMA2 128 [x out]
   (let [ba (freeze (:value x) {:skip-header? true :compressor nil})
         ba-len    (alength ba)
