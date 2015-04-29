@@ -13,7 +13,7 @@
 
   :dependencies
   [[org.clojure/clojure      "1.4.0"]
-   [org.clojure/tools.reader "0.9.1"]
+   [org.clojure/tools.reader "0.9.2"]
    [com.taoensso/encore      "1.24.1"]
    [org.iq80.snappy/snappy   "0.3"]
    [org.tukaani/xz           "1.5"]
