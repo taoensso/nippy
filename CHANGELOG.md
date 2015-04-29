@@ -5,7 +5,7 @@
 > This is a non-breaking **performance release** that can result in significant speed+space improvements for users serializing many small values
 
 * **Implementation**: eliminate some unnecessary boxed math
-* **New**: intelligent allow auto-selection of `freeze` compression scheme using `:auto` compressor (now the default)
+* **New**: allow intelligent auto-selection of `freeze` compression scheme using `:auto` compressor (now the default)
 
 
 ```clojure
