@@ -21,7 +21,7 @@
 
 ;;;; Encore version check
 
-(let [min-encore-version 1.21]
+(let [min-encore-version 1.28] ; For `backport-run!` support
   (if-let [assert! (ns-resolve 'taoensso.encore 'assert-min-encore-version)]
     (assert! min-encore-version)
     (throw
@@ -209,7 +209,8 @@
         (println (format "DEBUG - freezer-coll: %s for %s" ~type (type ~'x)))))
      (if (counted? ~'x)
        (do (.writeInt ~'out (count ~'x))
-           (doseq [i# ~'x] (freeze-to-out ~'out i#)))
+           ;; (doseq [i# ~'x] (freeze-to-out ~'out i#))
+           (encore/backport-run! (fn [i#] (freeze-to-out ~'out i#)) ~'x))
        (let [bas#  (ByteArrayOutputStream.)
              sout# (DataOutputStream. bas#)
              cnt#  (reduce (fn [^long cnt# i#]
@@ -223,9 +224,14 @@
 (defmacro ^:private freezer-kvs [type id & body]
   `(freezer ~type ~id
     (.writeInt ~'out (* 2 (count ~'x)))
-    (doseq [kv# ~'x]
-      (freeze-to-out ~'out (key kv#))
-      (freeze-to-out ~'out (val kv#)))))
+    ;; (doseq [kv# ~'x]
+    ;;   (freeze-to-out ~'out (key kv#))
+    ;;   (freeze-to-out ~'out (val kv#)))
+    (encore/backport-run!
+      (fn [kv#]
+        (freeze-to-out ~'out (key kv#))
+        (freeze-to-out ~'out (val kv#)))
+      ~'x)))
 
 (freezer (Class/forName "[B") id-bytes   (write-bytes out ^bytes x))
 (freezer nil                  id-nil)
