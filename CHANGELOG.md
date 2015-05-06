@@ -1,5 +1,16 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.9.0-RC2 / 2015 May 6
+
+> This is a non-breaking **performance release**
+
+* **Implementation**: switch `doseq` -> (faster) `run!` calls
+
+```clojure
+[com.taoensso/nippy "2.9.0-RC2"]
+```
+
+
 ## v2.9.0-RC1 / 2015 Apr 29
 
 > This is a non-breaking **performance release** that can result in significant speed+space improvements for users serializing many small values

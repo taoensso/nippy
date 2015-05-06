@@ -2,7 +2,7 @@
 
 ```clojure
 [com.taoensso/nippy "2.8.0"]     ; Stable
-[com.taoensso/nippy "2.9.0-RC1"] ; Dev, please see CHANGELOG for details
+[com.taoensso/nippy "2.9.0-RC2"] ; Dev, please see CHANGELOG for details
 ```
 
 # Nippy, a Clojure serialization library
