@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.9.0-RC2"
+(defproject com.taoensso/nippy "2.9.0-RC3"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"

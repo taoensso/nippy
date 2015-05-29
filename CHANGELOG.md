@@ -1,5 +1,16 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.9.0-RC3 / 2015 May 29
+
+> This is a non-breaking **stability release**
+
+* **Implementation**: more robust error handling for unthawable records
+
+```clojure
+[com.taoensso/nippy "2.9.0-RC3"]
+```
+
+
 ## v2.9.0-RC2 / 2015 May 6
 
 > This is a non-breaking **performance release**
