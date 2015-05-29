@@ -461,6 +461,7 @@
      (encore/repeatedly-into* ~coll (quot (.readInt in#) 2)
        [(thaw-from-in in#) (thaw-from-in in#)])))
 
+(def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
 (declare ^:private custom-readers)
 (defn- read-custom! [type-id in]
@@ -489,21 +490,40 @@
 
         id-reader
         (let [edn (read-utf8 in)]
-          (try (edn/read-string {:readers *data-readers*} edn)
-               (catch Exception e {:nippy/unthawable edn
-                                   :type :reader
-                                   :throwable e})))
+          (try
+            (edn/read-string {:readers *data-readers*} edn)
+            (catch Exception e
+              {:type :reader
+               :throwable e
+               :nippy/unthawable edn})))
 
         id-serializable
         (let [class-name (read-utf8 in)]
-          (try (let [;; .readObject _before_ Class/forName: it'll always read
-                     ;; all data before throwing
-                     object (.readObject (ObjectInputStream. in))
-                     ^Class class (Class/forName class-name)]
-                 (cast class object))
-               (catch Exception e {:nippy/unthawable class-name
-                                   :type :serializable
-                                   :throwable e})))
+          (try
+            (let [content (.readObject (ObjectInputStream. in))]
+              (try
+                (let [class (Class/forName class-name)]
+                  (cast class content))
+                (catch Exception e
+                  {:type :serializable
+                   :throwable e
+                   :nippy/unthawable {:class-name class-name :content content}})))
+            (catch Exception e
+              {:type :serializable
+               :throwable e
+               :nippy/unthawable {:class-name class-name :content nil}})))
+
+        id-record
+        (let [class-name (read-utf8    in)
+              content    (thaw-from-in in)]
+          (try
+            (let [class  (Class/forName class-name)
+                  method (.getMethod class "create" class-method-sig)]
+              (.invoke method class (into-array Object [content])))
+            (catch Exception e
+              {:type :record
+               :throwable e
+               :nippy/unthawable {:class-name class-name :content content}})))
 
         id-bytes   (read-bytes in)
         id-nil     nil
@@ -551,12 +571,6 @@
 
         id-ratio (/ (bigint (read-biginteger in))
                     (bigint (read-biginteger in)))
-
-        id-record
-        (let [class    ^Class (Class/forName (read-utf8 in))
-              meth-sig (into-array Class [IPersistentMap])
-              method   ^Method (.getMethod class "create" meth-sig)]
-          (.invoke method class (into-array Object [(thaw-from-in in)])))
 
         id-date  (Date. (.readLong in))
         id-uuid  (UUID. (.readLong in) (.readLong in))
