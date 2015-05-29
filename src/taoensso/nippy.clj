@@ -461,6 +461,7 @@
      (encore/repeatedly-into* ~coll (quot (.readInt in#) 2)
        [(thaw-from-in in#) (thaw-from-in in#)])))
 
+(def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
 (declare ^:private custom-readers)
 (defn- read-custom! [type-id in]
@@ -553,10 +554,17 @@
                     (bigint (read-biginteger in)))
 
         id-record
-        (let [class    ^Class (Class/forName (read-utf8 in))
-              meth-sig (into-array Class [IPersistentMap])
-              method   ^Method (.getMethod class "create" meth-sig)]
-          (.invoke method class (into-array Object [(thaw-from-in in)])))
+        (let [class-name (read-utf8    in)
+              content    (thaw-from-in in)]
+          (try
+            (let [class  (Class/forName class-name)
+                  method (.getMethod class "create" class-method-sig)]
+              (.invoke method class (into-array Object [content])))
+            (catch Exception e
+              {:nippy/unthawable class-name
+               :type :record
+               :content content
+               :throwable e})))
 
         id-date  (Date. (.readLong in))
         id-uuid  (UUID. (.readLong in) (.readLong in))
