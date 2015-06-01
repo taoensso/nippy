@@ -8,22 +8,19 @@
 
 Clojure's [rich data types](http://clojure.org/datatypes) are *awesome*. And its [reader](http://clojure.org/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
-Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**. It's used, among others, as the [Carmine Redis client](https://github.com/ptaoussanis/carmine) and [Faraday DynamoDB client](https://github.com/ptaoussanis/faraday) serializer.
+Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**. It's used as the serializer for the [Carmine Redis client](https://github.com/ptaoussanis/carmine), the [Faraday DynamoDB client](https://github.com/ptaoussanis/faraday), and a number of other projects.
 
 ## What's in the box™?
-  * Small, uncomplicated **all-Clojure** library.
-  * **Terrific performance**.
-  * Comprehesive **support for all standard data types**.
-  * **Easily extendable to custom data types**. (v2.1+)
-  * Java's **Serializable** fallback when available. (v2.5+)
-  * **Reader-fallback** for all other types (including Clojure 1.4+ tagged literals).
-  * **Full test coverage** for every supported type.
-  * Fully pluggable **compression**, including built-in high-performance [Snappy](http://code.google.com/p/snappy/) compressor.
-  * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option. (v2+)
-  * Utils for **easy integration into 3rd-party tools/libraries**. (v2+)
-
-## Optional plugins
-  * [LZ4 compressor](https://github.com/mpenet/nippy-lz4) by [mpenet](https://github.com/mpenet) (v2+).
+  * Small, uncomplicated **all-Clojure** library
+  * **Terrific performance** (the fastest for Clojure that I'm aware of)
+  * Comprehesive **support for all standard data types**
+  * **Easily extendable to custom data types** (v2.1+)
+  * Java's **Serializable** fallback when available (v2.5+)
+  * **Reader-fallback** for all other types (including Clojure 1.4+ tagged literals)
+  * **Full test coverage** for every supported type
+  * Fully pluggable **compression**, including built-in high-performance [LZ4](https://code.google.com/p/lz4/) compressor
+  * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option (v2+)
+  * Utils for **easy integration into 3rd-party tools/libraries** (v2+)
 
 ## Getting started
 
