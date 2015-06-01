@@ -466,9 +466,9 @@
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
-(declare ^:private custom-readers)
+(declare ^:dynamic *custom-readers*)
 (defn- read-custom! [type-id in]
-  (if-let [custom-reader (get @custom-readers type-id)]
+  (if-let [custom-reader (get *custom-readers* type-id)]
     (try
       (custom-reader in)
       (catch Exception e
@@ -756,7 +756,9 @@
              (.writeShort ~out ~(coerce-custom-type-id custom-type-id))))
        ~@body)))
 
-(defonce custom-readers (atom {})) ; {<hash-or-byte-id> (fn [data-input]) ...}
+(def ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
+(defn swap-custom-readers! [f] (alter-var-root #'*custom-readers* f))
+
 (defmacro extend-thaw
   "Extends Nippy to support thawing of a custom type with given id:
   (extend-thaw :foo/my-type [data-input] ; Keyword id
@@ -766,13 +768,15 @@
     (->MyType (.readUTF data-input)))"
   [custom-type-id [in] & body]
   (assert-custom-type-id custom-type-id)
-  (when (contains? @custom-readers (coerce-custom-type-id custom-type-id))
+  (when (contains? *custom-readers* (coerce-custom-type-id custom-type-id))
     (println (format "Warning: resetting Nippy thaw for custom type with id: %s"
                custom-type-id)))
-  `(swap! custom-readers assoc
-     ~(coerce-custom-type-id custom-type-id)
-     (fn [~(with-meta in {:tag 'java.io.DataInput})]
-       ~@body)))
+  `(swap-custom-readers!
+     (fn [m#]
+       (assoc m#
+         ~(coerce-custom-type-id custom-type-id)
+         (fn [~(with-meta in {:tag 'java.io.DataInput})]
+           ~@body)))))
 
 (comment (defrecord MyType [data])
          (extend-freeze MyType 1 [x out] (.writeUTF out (:data x)))
