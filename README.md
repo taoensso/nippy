@@ -1,8 +1,7 @@
 **[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contrib](#contact--contributing) | current [Break Version][]:
 
 ```clojure
-[com.taoensso/nippy "2.8.0"]     ; Stable
-[com.taoensso/nippy "2.9.0-RC3"] ; Dev, please see CHANGELOG for details
+[com.taoensso/nippy "2.9.0"] ; Stable, please see CHANGELOG for details
 ```
 
 # Nippy, a Clojure serialization library
@@ -13,7 +12,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 
 ## What's in the box™?
   * Small, uncomplicated **all-Clojure** library.
-  * **Great performance**.
+  * **Terrific performance**.
   * Comprehesive **support for all standard data types**.
   * **Easily extendable to custom data types**. (v2.1+)
   * Java's **Serializable** fallback when available. (v2.5+)
@@ -33,7 +32,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your [Leiningen][] `project.clj` and `require` the library in your ns:
 
 ```clojure
-[com.taoensso/nippy "2.8.0"] ; project.clj
+[com.taoensso/nippy "2.9.0"] ; project.clj
 (ns my-app (:require [taoensso.nippy :as nippy])) ; ns
 ```
 

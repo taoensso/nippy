@@ -1,37 +1,16 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
-## v2.9.0-RC3 / 2015 May 29
+## v2.9.0 / 2015 June 1
 
-> This is a non-breaking **stability release**
+> This is a major, **non-breaking** release that improves performance and makes thawing more resilient to certain failures. Identical to **v2.9.0-RC3**.
 
-* **Implementation**: more robust error handling for unthawable records
-
-```clojure
-[com.taoensso/nippy "2.9.0-RC3"]
-```
-
-
-## v2.9.0-RC2 / 2015 May 6
-
-> This is a non-breaking **performance release**
-
-* **Implementation**: switch `doseq` -> (faster) `run!` calls
+* **Robustness**: improve error handling for unthawable records
+* **Performance**: switch `doseq` -> (faster) `run!` calls
+* **Performance**: eliminate some unnecessary boxed math
+* **New**: allow intelligent auto-selection of `freeze` compression scheme using `:auto` compressor (now the default). This can result in significant speed+space improvements for users serializing many small values.
 
 ```clojure
-[com.taoensso/nippy "2.9.0-RC2"]
-```
-
-
-## v2.9.0-RC1 / 2015 Apr 29
-
-> This is a non-breaking **performance release** that can result in significant speed+space improvements for users serializing many small values
-
-* **Implementation**: eliminate some unnecessary boxed math
-* **New**: allow intelligent auto-selection of `freeze` compression scheme using `:auto` compressor (now the default)
-
-
-```clojure
-[com.taoensso/nippy "2.9.0-RC1"]
+[com.taoensso/nippy "2.9.0"]
 ```
 
 
