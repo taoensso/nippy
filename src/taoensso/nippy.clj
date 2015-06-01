@@ -768,20 +768,22 @@
     (->MyType (.readUTF data-input)))"
   [custom-type-id [in] & body]
   (assert-custom-type-id custom-type-id)
-  (when (contains? *custom-readers* (coerce-custom-type-id custom-type-id))
-    (println (format "Warning: resetting Nippy thaw for custom type with id: %s"
-               custom-type-id)))
-  `(swap-custom-readers!
-     (fn [m#]
-       (assoc m#
-         ~(coerce-custom-type-id custom-type-id)
-         (fn [~(with-meta in {:tag 'java.io.DataInput})]
-           ~@body)))))
+  `(do
+     (when (contains? *custom-readers* ~(coerce-custom-type-id custom-type-id))
+       (println (format "Warning: resetting Nippy thaw for custom type with id: %s"
+                  ~custom-type-id)))
+     (swap-custom-readers!
+       (fn [m#]
+         (assoc m#
+           ~(coerce-custom-type-id custom-type-id)
+           (fn [~(with-meta in {:tag 'java.io.DataInput})]
+             ~@body))))))
 
-(comment (defrecord MyType [data])
-         (extend-freeze MyType 1 [x out] (.writeUTF out (:data x)))
-         (extend-thaw 1 [in] (->MyType (.readUTF in)))
-         (thaw (freeze (->MyType "Joe"))))
+(comment
+  (defrecord MyType [data])
+  (extend-freeze MyType 1 [x out] (.writeUTF out (:data x)))
+  (extend-thaw 1 [in] (->MyType (.readUTF in)))
+  (thaw (freeze (->MyType "Joe"))))
 
 ;;; Some useful custom types - EXPERIMENTAL
 
