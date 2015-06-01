@@ -466,7 +466,9 @@
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
-(declare ^:dynamic *custom-readers*)
+(def ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
+(defn swap-custom-readers! [f] (alter-var-root #'*custom-readers* f))
+
 (defn- read-custom! [type-id in]
   (if-let [custom-reader (get *custom-readers* type-id)]
     (try
@@ -756,9 +758,6 @@
              (.writeShort ~out ~(coerce-custom-type-id custom-type-id))))
        ~@body)))
 
-(def ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
-(defn swap-custom-readers! [f] (alter-var-root #'*custom-readers* f))
-
 (defmacro extend-thaw
   "Extends Nippy to support thawing of a custom type with given id:
   (extend-thaw :foo/my-type [data-input] ; Keyword id
@@ -780,6 +779,7 @@
              ~@body))))))
 
 (comment
+  *custom-readers*
   (defrecord MyType [data])
   (extend-freeze MyType 1 [x out] (.writeUTF out (:data x)))
   (extend-thaw 1 [in] (->MyType (.readUTF in)))
