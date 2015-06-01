@@ -391,11 +391,14 @@
       (> ba-len 128)     lz4-compressor
       :else              nil)))
 
-(encore/defonce* default-freeze-compressor-selector_
-  "EXPERIMENTAL.
-  Determines the global default default compressor selector
-  (fn [^bytes ba])->compressor used by `(freeze <x> {:compressor :auto <...>})."
-  (atom default-freeze-compressor-selector))
+(encore/defonce* ^:dynamic ^:private *default-freeze-compressor-selector*
+  default-freeze-compressor-selector)
+
+(defn set-default-freeze-compressor-selector!
+  "Sets global dynamic (fn selector [^bytes ba])->compressor used by
+  `(freeze <x> {:compressor :auto <...>})."
+  [selector]
+  (alter-var-root #'*default-freeze-compressor-selector* (constantly selector)))
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
@@ -417,7 +420,7 @@
           (if (identical? compressor :auto)
             (if skip-header?
               lz4-compressor
-              (@default-freeze-compressor-selector_ ba))
+              (*default-freeze-compressor-selector* ba))
             (if (fn? compressor)
               (compressor ba) ; Assume compressor selector fn
               compressor      ; Assume compressor
