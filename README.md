@@ -141,7 +141,7 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 
 ![Comparison chart](https://github.com/ptaoussanis/nippy/raw/master/benchmarks.png)
 
-[Detailed benchmark information](https://docs.google.com/spreadsheet/ccc?key=0AuSXb68FH4uhdE5kTTlocGZKSXppWG9sRzA5Y2pMVkE&pli=1#gid=0) is available on Google Docs.
+[Detailed benchmark information](https://docs.google.com/spreadsheet/ccc?key=0AuSXb68FH4uhdE5kTTlocGZKSXppWG9sRzA5Y2pMVkE) is available on Google Docs.
 
 ## Contact & contributing
 
