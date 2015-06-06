@@ -31,6 +31,8 @@
                          ;; [com.cemerick/double-check  "0.6.1"]
                          [org.clojure/data.fressian     "0.2.0"]
                          [org.xerial.snappy/snappy-java "1.1.1.7"]]}
+   :perf {:dependencies [[citius "0.1.1"]]
+          :test-paths ^:replace ["test-perf"]}
    :dev [:1.7 :test
          {:plugins
           [[lein-pprint       "1.1.1"]
