@@ -73,69 +73,69 @@
 
   ;; ** Negative ids reserved for user-defined types **
   ;;
-  (def ^:const id-reserved   (int 0))
-  ;;                              1
-  (def ^:const id-bytes      (int 2))
-  (def ^:const id-nil        (int 3))
-  (def ^:const id-boolean    (int 4))
-  (def ^:const id-reader     (int 5)) ; Fallback #2
-  (def ^:const id-serializable (int 6)) ; Fallback #1
+  (def ^:const id-reserved        (int 0))
+  ;;                                   1     ; Deprecated
+  (def ^:const id-bytes           (int 2))
+  (def ^:const id-nil             (int 3))
+  (def ^:const id-boolean         (int 4))
+  (def ^:const id-reader          (int 5))   ; Fallback #2
+  (def ^:const id-serializable    (int 6))   ; Fallback #1
 
-  (def ^:const id-char       (int 10))
-  ;;                              11
-  ;;                              12
-  (def ^:const id-string     (int 13))
-  (def ^:const id-keyword    (int 14))
+  (def ^:const id-char            (int 10))
+  ;;                                   11    ; Deprecated
+  ;;                                   12    ; Deprecated
+  (def ^:const id-string          (int 13))
+  (def ^:const id-keyword         (int 14))
 
-  (def ^:const id-list       (int 20))
-  (def ^:const id-vector     (int 21))
-  ;;                              22
-  (def ^:const id-set        (int 23))
-  (def ^:const id-seq        (int 24))
-  (def ^:const id-meta       (int 25))
-  (def ^:const id-queue      (int 26))
-  (def ^:const id-map        (int 27))
-  (def ^:const id-sorted-set (int 28))
-  (def ^:const id-sorted-map (int 29))
+  (def ^:const id-list            (int 20))
+  (def ^:const id-vector          (int 21))
+  ;;                                   22    ; Deprecated
+  (def ^:const id-set             (int 23))
+  (def ^:const id-seq             (int 24))
+  (def ^:const id-meta            (int 25))
+  (def ^:const id-queue           (int 26))
+  (def ^:const id-map             (int 27))
+  (def ^:const id-sorted-set      (int 28))
+  (def ^:const id-sorted-map      (int 29))
 
-  (def ^:const id-byte       (int 40))
-  (def ^:const id-short      (int 41))
-  (def ^:const id-integer    (int 42))
-  (def ^:const id-long       (int 43))
-  (def ^:const id-bigint     (int 44))
-  (def ^:const id-biginteger (int 45))
+  (def ^:const id-byte            (int 40))
+  (def ^:const id-short           (int 41))
+  (def ^:const id-integer         (int 42))
+  (def ^:const id-long            (int 43))
+  (def ^:const id-bigint          (int 44))
+  (def ^:const id-biginteger      (int 45))
 
-  (def ^:const id-float      (int 60))
-  (def ^:const id-double     (int 61))
-  (def ^:const id-bigdec     (int 62))
+  (def ^:const id-float           (int 60))
+  (def ^:const id-double          (int 61))
+  (def ^:const id-bigdec          (int 62))
 
-  (def ^:const id-ratio      (int 70))
+  (def ^:const id-ratio           (int 70))
 
-  (def ^:const id-record     (int 80))
-  ;; (def ^:const id-type    (int 81)) ; TODO?
+  (def ^:const id-record          (int 80))
+  ;; (def ^:const id-type         (int 81))  ; TODO?
   (def ^:const id-prefixed-custom (int 82))
 
-  (def ^:const id-date       (int 90))
-  (def ^:const id-uuid       (int 91))
+  (def ^:const id-date            (int 90))
+  (def ^:const id-uuid            (int 91))
 
   ;;; Optimized, common-case types (v2.6+)
-  (def ^:const id-byte-as-long  (int 100)) ; 1 vs 8 bytes
-  (def ^:const id-short-as-long (int 101)) ; 2 vs 8 bytes
-  (def ^:const id-int-as-long   (int 102)) ; 4 vs 8 bytes
-  ;; (def ^:const id-compact-long  (int 103)) ; 6->7 vs 8 bytes
+  (def ^:const id-byte-as-long    (int 100)) ; 1 vs 8 bytes
+  (def ^:const id-short-as-long   (int 101)) ; 2 vs 8 bytes
+  (def ^:const id-int-as-long     (int 102)) ; 4 vs 8 bytes
+  ;; (def ^:const id-compact-long (int 103)) ; 6->7 vs 8 bytes
   ;;
-  (def ^:const id-string-small  (int 105)) ; 1 vs 4 byte length prefix
-  (def ^:const id-keyword-small (int 106)) ; ''
+  (def ^:const id-string-small    (int 105)) ; 1 vs 4 byte length prefix
+  (def ^:const id-keyword-small   (int 106)) ; ''
   ;;
-  ;; (def ^:const id-vector-small  (int 110)) ; ''
-  ;; (def ^:const id-set-small     (int 111)) ; ''
-  ;; (def ^:const id-map-small     (int 112)) ; ''
+  ;; (def ^:const id-vector-small (int 110)) ; ''
+  ;; (def ^:const id-set-small    (int 111)) ; ''
+  ;; (def ^:const id-map-small    (int 112)) ; ''
 
   ;;; DEPRECATED (old types will be supported only for thawing)
-  (def ^:const id-old-reader  (int 1))  ; as of 0.9.2, for +64k support
-  (def ^:const id-old-string  (int 11)) ; as of 0.9.2, for +64k support
-  (def ^:const id-old-map     (int 22)) ; as of 0.9.0, for more efficient thaw
-  (def ^:const id-old-keyword (int 12)) ; as of 2.0.0-alpha5, for str consistecy
+  (def ^:const id-old-reader      (int 1))   ; v0.9.2+ for +64k support
+  (def ^:const id-old-string      (int 11))  ; v0.9.2+ for +64k support
+  (def ^:const id-old-map         (int 22))  ; v0.9.0+ for more efficient thaw
+  (def ^:const id-old-keyword     (int 12))  ; v2.0.0-alpha5+ for str consistecy
   )
 
 ;;;; Ns imports (mostly for convenience of lib consumers)
