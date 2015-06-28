@@ -2,8 +2,7 @@
   "High-performance JVM Clojure serialization library. Originally adapted from
    Deep-Freeze."
   {:author "Peter Taoussanis"}
-  (:require [clojure.tools.reader.edn :as edn]
-            [taoensso.encore :as encore]
+  (:require [taoensso.encore :as encore]
             [taoensso.nippy
              (utils       :as utils)
              (compression :as compression)
@@ -21,7 +20,7 @@
 
 ;;;; Encore version check
 
-(let [min-encore-version 1.28] ; For `backport-run!` support
+(let [min-encore-version 1.38]
   (if-let [assert! (ns-resolve 'taoensso.encore 'assert-min-encore-version)]
     (assert! min-encore-version)
     (throw
@@ -79,7 +78,7 @@
   (def ^:const id-bytes      (int 2))
   (def ^:const id-nil        (int 3))
   (def ^:const id-boolean    (int 4))
-  (def ^:const id-reader     (int 5)) ; Fallback #2: pr-str output
+  (def ^:const id-reader     (int 5)) ; Fallback #2
   (def ^:const id-serializable (int 6)) ; Fallback #1
 
   (def ^:const id-char       (int 10))
@@ -325,7 +324,7 @@
 
 (def ^:dynamic *final-freeze-fallback* "Alpha - subject to change." nil)
 (defn freeze-fallback-as-str "Alpha-subject to change." [x out]
-  (freeze-to-out* {:nippy/unfreezable (pr-str x) :type (type x)} out))
+  (freeze-to-out* {:nippy/unfreezable (encore/pr-edn x) :type (type x)} out))
 
 (comment
   (require '[clojure.core.async :as async])
@@ -349,13 +348,13 @@
      (do (when-debug-mode
           (println (format "DEBUG - Reader fallback: %s" (type x))))
          (write-id out id-reader)
-         (write-utf8 out (pr-str x)))
+         (write-utf8 out (encore/pr-edn x)))
 
      :else ; Fallback #3: *final-freeze-fallback*
      (if-let [ffb *final-freeze-fallback*] (ffb x out)
        (throw (ex-info (format "Unfreezable type: %s %s" (type x) (str x))
                 {:type   (type x)
-                 :as-str (pr-str x)}))))))
+                 :as-str (encore/pr-edn x)}))))))
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 (def ^:private get-head-ba
@@ -496,7 +495,7 @@
         id-reader
         (let [edn (read-utf8 in)]
           (try
-            (edn/read-string {:readers *data-readers*} edn)
+            (encore/read-edn {:readers *data-readers*} edn)
             (catch Exception e
               {:type :reader
                :throwable e
@@ -581,7 +580,7 @@
         id-uuid  (UUID. (.readLong in) (.readLong in))
 
         ;;; DEPRECATED
-        id-old-reader (edn/read-string (.readUTF in))
+        id-old-reader (encore/read-edn (.readUTF in))
         id-old-string (.readUTF in)
         id-old-map    (apply hash-map (encore/repeatedly-into* []
                         (* 2 (.readInt in)) (thaw-from-in in)))

@@ -1,8 +1,7 @@
 (ns taoensso.nippy.utils
   {:author "Peter Taoussanis"}
-  (:require [clojure.string           :as str]
-            [clojure.tools.reader.edn :as edn]
-            [taoensso.encore          :as encore])
+  (:require [clojure.string  :as str]
+            [taoensso.encore :as encore])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream Serializable
              ObjectOutputStream ObjectInputStream]))
 
@@ -34,7 +33,7 @@
          (cast class object)
          true)))))
 
-(def readable? (memoize-type-test (fn [x] (-> x pr-str (edn/read-string)) true)))
+(def readable? (memoize-type-test (fn [x] (-> x encore/pr-edn encore/read-edn) true)))
 
 (comment
   (serializable? "Hello world")
