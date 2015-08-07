@@ -208,7 +208,6 @@
         (println (format "DEBUG - freezer-coll: %s for %s" ~type (type ~'x)))))
      (if (counted? ~'x)
        (do (.writeInt ~'out (count ~'x))
-           ;; (doseq [i# ~'x] (freeze-to-out ~'out i#))
            (encore/backport-run! (fn [i#] (freeze-to-out ~'out i#)) ~'x))
        (let [bas#  (ByteArrayOutputStream.)
              sout# (DataOutputStream. bas#)
@@ -223,9 +222,6 @@
 (defmacro ^:private freezer-kvs [type id & body]
   `(freezer ~type ~id
     (.writeInt ~'out (* 2 (count ~'x)))
-    ;; (doseq [kv# ~'x]
-    ;;   (freeze-to-out ~'out (key kv#))
-    ;;   (freeze-to-out ~'out (val kv#)))
     (encore/backport-run!
       (fn [kv#]
         (freeze-to-out ~'out (key kv#))
@@ -916,8 +912,5 @@
 
 ;;;; Deprecated API
 
-(def freeze-to-stream! "DEPRECATED: Use `freeze-to-out!` instead."
-  freeze-to-out!)
-
-(def thaw-from-stream! "DEPRECATED: Use `thaw-from-in!` instead."
-  thaw-from-in!)
+(def freeze-to-stream! "DEPRECATED: Use `freeze-to-out!` instead." freeze-to-out!)
+(def thaw-from-stream! "DEPRECATED: Use `thaw-from-in!` instead."  thaw-from-in!)
