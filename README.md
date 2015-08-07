@@ -1,7 +1,7 @@
 **[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contrib](#contact--contributing) | current [Break Version][]:
 
 ```clojure
-[com.taoensso/nippy "2.9.0"] ; Stable, please see CHANGELOG for details
+[com.taoensso/nippy "2.9.0"] ; Stable, see CHANGELOG for details
 ```
 
 # Nippy, a Clojure serialization library
