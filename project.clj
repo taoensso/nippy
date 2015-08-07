@@ -14,8 +14,8 @@
   :dependencies
   [[org.clojure/clojure      "1.4.0"]
    [org.clojure/tools.reader "0.9.2"]
-   [com.taoensso/encore      "1.38.0"]
-   [org.iq80.snappy/snappy   "0.3"]
+   [com.taoensso/encore      "1.38.0"] ; 2.x needs Clojure 1.5+
+   [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.5"]
    [net.jpountz.lz4/lz4      "1.3"]]
 
@@ -27,9 +27,9 @@
    :1.7  {:dependencies [[org.clojure/clojure "1.7.0-RC1"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
           :dependencies [[expectations                  "2.1.1"]
-                         [org.clojure/test.check        "0.7.0"]
+                         [org.clojure/test.check        "0.8.2"]
                          ;; [com.cemerick/double-check  "0.6.1"]
-                         [org.clojure/data.fressian     "0.2.0"]
+                         [org.clojure/data.fressian     "0.2.1"]
                          [org.xerial.snappy/snappy-java "1.1.1.7"]]}
    :dev [:1.7 :test
          {:plugins
