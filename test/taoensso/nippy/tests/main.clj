@@ -164,4 +164,4 @@
 
 ;;;; Benchmarks
 
-;; (expect (benchmarks/bench {})) ; Also tests :cached passwords
+(expect (benchmarks/bench {})) ; Also tests :cached passwords
