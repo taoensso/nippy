@@ -15,17 +15,26 @@
 
 ;;;; Default digests, ciphers, etc.
 
-(def ^:private ^javax.crypto.Cipher aes128-cipher
-  (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding"))
-(def ^:private ^java.security.MessageDigest sha512-md
-  (java.security.MessageDigest/getInstance "SHA-512"))
-(def ^:private ^java.security.SecureRandom prng
-  (java.security.SecureRandom/getInstance "SHA1PRNG"))
+(def ^:private aes128-cipher*
+  (encore/thread-local-proxy
+    (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
 
-(def ^:private ^:const aes128-block-size (.getBlockSize aes128-cipher))
+(def ^:private sha512-md*
+  (encore/thread-local-proxy
+    (java.security.MessageDigest/getInstance "SHA-512")))
+
+(def ^:private prng*
+  (encore/thread-local-proxy
+    (java.security.SecureRandom/getInstance "SHA1PRNG")))
+
+(defn- aes128-cipher ^javax.crypto.Cipher         [] (.get ^ThreadLocal aes128-cipher*))
+(defn- sha512-md     ^java.security.MessageDigest [] (.get ^ThreadLocal sha512-md*))
+(defn- prng          ^java.security.SecureRandom  [] (.get ^ThreadLocal prng*))
+
+(def ^:private ^:const aes128-block-size (.getBlockSize (aes128-cipher)))
 (def ^:private ^:const salt-size         aes128-block-size)
 
-(defn- rand-bytes [size] (let [seed (byte-array size)] (.nextBytes prng seed) seed))
+(defn- rand-bytes [size] (let [ba (byte-array size)] (.nextBytes (prng) ba) ba))
 
 ;;;; Default key-gen
 
@@ -33,13 +42,14 @@
   "SHA512-based key generator. Good JVM availability without extra dependencies
   (PBKDF2, bcrypt, scrypt, etc.). Decent security with multiple rounds."
   [salt-ba ^String pwd]
-  (loop [^bytes ba (let [pwd-ba (.getBytes pwd "UTF-8")]
-                     (if salt-ba (encore/ba-concat salt-ba pwd-ba) pwd-ba))
-         n (* (int Short/MAX_VALUE) (if salt-ba 5 64))]
-    (if-not (zero? n)
-      (recur (.digest sha512-md ba) (dec n))
-      (-> ba (java.util.Arrays/copyOf aes128-block-size)
-             (javax.crypto.spec.SecretKeySpec. "AES")))))
+  (let [md (sha512-md)]
+    (loop [^bytes ba (let [pwd-ba (.getBytes pwd "UTF-8")]
+                       (if salt-ba (encore/ba-concat salt-ba pwd-ba) pwd-ba))
+           n (* (int Short/MAX_VALUE) (if salt-ba 5 64))]
+      (if-not (zero? n)
+        (recur (.digest md ba) (dec n))
+        (-> ba (java.util.Arrays/copyOf aes128-block-size)
+               (javax.crypto.spec.SecretKeySpec. "AES"))))))
 
 (comment
   (time (sha512-key nil "hi" 1))   ; ~40ms per hash (fast)
@@ -73,12 +83,14 @@
           iv-ba      (rand-bytes aes128-block-size)
           salt-ba    (when salt? (rand-bytes salt-size))
           prefix-ba  (if-not salt? iv-ba (encore/ba-concat iv-ba salt-ba))
-          key        (encore/memoized (when-not salt? key-cache)
-                       key-gen salt-ba pwd)
-          iv         (javax.crypto.spec.IvParameterSpec. iv-ba)]
-      (.init aes128-cipher javax.crypto.Cipher/ENCRYPT_MODE
+          key        (if salt?
+                       (key-gen salt-ba pwd)
+                       (encore/memoized key-cache key-gen salt-ba pwd))
+          iv         (javax.crypto.spec.IvParameterSpec. iv-ba)
+          cipher     (aes128-cipher)]
+      (.init cipher javax.crypto.Cipher/ENCRYPT_MODE
              ^javax.crypto.spec.SecretKeySpec key iv)
-      (encore/ba-concat prefix-ba (.doFinal aes128-cipher data-ba))))
+      (encore/ba-concat prefix-ba (.doFinal cipher data-ba))))
 
   (decrypt [_ typed-pwd ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
@@ -87,12 +99,14 @@
           [prefix-ba data-ba] (encore/ba-split ba prefix-size)
           [iv-ba salt-ba]     (if-not salt? [prefix-ba nil]
                                 (encore/ba-split prefix-ba aes128-block-size))
-          key (encore/memoized (when-not salt? key-cache)
-                key-gen salt-ba pwd)
-          iv  (javax.crypto.spec.IvParameterSpec. iv-ba)]
-      (.init aes128-cipher javax.crypto.Cipher/DECRYPT_MODE
+          key (if salt?
+                (key-gen salt-ba pwd)
+                (encore/memoized key-cache key-gen salt-ba pwd))
+          iv  (javax.crypto.spec.IvParameterSpec. iv-ba)
+          cipher (aes128-cipher)]
+      (.init cipher javax.crypto.Cipher/DECRYPT_MODE
              ^javax.crypto.spec.SecretKeySpec key iv)
-      (.doFinal aes128-cipher data-ba))))
+      (.doFinal cipher data-ba))))
 
 (def aes128-encryptor
   "Default 128bit AES encryptor with multi-round SHA-512 key-gen.
@@ -100,7 +114,7 @@
   Password form [:salted \"my-password\"]
   ---------------------------------------
   USE CASE: You want more than a small, finite number of passwords (e.g. each
-             item encrypted will use a unique user-provided password).
+            item encrypted will use a unique user-provided password).
 
   IMPLEMENTATION: Uses a relatively cheap key hash, but automatically salts
                   every key.
