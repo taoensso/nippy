@@ -279,24 +279,25 @@
          (write-utf8 out (.getName (class x))) ; Reflect
          (freeze-to-out out (into {} x)))
 
-(freezer Byte       id-byte    (.writeByte  out x))
-(freezer Short      id-short   (.writeShort out x))
-(freezer Integer    id-integer (.writeInt   out x))
-;;(freezer Long    id-long    (.writeLong  out x))
+(freezer Byte    id-byte    (.writeByte  out x))
+(freezer Short   id-short   (.writeShort out x))
+(freezer Integer id-integer (.writeInt   out x))
+;;(freezer Long  id-long    (.writeLong  out x))
 (extend-type Long ; Optimized common-case type
   Freezable
   (freeze-to-out* [x ^DataOutput out]
-    (cond
-     (<= Byte/MIN_VALUE x Byte/MAX_VALUE)
-     (do (write-id out id-byte-as-long) (.writeByte out x))
+    (let [^long x x]
+      (cond
+        (and (<= Byte/MIN_VALUE x) (<= x Byte/MAX_VALUE))
+        (do (write-id out id-byte-as-long) (.writeByte out x))
 
-     (<= Short/MIN_VALUE x Short/MAX_VALUE)
-     (do (write-id out id-short-as-long) (.writeShort out x))
+        (and (<= Short/MIN_VALUE x) (<= x Short/MAX_VALUE))
+        (do (write-id out id-short-as-long) (.writeShort out x))
 
-     (<= Integer/MIN_VALUE x Integer/MAX_VALUE)
-     (do (write-id out id-int-as-long) (.writeInt out x))
+        (and (<= Integer/MIN_VALUE x) (<= x Integer/MAX_VALUE))
+        (do (write-id out id-int-as-long) (.writeInt out x))
 
-     :else (do (write-id out id-long) (.writeLong out x)))))
+        :else (do (write-id out id-long) (.writeLong out x))))))
 
 ;;
 
@@ -361,6 +362,7 @@
 
 (defn- wrap-header [data-ba head-meta]
   (if-let [head-ba (get-head-ba head-meta)]
+    ;; TODO Would be nice if we could avoid the array copy here:
     (encore/ba-concat head-ba data-ba)
     (throw (ex-info (format "Unrecognized header meta: %s" head-meta)
              {:head-meta head-meta}))))
