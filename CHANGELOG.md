@@ -1,5 +1,20 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.10.0-beta1 / 2015 Sep 17
+
+> This is a major **non-breaking** feature/performance release
+
+* **DEPRECATION NOTICE**: this will be the last major release with support for Clojure 1.4
+* **Performance**: various small performance improvements
+* **New**: dynamic `*default-freeze-compressor-selector*`, `set-default-freeze-compressor-selector!` util
+* **New**: dynamic `*custom-readers*`, `swap-custom-readers!` util
+* **New**: edn writes now override dynamic `*print-level*`, `*print-length*` for safety
+
+```clojure
+[com.taoensso/nippy "2.10.0-beta1"]
+```
+
+
 ## v2.9.1 / 2015 Sep 14
 
 > This is a hotfix release with an **important fix** for Nippy encryption users
@@ -13,7 +28,7 @@
 
 ## v2.9.0 / 2015 Jun 1
 
-> This is a major, **non-breaking** release that improves performance and makes thawing more resilient to certain failures. Identical to **v2.9.0-RC3**.
+> This is a major **non-breaking** release that improves performance and makes thawing more resilient to certain failures. Identical to **v2.9.0-RC3**.
 
 * **Robustness**: improve error handling for unthawable records
 * **Performance**: switch `doseq` -> (faster) `run!` calls
