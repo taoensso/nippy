@@ -1,6 +1,17 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
-## v2.9.0 / 2015 June 1
+## v2.9.1 / 2015 Sep 14
+
+> This is a hotfix release with an **important fix** for Nippy encryption users
+
+* **Fix**: broken encryption thread-safety [#68]
+
+```clojure
+[com.taoensso/nippy "2.9.1"]
+```
+
+
+## v2.9.0 / 2015 Jun 1
 
 > This is a major, **non-breaking** release that improves performance and makes thawing more resilient to certain failures. Identical to **v2.9.0-RC3**.
 
