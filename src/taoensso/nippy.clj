@@ -161,15 +161,17 @@
 
 (defmacro write-id    [out id] `(.writeByte ~out ~id))
 (defmacro write-bytes [out ba & [small?]]
-  (let [out     (with-meta out {:tag 'java.io.DataOutput})
-        ba      (with-meta ba  {:tag 'bytes})
-        ;; Optimization, must be known before id's written
-        ;; `byte` to throw on range error
-        [wc wr] (if small? [byte 'writeByte] [int 'writeInt])]
-    `(let [out# ~out, ba# ~ba
-           size# (alength ba#)]
-       (. out# ~wr (~wc size#))
-       (.write out# ba# 0 size#))))
+  (let [out (with-meta out {:tag 'java.io.DataOutput})
+        ba  (with-meta ba  {:tag 'bytes})]
+    (if small? ; Optimization, must be known before id's written
+      `(let [out# ~out, ba# ~ba
+             size# (alength ba#)]
+         (.writeByte out# (byte size#))
+         (.write     out# ba# 0 size#))
+      `(let [out# ~out, ba# ~ba
+             size# (alength ba#)]
+         (.writeInt out#  (int size#))
+         (.write    out# ba# 0 size#)))))
 
 (defmacro write-biginteger [out x]
   (let [x (with-meta x {:tag 'java.math.BigInteger})]
@@ -423,8 +425,8 @@
               compressor      ; Assume compressor
               ))
 
-          ba (if compressor (compress compressor ba) ba)
-          ba (if encryptor (encrypt encryptor password ba) ba)]
+          ba (if compressor (compress compressor         ba) ba)
+          ba (if encryptor  (encrypt  encryptor password ba) ba)]
 
       (if skip-header? ba
         (wrap-header ba
@@ -665,8 +667,8 @@
 
             (try
               (let [ba data-ba
-                    ba (if encryptor (decrypt encryptor password ba) ba)
-                    ba (if compressor (decompress compressor ba) ba)
+                    ba (if encryptor  (decrypt    encryptor password ba) ba)
+                    ba (if compressor (decompress compressor         ba) ba)
                     dis (DataInputStream. (ByteArrayInputStream. ba))]
                 (thaw-from-in! dis))
 
