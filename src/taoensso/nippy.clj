@@ -163,13 +163,13 @@
 (defmacro write-id    [out id] `(.writeByte ~out ~id))
 (defmacro write-bytes [out ba & [small?]]
   (let [out (with-meta out {:tag 'java.io.DataOutput})
-        ba  (with-meta ba  {:tag 'bytes})]
+        ba  (with-meta ba  {:tag 'bytes})
+        ;; Optimization, must be known before id's written
+        ;; `byte` to throw on range error
+        [wc wr]  (if small? [byte 'writeByte] [int 'writeInt])]
     `(let [out# ~out, ba# ~ba
            size# (alength ba#)]
-       (if ~small?             ; Optimization, must be known before id's written
-         (.writeByte out# (byte size#))  ; `byte` to throw on range error
-         (.writeInt  out# (int  size#))  ; `int`  ''
-         )
+       (. out# ~wr (~wc size#))
        (.write out# ba# 0 size#))))
 
 (defmacro write-biginteger [out x]
