@@ -162,11 +162,11 @@
 
 (defmacro write-id    [out id] `(.writeByte ~out ~id))
 (defmacro write-bytes [out ba & [small?]]
-  (let [out (with-meta out {:tag 'java.io.DataOutput})
-        ba  (with-meta ba  {:tag 'bytes})
+  (let [out     (with-meta out {:tag 'java.io.DataOutput})
+        ba      (with-meta ba  {:tag 'bytes})
         ;; Optimization, must be known before id's written
         ;; `byte` to throw on range error
-        [wc wr]  (if small? [byte 'writeByte] [int 'writeInt])]
+        [wc wr] (if small? [byte 'writeByte] [int 'writeInt])]
     `(let [out# ~out, ba# ~ba
            size# (alength ba#)]
        (. out# ~wr (~wc size#))
@@ -292,13 +292,13 @@
   Freezable
   (freeze-to-out* [x ^DataOutput out]
     (cond
-     (<= Byte/MIN_VALUE x Byte/MAX_VALUE)
+     (and (<= Byte/MIN_VALUE x) (<= x Byte/MAX_VALUE))
      (do (write-id out id-byte-as-long) (.writeByte out x))
 
-     (<= Short/MIN_VALUE x Short/MAX_VALUE)
+     (and (<= Short/MIN_VALUE x) (<= x Short/MAX_VALUE))
      (do (write-id out id-short-as-long) (.writeShort out x))
 
-     (<= Integer/MIN_VALUE x Integer/MAX_VALUE)
+     (and (<= Integer/MIN_VALUE x) (<= x Integer/MAX_VALUE))
      (do (write-id out id-int-as-long) (.writeInt out x))
 
      :else (do (write-id out id-long) (.writeLong out x)))))
