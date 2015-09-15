@@ -24,7 +24,7 @@
    :server-jvm {:jvm-opts ^:replace ["-server" "-Xms1024m" "-Xmx2048m"]}
    :1.5  {:dependencies [[org.clojure/clojure "1.5.1"]]}
    :1.6  {:dependencies [[org.clojure/clojure "1.6.0"]]}
-   :1.7  {:dependencies [[org.clojure/clojure "1.7.0-RC1"]]}
+   :1.7  {:dependencies [[org.clojure/clojure "1.7.0"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
           :dependencies [[expectations                  "2.1.1"]
                          [org.clojure/test.check        "0.8.2"]
@@ -32,7 +32,9 @@
                          [org.clojure/data.fressian     "0.2.1"]
                          [org.xerial.snappy/snappy-java "1.1.1.7"]]}
    :dev [:1.7 :test
-         {:plugins
+         {:dependencies
+          [[com.taoensso/encore "2.13.0"]]
+          :plugins
           [[lein-pprint       "1.1.1"]
            [lein-ancient      "0.6.7"]
            [lein-expectations "0.0.8"]
