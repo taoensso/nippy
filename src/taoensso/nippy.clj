@@ -405,7 +405,7 @@
                        encryptor  aes128-encryptor}
                 :as   opts}]]
   (let [legacy-mode? (:legacy-mode opts) ; DEPRECATED Nippy v1-compatible freeze
-        compressor   (if-not legacy-mode? compressor snappy-compressor)
+        compressor   (if legacy-mode? snappy-compressor compressor)
         encryptor    (when password (if-not legacy-mode? encryptor nil))
         skip-header? (or skip-header? legacy-mode?)
         baos (ByteArrayOutputStream.)
@@ -423,8 +423,8 @@
               compressor      ; Assume compressor
               ))
 
-          ba (if-not compressor ba (compress compressor ba))
-          ba (if-not encryptor  ba (encrypt encryptor password ba))]
+          ba (if compressor (compress compressor ba) ba)
+          ba (if encryptor (encrypt encryptor password ba) ba)]
 
       (if skip-header? ba
         (wrap-header ba
@@ -651,18 +651,20 @@
                                    e)))
         thaw-data
         (fn [data-ba compressor-id encryptor-id]
-          (let [compressor (if-not (identical? compressor :auto) compressor
-                             (get-auto-compressor compressor-id))
-                encryptor  (if-not (identical? encryptor :auto) encryptor
-                             (get-auto-encryptor encryptor-id))]
+          (let [compressor (if (identical? compressor :auto)
+                             (get-auto-compressor compressor-id)
+                             compressor)
+                encryptor  (if (identical? encryptor :auto)
+                             (get-auto-encryptor encryptor-id)
+                             encryptor)]
 
             (when (and encryptor (not password))
               (ex "Password required for decryption."))
 
             (try
               (let [ba data-ba
-                    ba (if-not encryptor  ba (decrypt encryptor password ba))
-                    ba (if-not compressor ba (decompress compressor ba))
+                    ba (if encryptor (decrypt encryptor password ba) ba)
+                    ba (if compressor (decompress compressor ba) ba)
                     dis (DataInputStream. (ByteArrayInputStream. ba))]
                 (thaw-from-in! dis))
 
@@ -785,9 +787,9 @@
         ba-len    (alength ba)
         compress? (> ba-len 1024)]
     (.writeBoolean out compress?)
-    (if-not compress? (write-bytes out ba)
-      (let [ba* (compress lzma2-compressor ba)]
-        (write-bytes out ba*)))))
+    (if compress?
+      (write-bytes out (compress lzma2-compressor ba))
+      (write-bytes out ba))))
 
 (extend-thaw 128 [in]
   (let [compressed? (.readBoolean in)
