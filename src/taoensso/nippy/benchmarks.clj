@@ -66,7 +66,15 @@
   ;; (bench {:laps 4})
   ;; (bench {:laps 1})
 
-  ;;; 2015 Sep 14 - v2.10.0-beta1, Clojure 1.7.0
+  ;;; 2015 Sep 15 - v2.10.0-alpha6, Clojure 1.7.0
+  {:reader    {:round 94901, :freeze 25781, :thaw 69120, :size 27686}}
+  {:lzma2     {:round 65127, :freeze 43150, :thaw 21977, :size 11244}}
+  {:encrypted {:round 12590, :freeze 7565,  :thaw 5025,  :size 16148}}
+  {:fressian  {:round 12085, :freeze 9168,  :thaw 2917,  :size 16972}}
+  {:default   {:round 6974,  :freeze 4582,  :thaw 2392,  :size 16123}}
+  {:fast      {:round 6255,  :freeze 3724,  :thaw 2531,  :size 17013}}
+
+  ;;; 2015 Sep 14 - v2.10.0-alpha5, Clojure 1.7.0-RC1
   {:default   {:round 6870,  :freeze 4376, :thaw 2494, :size 16227}}
   {:fast      {:round 6104,  :freeze 3743, :thaw 2361, :size 17013}}
   {:encrypted {:round 12155, :freeze 6908, :thaw 5247, :size 16244}}
