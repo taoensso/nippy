@@ -215,7 +215,7 @@
 
 (defmacro ^:private freezer-kvs [type id & body]
   `(freezer ~type ~id
-    (.writeInt ~'out (* 2 (count ~'x)))
+    (.writeInt ~'out (* 2 (count ~'x))) ; *2 here is vestigial
     (encore/backport-run!
       (fn [kv#]
         (freeze-to-out ~'out (key kv#))
@@ -452,7 +452,7 @@
 
 (defmacro ^:private read-kvs [in coll]
   `(let [in# ~in]
-     (encore/repeatedly-into* ~coll (quot (.readInt in#) 2)
+     (encore/repeatedly-into* ~coll (quot (.readInt in#) 2) ; /2 here is vestigial
        [(thaw-from-in in#) (thaw-from-in in#)])))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
