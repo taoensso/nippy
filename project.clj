@@ -33,7 +33,7 @@
                          [org.xerial.snappy/snappy-java "1.1.1.7"]]}
    :dev [:1.7 :test
          {:dependencies
-          [[com.taoensso/encore "2.13.0"]]
+          [[com.taoensso/encore "2.15.0"]]
           :plugins
           [[lein-pprint       "1.1.1"]
            [lein-ancient      "0.6.7"]

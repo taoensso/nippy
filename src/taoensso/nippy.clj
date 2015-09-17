@@ -1,7 +1,7 @@
 (ns taoensso.nippy
   "High-performance JVM Clojure serialization library. Originally adapted from
-   Deep-Freeze."
-  {:author "Peter Taoussanis"}
+  Deep-Freeze (https://goo.gl/OePPGr)."
+  {:author "Peter Taoussanis (@ptaoussanis)"}
   (:require [taoensso.encore :as encore]
             [taoensso.nippy
              (utils       :as utils)
@@ -18,17 +18,9 @@
              PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList ; LazySeq
              IRecord ISeq]))
 
-;;;; Encore version check
-
-(let [min-encore-version 1.38]
-  (if-let [assert! (ns-resolve 'taoensso.encore 'assert-min-encore-version)]
-    (assert! min-encore-version)
-    (throw
-      (ex-info
-        (format
-          "Insufficient com.taoensso/encore version (< %s). You may have a Leiningen dependency conflict (see http://goo.gl/qBbLvC for solution)."
-          min-encore-version)
-        {:min-version min-encore-version}))))
+(if (vector? taoensso.encore/encore-version)
+  (encore/assert-min-encore-version [1 38 0]) ; Note v1.x for Clojure 1.4 support
+  (encore/assert-min-encore-version  1.38))
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1].
