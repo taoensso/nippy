@@ -86,7 +86,7 @@
   (def ^:const id-seq             (int 24))
   (def ^:const id-meta            (int 25))
   (def ^:const id-queue           (int 26))
-  (def ^:const id-map             (int 30))
+  (def ^:const id-map             (int 27))
   (def ^:const id-sorted-set      (int 28))
   (def ^:const id-sorted-map      (int 29))
 
@@ -124,11 +124,10 @@
   ;; (def ^:const id-map-small    (int 112)) ; ''
 
   ;;; DEPRECATED (old types will be supported only for thawing)
-  (def ^:const id-reader-v1       (int 1))   ; v0.9.2+ for +64k support
-  (def ^:const id-string-v1       (int 11))  ; v0.9.2+ for +64k support
-  (def ^:const id-map-v1          (int 22))  ; v0.9.0+ for more efficient thaw
-  (def ^:const id-keyword-v1      (int 12))  ; v2.0.0-alpha5+ for str consistecy
-  (def ^:const id-map-v2          (int 27))  ; v2.11 for more efficient freeze+thaw
+  (def ^:const id-old-reader      (int 1))   ; v0.9.2+ for +64k support
+  (def ^:const id-old-string      (int 11))  ; v0.9.2+ for +64k support
+  (def ^:const id-old-map         (int 22))  ; v0.9.0+ for more efficient thaw
+  (def ^:const id-old-keyword     (int 12))  ; v2.0.0-alpha5+ for str consistecy
   )
 
 ;;;; Ns imports (mostly for convenience of lib consumers)
@@ -216,20 +215,11 @@
 
 (defmacro ^:private freezer-kvs [type id & body]
   `(freezer ~type ~id
-    (.writeInt ~'out (* 2 (count ~'x))) ; The *2 is vestigial
+    (.writeInt ~'out (* 2 (count ~'x)))
     (encore/backport-run!
       (fn [kv#]
         (freeze-to-out ~'out (key kv#))
         (freeze-to-out ~'out (val kv#)))
-      ~'x)))
-
-(defmacro ^:private freezer-mapent-kvs [type id & body]
-  `(freezer ~type ~id
-    (.writeInt ~'out (count ~'x))
-    (encore/backport-run!
-      (fn [kv#]
-        (freeze-to-out ~'out (.getKey   ^clojure.lang.MapEntry kv#))
-        (freeze-to-out ~'out (.getValue ^clojure.lang.MapEntry kv#)))
       ~'x)))
 
 (freezer (Class/forName "[B") id-bytes   (write-bytes out ^bytes x))
@@ -269,7 +259,7 @@
 (freezer-coll PersistentTreeSet     id-sorted-set)
 (freezer-kvs  PersistentTreeMap     id-sorted-map)
 
-(freezer-mapent-kvs APersistentMap  id-map)
+(freezer-kvs  APersistentMap        id-map)
 (freezer-coll APersistentVector     id-vector)
 (freezer-coll APersistentSet        id-set)
 (freezer-coll PersistentList        id-list) ; No APersistentList
@@ -462,14 +452,8 @@
 
 (defmacro ^:private read-kvs [in coll]
   `(let [in# ~in]
-     (encore/repeatedly-into* ~coll
-       (quot (.readInt in#) 2) ; The /2 is vestigial
+     (encore/repeatedly-into* ~coll (quot (.readInt in#) 2)
        [(thaw-from-in in#) (thaw-from-in in#)])))
-
-(defmacro ^:private read-mapent-kvs [in coll]
-  `(let [in# ~in]
-     (encore/repeatedly-into* ~coll (.readInt in#)
-       (clojure.lang.MapEntry. (thaw-from-in in#) (thaw-from-in in#)))))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
@@ -556,7 +540,7 @@
         id-list    (into '() (rseq (read-coll in [])))
         id-vector  (read-coll in  [])
         id-set     (read-coll in #{})
-        id-map     (read-mapent-kvs in {})
+        id-map     (read-kvs  in  {})
         id-seq     (or (seq (read-coll in []))
                        (lazy-seq nil) ; Empty coll
                        )
@@ -592,12 +576,11 @@
         id-uuid  (UUID. (.readLong in) (.readLong in))
 
         ;;; DEPRECATED
-        id-map-v2    (read-kvs in {})
-        id-reader-v1 (encore/read-edn (.readUTF in))
-        id-string-v1 (.readUTF in)
-        id-map-v1    (apply hash-map (encore/repeatedly-into* []
+        id-old-reader (encore/read-edn (.readUTF in))
+        id-old-string (.readUTF in)
+        id-old-map    (apply hash-map (encore/repeatedly-into* []
                         (* 2 (.readInt in)) (thaw-from-in in)))
-        id-keyword-v1 (keyword (.readUTF in))
+        id-old-keyword (keyword (.readUTF in))
 
         id-prefixed-custom ; Prefixed custom type
         (let [hash-id (.readShort in)]
