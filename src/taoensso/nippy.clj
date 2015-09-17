@@ -382,12 +382,12 @@
       (> ba-len 128)     lz4-compressor
       :else              nil)))
 
-(encore/defonce* ^:dynamic ^:private *default-freeze-compressor-selector*
+(encore/defonce* ^:dynamic *default-freeze-compressor-selector*
+  "(fn selector [^bytes ba])->compressor used by `(freeze <x> {:compressor :auto})."
   default-freeze-compressor-selector)
 
 (defn set-default-freeze-compressor-selector!
-  "Sets global dynamic (fn selector [^bytes ba])->compressor used by
-  `(freeze <x> {:compressor :auto <...>})."
+  "Sets root binding of `*default-freeze-compressor-selector*`."
   [selector]
   (alter-var-root #'*default-freeze-compressor-selector* (constantly selector)))
 
