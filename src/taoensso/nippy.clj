@@ -565,8 +565,12 @@
         id-double (.readDouble in)
         id-bigdec (BigDecimal. (read-biginteger in) (.readInt in))
 
-        id-ratio (/ (bigint (read-biginteger in))
-                    (bigint (read-biginteger in)))
+        ;; id-ratio (/ (bigint (read-biginteger in))
+        ;;             (bigint (read-biginteger in)))
+
+        id-ratio (clojure.lang.Ratio.
+                   (read-biginteger in)
+                   (read-biginteger in))
 
         id-date  (Date. (.readLong in))
         id-uuid  (UUID. (.readLong in) (.readLong in))
