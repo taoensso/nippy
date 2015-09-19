@@ -448,12 +448,13 @@
 (defmacro read-compact-long [in] `(long (BigInteger. (read-bytes ~in :small))))
 
 (defmacro ^:private read-coll [in coll]
-  `(let [in# ~in] (encore/repeatedly-into* ~coll (.readInt in#) (thaw-from-in in#))))
+  `(let [in# ~in] (encore/repeatedly-into ~coll (.readInt in#)
+                    (fn [] (thaw-from-in in#)))))
 
 (defmacro ^:private read-kvs [in coll]
   `(let [in# ~in]
-     (encore/repeatedly-into* ~coll (quot (.readInt in#) 2) ; /2 here is vestigial
-       [(thaw-from-in in#) (thaw-from-in in#)])))
+     (encore/repeatedly-into ~coll (quot (.readInt in#) 2) ; /2 here is vestigial
+       (fn [] [(thaw-from-in in#) (thaw-from-in in#)]))))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
@@ -578,8 +579,8 @@
         ;;; DEPRECATED
         id-old-reader (encore/read-edn (.readUTF in))
         id-old-string (.readUTF in)
-        id-old-map    (apply hash-map (encore/repeatedly-into* []
-                        (* 2 (.readInt in)) (thaw-from-in in)))
+        id-old-map    (apply hash-map (encore/repeatedly-into [] (* 2 (.readInt in))
+                                        (fn [] (thaw-from-in in))))
         id-old-keyword (keyword (.readUTF in))
 
         id-prefixed-custom ; Prefixed custom type
