@@ -1,6 +1,6 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
-## v2.10.0-beta1 / 2015 Sep 17
+## v2.10.0-RC1 / 2015 Sep 26
 
 > This is a major **non-breaking** feature/performance release
 
@@ -11,7 +11,7 @@
 * **New**: edn writes now override dynamic `*print-level*`, `*print-length*` for safety
 
 ```clojure
-[com.taoensso/nippy "2.10.0-beta1"]
+[com.taoensso/nippy "2.10.0-RC1"]
 ```
 
 
