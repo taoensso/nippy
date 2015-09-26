@@ -366,7 +366,7 @@
 
 (defn freeze-to-out!
   "Low-level API. Serializes arg (any Clojure data type) to a DataOutput."
-  [^DataOutput data-output x & _]
+  [^DataOutput data-output x]
   (freeze-to-out data-output x))
 
 (defn default-freeze-compressor-selector
@@ -394,40 +394,41 @@
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
   types, extend the Clojure reader or see `extend-freeze`."
-  ^bytes [x & [{:keys [compressor encryptor password skip-header?]
-                :or   {compressor :auto
-                       encryptor  aes128-encryptor}
-                :as   opts}]]
-  (let [legacy-mode? (:legacy-mode opts) ; DEPRECATED Nippy v1-compatible freeze
-        compressor   (if legacy-mode? snappy-compressor compressor)
-        encryptor    (when password (if-not legacy-mode? encryptor nil))
-        skip-header? (or skip-header? legacy-mode?)
-        baos (ByteArrayOutputStream.)
-        dos  (DataOutputStream. baos)]
-    (freeze-to-out! dos x)
-    (let [ba (.toByteArray baos)
+  (^bytes [x] (freeze x nil))
+  (^bytes [x {:keys [compressor encryptor password skip-header?]
+              :or   {compressor :auto
+                     encryptor  aes128-encryptor}
+              :as   opts}]
+    (let [legacy-mode? (:legacy-mode opts) ; DEPRECATED Nippy v1-compatible freeze
+          compressor   (if legacy-mode? snappy-compressor compressor)
+          encryptor    (when password (if-not legacy-mode? encryptor nil))
+          skip-header? (or skip-header? legacy-mode?)
+          baos (ByteArrayOutputStream.)
+          dos  (DataOutputStream. baos)]
+      (freeze-to-out! dos x)
+      (let [ba (.toByteArray baos)
 
-          compressor
-          (if (identical? compressor :auto)
-            (if skip-header?
-              lz4-compressor
-              (*default-freeze-compressor-selector* ba))
-            (if (fn? compressor)
-              (compressor ba) ; Assume compressor selector fn
-              compressor      ; Assume compressor
-              ))
+            compressor
+            (if (identical? compressor :auto)
+              (if skip-header?
+                lz4-compressor
+                (*default-freeze-compressor-selector* ba))
+              (if (fn? compressor)
+                (compressor ba) ; Assume compressor selector fn
+                compressor      ; Assume compressor
+                ))
 
-          ba (if compressor (compress compressor         ba) ba)
-          ba (if encryptor  (encrypt  encryptor password ba) ba)]
+            ba (if compressor (compress compressor         ba) ba)
+            ba (if encryptor  (encrypt  encryptor password ba) ba)]
 
-      (if skip-header? ba
-        (wrap-header ba
-          {:compressor-id (when-let [c compressor]
-                            (or (compression/standard-header-ids
-                                 (compression/header-id c)) :else))
-           :encryptor-id  (when-let [e encryptor]
-                            (or (encryption/standard-header-ids
-                                 (encryption/header-id e)) :else))})))))
+        (if skip-header? ba
+          (wrap-header ba
+            {:compressor-id (when-let [c compressor]
+                              (or (compression/standard-header-ids
+                                  (compression/header-id c)) :else))
+             :encryptor-id  (when-let [e encryptor]
+                              (or (encryption/standard-header-ids
+                                  (encryption/header-id e)) :else))}))))))
 
 ;;;; Thawing
 
@@ -597,7 +598,7 @@
 (defn thaw-from-in!
   "Low-level API. Deserializes a frozen object from given DataInput to its
   original Clojure data type."
-  [data-input & _]
+  [data-input]
   (thaw-from-in data-input))
 
 (defn- try-parse-header [ba]
@@ -634,73 +635,74 @@
   Options include:
     :compressor - An ICompressor, :auto (requires Nippy header), or nil.
     :encryptor  - An IEncryptor,  :auto (requires Nippy header), or nil."
-  [^bytes ba
-   & [{:keys [compressor encryptor password v1-compatibility?]
-       :or   {compressor        :auto
-              encryptor         :auto
-              v1-compatibility? true ; Recommend disabling when possible
-              }
-       :as   opts}]]
 
-  (assert (not (contains? opts :headerless-meta))
-    ":headerless-meta `thaw` option removed as of Nippy v2.7.")
+  ([ba] (thaw ba nil))
+  ([^bytes ba
+    {:keys [v1-compatibility? compressor encryptor password]
+     :or   {v1-compatibility? true ; Recommend disabling when possible
+            compressor        :auto
+            encryptor         :auto}
+     :as   opts}]
 
-  (let [ex (fn [msg & [e]] (throw (ex-info (format "Thaw failed: %s" msg)
-                                   {:opts (merge opts
-                                            {:compressor compressor
-                                             :encryptor  encryptor})}
-                                   e)))
-        thaw-data
-        (fn [data-ba compressor-id encryptor-id]
-          (let [compressor (if (identical? compressor :auto)
-                             (get-auto-compressor compressor-id)
-                             compressor)
-                encryptor  (if (identical? encryptor :auto)
-                             (get-auto-encryptor encryptor-id)
-                             encryptor)]
+   (assert (not (:headerless-meta opts))
+     ":headerless-meta `thaw` opt removed in Nippy v2.7+")
 
-            (when (and encryptor (not password))
-              (ex "Password required for decryption."))
+   (let [ex (fn [msg & [e]] (throw (ex-info (format "Thaw failed: %s" msg)
+                                    {:opts (merge opts
+                                             {:compressor compressor
+                                              :encryptor  encryptor})}
+                                    e)))
+         thaw-data
+         (fn [data-ba compressor-id encryptor-id]
+           (let [compressor (if (identical? compressor :auto)
+                              (get-auto-compressor compressor-id)
+                              compressor)
+                 encryptor  (if (identical? encryptor :auto)
+                              (get-auto-encryptor encryptor-id)
+                              encryptor)]
 
-            (try
-              (let [ba data-ba
-                    ba (if encryptor  (decrypt    encryptor password ba) ba)
-                    ba (if compressor (decompress compressor         ba) ba)
-                    dis (DataInputStream. (ByteArrayInputStream. ba))]
-                (thaw-from-in! dis))
+             (when (and encryptor (not password))
+               (ex "Password required for decryption."))
 
-              (catch Exception e
-                (ex "Decryption/decompression failure, or data unfrozen/damaged."
-                  e)))))
+             (try
+               (let [ba data-ba
+                     ba (if encryptor  (decrypt    encryptor password ba) ba)
+                     ba (if compressor (decompress compressor         ba) ba)
+                     dis (DataInputStream. (ByteArrayInputStream. ba))]
+                 (thaw-from-in! dis))
 
-        ;; This is hackish and can actually currently result in JVM core dumps
-        ;; due to buggy Snappy behaviour, Ref. http://goo.gl/mh7Rpy.
-        thaw-nippy-v1-data
-        (fn [data-ba]
-          (if-not v1-compatibility?
-            (throw (Exception. "v1 compatibility disabled"))
-            (try (thaw-data data-ba :snappy nil)
-                 (catch Exception _
-                   (thaw-data data-ba nil nil)))))]
+               (catch Exception e
+                 (ex "Decryption/decompression failure, or data unfrozen/damaged."
+                   e)))))
 
-    (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
-                       :as   head-meta}] (try-parse-header ba)]
-
-      ;; A well-formed header _appears_ to be present (it's possible though
-      ;; unlikely that this is a fluke and data is actually headerless):
-      (try (thaw-data data-ba compressor-id encryptor-id)
-           (catch Exception e
-             (try (thaw-nippy-v1-data data-ba)
+         ;; This is hackish and can actually currently result in JVM core dumps
+         ;; due to buggy Snappy behaviour, Ref. http://goo.gl/mh7Rpy.
+         thaw-nippy-v1-data
+         (fn [data-ba]
+           (if-not v1-compatibility?
+             (throw (Exception. "v1 compatibility disabled"))
+             (try (thaw-data data-ba :snappy nil)
                   (catch Exception _
-                    (if unrecognized-meta?
-                      (ex "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?"
-                          e)
-                      (throw e))))))
+                    (thaw-data data-ba nil nil)))))]
 
-      ;; Well-formed header definitely not present
-      (try (thaw-nippy-v1-data ba)
-           (catch Exception _
-             (thaw-data ba :no-header :no-header))))))
+     (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
+                        :as   head-meta}] (try-parse-header ba)]
+
+       ;; A well-formed header _appears_ to be present (it's possible though
+       ;; unlikely that this is a fluke and data is actually headerless):
+       (try (thaw-data data-ba compressor-id encryptor-id)
+            (catch Exception e
+              (try (thaw-nippy-v1-data data-ba)
+                   (catch Exception _
+                     (if unrecognized-meta?
+                       (ex "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?"
+                         e)
+                       (throw e))))))
+
+       ;; Well-formed header definitely not present
+       (try (thaw-nippy-v1-data ba)
+            (catch Exception _
+              (thaw-data ba :no-header :no-header)))))))
 
 (comment (thaw (freeze "hello"))
          (thaw (freeze "hello" {:compressor nil}))
@@ -912,8 +914,3 @@
 
 (comment (inspect-ba (freeze "hello"))
          (seq (:data-ba (inspect-ba (freeze "hello")))))
-
-;;;; Deprecated API
-
-(def freeze-to-stream! "DEPRECATED: Use `freeze-to-out!` instead." freeze-to-out!)
-(def thaw-from-stream! "DEPRECATED: Use `thaw-from-in!` instead."  thaw-from-in!)
