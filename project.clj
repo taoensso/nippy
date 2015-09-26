@@ -30,10 +30,10 @@
                          [org.clojure/test.check        "0.8.2"]
                          ;; [com.cemerick/double-check  "0.6.1"]
                          [org.clojure/data.fressian     "0.2.1"]
-                         [org.xerial.snappy/snappy-java "1.1.1.7"]]}
+                         [org.xerial.snappy/snappy-java "1.1.2"]]}
    :dev [:1.7 :test
          {:dependencies
-          [[com.taoensso/encore "2.15.0"]]
+          [[com.taoensso/encore "2.18.0"]]
           :plugins
           [[lein-pprint       "1.1.1"]
            [lein-ancient      "0.6.7"]
