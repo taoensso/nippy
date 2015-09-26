@@ -62,9 +62,18 @@
          (bench1 fressian-freeze fressian-thaw))
 
 (comment
+  (set! *unchecked-math* false)
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 3})
   ;; (bench {:laps 4})
-  ;; (bench {:laps 1})
+  ;; (bench {:laps 1 :lzma2? true})
+
+  ;;; 2015 Sep 29, various micro optimizations (incl. &arg elimination)
+  {:reader    {:round 63547, :freeze 19374, :thaw 44173, :size 27717}}
+  {:lzma2     {:round 51724, :freeze 33502, :thaw 18222, :size 11248}}
+  {:fressian  {:round 8813,  :freeze 6460,  :thaw 2353,  :size 16985}}
+  {:encrypted {:round 6005,  :freeze 3768,  :thaw 2237,  :size 16164}}
+  {:default   {:round 5417,  :freeze 3354,  :thaw 2063,  :size 16145}}
+  {:fast      {:round 4659,  :freeze 2712,  :thaw 1947,  :size 17026}}
 
   ;;; 2015 Sep 15 - v2.10.0-alpha6, Clojure 1.7.0
   {:reader    {:round 94901, :freeze 25781, :thaw 69120, :size 27686}}
