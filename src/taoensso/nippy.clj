@@ -217,9 +217,9 @@
   `(freezer ~type ~id
     (.writeInt ~'out (* 2 (count ~'x))) ; *2 here is vestigial
     (encore/backport-run!
-      (fn [kv#]
-        (freeze-to-out ~'out (key kv#))
-        (freeze-to-out ~'out (val kv#)))
+      (fn [[k# v#]]
+        (freeze-to-out ~'out k#)
+        (freeze-to-out ~'out v#))
       ~'x)))
 
 (freezer (Class/forName "[B") id-bytes   (write-bytes out ^bytes x))
