@@ -86,9 +86,9 @@
   (def ^:const id-seq             (int 24))
   (def ^:const id-meta            (int 25))
   (def ^:const id-queue           (int 26))
-  (def ^:const id-map             (int 27))
+  (def ^:const id-map             (int 30))
   (def ^:const id-sorted-set      (int 28))
-  (def ^:const id-sorted-map      (int 29))
+  (def ^:const id-sorted-map      (int 31))
 
   (def ^:const id-byte            (int 40))
   (def ^:const id-short           (int 41))
@@ -124,10 +124,12 @@
   ;; (def ^:const id-map-small    (int 112)) ; ''
 
   ;;; DEPRECATED (old types will be supported only for thawing)
-  (def ^:const id-reader-depr1    (int 1))   ; v0.9.2+ for +64k support
-  (def ^:const id-string-depr1    (int 11))  ; v0.9.2+ for +64k support
-  (def ^:const id-map-depr1       (int 22))  ; v0.9.0+ for more efficient thaw
-  (def ^:const id-keyword-depr1   (int 12))  ; v2.0.0-alpha5+ for str consistecy
+  (def ^:const id-reader-depr1     (int 1))   ; v0.9.2+ for +64k support
+  (def ^:const id-string-depr1     (int 11))  ; v0.9.2+ for +64k support
+  (def ^:const id-map-depr1        (int 22))  ; v0.9.0+ for more efficient thaw
+  (def ^:const id-keyword-depr1    (int 12))  ; v2.0.0-alpha5+ for str consistecy
+  (def ^:const id-map-depr2        (int 27))  ; v2.11+ for count/2
+  (def ^:const id-sorted-map-depr1 (int 29))  ; v2.11+ for count/2
   )
 
 ;;;; Ns imports (mostly for convenience of lib consumers)
@@ -175,7 +177,7 @@
 
 (defmacro write-compact-long "Uses 2->9 bytes." [out x]
   `(write-bytes ~out (.toByteArray (java.math.BigInteger/valueOf (long ~x)))
-                :small))
+     :small))
 
 (comment (alength (.toByteArray (java.math.BigInteger/valueOf Long/MAX_VALUE))))
 
@@ -215,7 +217,7 @@
 
 (defmacro ^:private freezer-kvs [type id & body]
   `(freezer ~type ~id
-    (.writeInt ~'out (* 2 (count ~'x))) ; *2 here is vestigial
+    (.writeInt ~'out (count ~'x))
     (encore/run-kv!
       (fn [k# v#]
         (freeze-to-out ~'out k#)
@@ -466,7 +468,12 @@
 
 (defmacro ^:private read-kvs [in coll]
   `(let [in# ~in]
-     (encore/repeatedly-into ~coll (quot (.readInt in#) 2) ; /2 here is vestigial
+     (encore/repeatedly-into ~coll (.readInt in#)
+       (fn [] [(thaw-from-in in#) (thaw-from-in in#)]))))
+
+(defmacro ^:private read-kvs-depr1 [in coll]
+  `(let [in# ~in]
+     (encore/repeatedly-into ~coll (quot (.readInt in#) 2)
        (fn [] [(thaw-from-in in#) (thaw-from-in in#)]))))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
@@ -590,6 +597,8 @@
         id-uuid  (UUID. (.readLong in) (.readLong in))
 
         ;;; DEPRECATED
+        id-sorted-map-depr1 (read-kvs-depr1 in (sorted-map))
+        id-map-depr2        (read-kvs-depr1 in {})
         id-reader-depr1 (encore/read-edn (.readUTF in))
         id-string-depr1 (.readUTF in)
         id-map-depr1    (apply hash-map (encore/repeatedly-into [] (* 2 (.readInt in))
