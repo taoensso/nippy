@@ -23,20 +23,20 @@
   (encore/assert-min-encore-version  2.16))
 
 ;;;; Nippy data format
-;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1].
+;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
 ;; { * 1-byte type id.
 ;;   * Arb-length payload. } ...
 ;;
 ;; [1] Inclusion of header is strongly recommended. Purpose:
-;;   * Sanity check (confirm that data appears to be Nippy data).
-;;   * Nippy version check (=> supports changes to data schema over time).
-;;   * Supports :auto thaw compressor, encryptor.
+;;   * Sanity check (confirm that data appears to be Nippy data)
+;;   * Nippy version check (=> supports changes to data schema over time)
+;;   * Supports :auto thaw compressor, encryptor
 ;;   * Supports :auto freeze compressor (since this depends on :auto thaw
-;;     compressor).
+;;     compressor)
 ;;
 (def ^:private ^:const head-version 1)
 (def ^:private head-sig (.getBytes "NPY" "UTF-8"))
-(def ^:private ^:const head-meta "Final byte stores version-dependent metadata."
+(def ^:private ^:const head-meta "Final byte stores version-dependent metadata"
   {(byte 0)  {:version 1 :compressor-id nil     :encryptor-id nil}
    (byte 4)  {:version 1 :compressor-id nil     :encryptor-id :else}
    (byte 5)  {:version 1 :compressor-id :else   :encryptor-id nil}
@@ -65,71 +65,72 @@
 
   ;; ** Negative ids reserved for user-defined types **
   ;;
-  (def ^:const id-reserved        (int 0))
-  ;;                                   1     ; Deprecated
-  (def ^:const id-bytes           (int 2))
-  (def ^:const id-nil             (int 3))
-  (def ^:const id-boolean         (int 4))
-  (def ^:const id-reader          (int 5))   ; Fallback #2
-  (def ^:const id-serializable    (int 6))   ; Fallback #1
+  (def ^:const id-reserved          (int 0))
+  ;;                                     1     ; Deprecated
+  (def ^:const id-bytes             (int 2))
+  (def ^:const id-nil               (int 3))
+  (def ^:const id-boolean           (int 4))
+  (def ^:const id-reader            (int 5))   ; Fallback #2
+  (def ^:const id-serializable      (int 6))   ; Fallback #1
 
-  (def ^:const id-char            (int 10))
-  ;;                                   11    ; Deprecated
-  ;;                                   12    ; Deprecated
-  (def ^:const id-string          (int 13))
-  (def ^:const id-keyword         (int 14))
+  (def ^:const id-char              (int 10))
+  ;;                                     11    ; Deprecated
+  ;;                                     12    ; Deprecated
+  (def ^:const id-string            (int 13))
+  (def ^:const id-keyword           (int 14))
 
-  (def ^:const id-list            (int 20))
-  (def ^:const id-vector          (int 21))
-  ;;                                   22    ; Deprecated
-  (def ^:const id-set             (int 23))
-  (def ^:const id-seq             (int 24))
-  (def ^:const id-meta            (int 25))
-  (def ^:const id-queue           (int 26))
-  (def ^:const id-map             (int 30))
-  (def ^:const id-sorted-set      (int 28))
-  (def ^:const id-sorted-map      (int 31))
+  (def ^:const id-list              (int 20))
+  (def ^:const id-vector            (int 21))
+  ;;                                     22    ; Deprecated
+  (def ^:const id-set               (int 23))
+  (def ^:const id-seq               (int 24))
+  (def ^:const id-meta              (int 25))
+  (def ^:const id-queue             (int 26))
+  ;;                                     27    ; Deprecated
+  (def ^:const id-sorted-set        (int 28))
+  ;;                                     29    ; Deprecated
+  (def ^:const id-map               (int 30))
+  (def ^:const id-sorted-map        (int 31))
 
-  (def ^:const id-byte            (int 40))
-  (def ^:const id-short           (int 41))
-  (def ^:const id-integer         (int 42))
-  (def ^:const id-long            (int 43))
-  (def ^:const id-bigint          (int 44))
-  (def ^:const id-biginteger      (int 45))
+  (def ^:const id-byte              (int 40))
+  (def ^:const id-short             (int 41))
+  (def ^:const id-integer           (int 42))
+  (def ^:const id-long              (int 43))
+  (def ^:const id-bigint            (int 44))
+  (def ^:const id-biginteger        (int 45))
 
-  (def ^:const id-float           (int 60))
-  (def ^:const id-double          (int 61))
-  (def ^:const id-bigdec          (int 62))
+  (def ^:const id-float             (int 60))
+  (def ^:const id-double            (int 61))
+  (def ^:const id-bigdec            (int 62))
 
-  (def ^:const id-ratio           (int 70))
+  (def ^:const id-ratio             (int 70))
 
-  (def ^:const id-record          (int 80))
-  ;; (def ^:const id-type         (int 81))  ; TODO?
-  (def ^:const id-prefixed-custom (int 82))
+  (def ^:const id-record            (int 80))
+  ;; (def ^:const id-type           (int 81))  ; TODO?
+  (def ^:const id-prefixed-custom   (int 82))
 
-  (def ^:const id-date            (int 90))
-  (def ^:const id-uuid            (int 91))
+  (def ^:const id-date              (int 90))
+  (def ^:const id-uuid              (int 91))
 
   ;;; Optimized, common-case types (v2.6+)
-  (def ^:const id-byte-as-long    (int 100)) ; 1 vs 8 bytes
-  (def ^:const id-short-as-long   (int 101)) ; 2 vs 8 bytes
-  (def ^:const id-int-as-long     (int 102)) ; 4 vs 8 bytes
-  ;; (def ^:const id-compact-long (int 103)) ; 6->7 vs 8 bytes
+  (def ^:const id-byte-as-long      (int 100)) ; 1 vs 8 bytes
+  (def ^:const id-short-as-long     (int 101)) ; 2 vs 8 bytes
+  (def ^:const id-int-as-long       (int 102)) ; 4 vs 8 bytes
   ;;
-  (def ^:const id-string-small    (int 105)) ; 1 vs 4 byte length prefix
-  (def ^:const id-keyword-small   (int 106)) ; ''
+  (def ^:const id-sm-string         (int 105)) ; 1 vs 4 byte length prefix
+  (def ^:const id-sm-keyword        (int 106)) ; ''
   ;;
-  ;; (def ^:const id-vector-small (int 110)) ; ''
-  ;; (def ^:const id-set-small    (int 111)) ; ''
-  ;; (def ^:const id-map-small    (int 112)) ; ''
+  ;; (def ^:const id-sm-vector      (int 110)) ; ''
+  ;; (def ^:const id-sm-set         (int 111)) ; ''
+  ;; (def ^:const id-sm-map         (int 112)) ; ''
 
   ;;; DEPRECATED (old types will be supported only for thawing)
-  (def ^:const id-reader-depr1     (int 1))   ; v0.9.2+ for +64k support
-  (def ^:const id-string-depr1     (int 11))  ; v0.9.2+ for +64k support
-  (def ^:const id-map-depr1        (int 22))  ; v0.9.0+ for more efficient thaw
-  (def ^:const id-keyword-depr1    (int 12))  ; v2.0.0-alpha5+ for str consistecy
-  (def ^:const id-map-depr2        (int 27))  ; v2.11+ for count/2
-  (def ^:const id-sorted-map-depr1 (int 29))  ; v2.11+ for count/2
+  (def ^:const id-reader-depr1      (int 1))   ; v0.9.2+ for +64k support
+  (def ^:const id-string-depr1      (int 11))  ; v0.9.2+ for +64k support
+  (def ^:const id-map-depr1         (int 22))  ; v0.9.0+ for more efficient thaw
+  (def ^:const id-keyword-depr1     (int 12))  ; v2.0.0-alpha5+ for str consistecy
+  (def ^:const id-map-depr2         (int 27))  ; v2.11+ for count/2
+  (def ^:const id-sorted-map-depr1  (int 29))  ; v2.11+ for count/2
   )
 
 ;;;; Ns imports (mostly for convenience of lib consumers)
@@ -150,7 +151,7 @@
 ;;;; Freezing
 
 (defprotocol Freezable
-  "Be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU."
+  "Be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU"
   (freeze-to-out* [this out]))
 
 (defmacro write-id    [out id] `(.writeByte ~out ~id))
@@ -175,14 +176,8 @@
   (let [x (with-meta x {:tag 'String})]
     `(write-bytes ~out (.getBytes ~x "UTF-8") ~small?)))
 
-(defmacro write-compact-long "Uses 2->9 bytes." [out x]
-  `(write-bytes ~out (.toByteArray (java.math.BigInteger/valueOf (long ~x)))
-     :small))
-
-(comment (alength (.toByteArray (java.math.BigInteger/valueOf Long/MAX_VALUE))))
-
 (defmacro ^:private freeze-to-out
-  "Like `freeze-to-out*` but with metadata support."
+  "Like `freeze-to-out*` but with metadata support"
   [out x]
   `(let [out# ~out, x# ~x]
      (when-let [m# (meta x#)]
@@ -236,7 +231,7 @@
   (freeze-to-out* [x ^DataOutput out]
     (let [ba (.getBytes x "UTF-8")]
       (if (<= (alength ^bytes ba) Byte/MAX_VALUE)
-        (do (write-id    out id-string-small)
+        (do (write-id    out id-sm-string)
             (write-bytes out ba :small))
 
         (do (write-id    out id-string)
@@ -251,7 +246,7 @@
           ba (.getBytes s "UTF-8")]
 
       (if (<= (alength ^bytes ba) Byte/MAX_VALUE)
-        (do (write-id    out id-keyword-small)
+        (do (write-id    out id-sm-keyword)
             (write-bytes out ba :small))
 
         (do (write-id    out id-keyword)
@@ -386,8 +381,8 @@
   [^bytes ba]
   (let [ba-len (alength ba)]
     (cond
-      ;; (> ba-len 4098) lzma2-compressor
-      ;; (> ba-len 2048) lz4hc-compressor
+      ;; (> ba-len 8192) lzma2-compressor
+      ;; (> ba-len 4098) lz4hc-compressor
          (> ba-len 1024) lz4-compressor
       :else              nil)))
 
@@ -396,7 +391,7 @@
   default-freeze-compressor-selector)
 
 (defn set-default-freeze-compressor-selector!
-  "Sets root binding of `*default-freeze-compressor-selector*`."
+  "Sets root binding of `*default-freeze-compressor-selector*`"
   [selector]
   (alter-var-root #'*default-freeze-compressor-selector* (constantly selector)))
 
@@ -459,8 +454,6 @@
 (defmacro read-biginteger [in] `(BigInteger. (read-bytes ~in)))
 (defmacro read-utf8 [in & [small?]]
   `(String. (read-bytes ~in ~small?) "UTF-8"))
-
-(defmacro read-compact-long [in] `(long (BigInteger. (read-bytes ~in :small))))
 
 (defmacro ^:private read-coll [in coll]
   `(let [in# ~in] (encore/repeatedly-into ~coll (.readInt in#)
@@ -551,8 +544,8 @@
         id-keyword (keyword (read-utf8 in))
 
         ;;; Optimized, common-case types (v2.6+)
-        id-string-small           (read-utf8 in :small)
-        id-keyword-small (keyword (read-utf8 in :small))
+        id-sm-string           (read-utf8 in :small)
+        id-sm-keyword (keyword (read-utf8 in :small))
 
         id-queue      (read-coll in (PersistentQueue/EMPTY))
         id-sorted-set (read-coll in (sorted-set))
@@ -577,7 +570,6 @@
         id-byte-as-long  (long (.readByte  in))
         id-short-as-long (long (.readShort in))
         id-int-as-long   (long (.readInt   in))
-        ;; id-compact-long  (read-compact-long in)
 
         id-bigint     (bigint (read-biginteger in))
         id-biginteger (read-biginteger in)
@@ -654,8 +646,8 @@
   Nippy. To thaw custom types, extend the Clojure reader or see `extend-thaw`.
 
   Options include:
-    :compressor - An ICompressor, :auto (requires Nippy header), or nil.
-    :encryptor  - An IEncryptor,  :auto (requires Nippy header), or nil."
+    :compressor - An ICompressor, :auto (requires Nippy header), or nil
+    :encryptor  - An IEncryptor,  :auto (requires Nippy header), or nil"
 
   ([ba] (thaw ba nil))
   ([^bytes ba
@@ -737,8 +729,8 @@
               (and (integer? custom-type-id) (<= 1 custom-type-id 128)))))
 
 (defn- coerce-custom-type-id
-  "* +ive byte id -> -ive byte id (for unprefixed custom types).
-   * Keyword id   -> Short hash id (for prefixed custom types)."
+  "* +ive byte id -> -ive byte id (for unprefixed custom types)
+  * Keyword id   -> Short hash id (for prefixed custom types)"
   [custom-type-id]
   (assert-custom-type-id custom-type-id)
   (if-not (keyword? custom-type-id)
@@ -758,8 +750,8 @@
 (defmacro extend-freeze
   "Extends Nippy to support freezing of a custom type (ideally concrete) with
   given id of form:
-    * Keyword        - 2 byte overhead, resistent to id collisions.
-    * Byte ∈[1, 128] - no overhead, subject to id collisions.
+    * Keyword           - 2 byte overhead, resistent to id collisions
+    * Integer ∈[1, 128] - no overhead, subject to id collisions
 
   (defrecord MyType [data])
   (extend-freeze MyType :foo/my-type [x data-output] ; Keyword id
@@ -809,7 +801,7 @@
 ;;; Some useful custom types - EXPERIMENTAL
 
 ;; Mostly deprecated by :auto compressor selection
-(defrecord Compressable-LZMA2 [value]) ; Why was this `LZMA2`, not `lzma2`?
+(defrecord Compressable-LZMA2 [value]) ; Why was this `LZMA2` instead of `lzma2`?
 (extend-freeze Compressable-LZMA2 128 [x out]
   (let [ba (freeze (:value x) {:skip-header? true :compressor nil})
         ba-len    (alength ba)
@@ -838,7 +830,7 @@
 ;;;; Stress data
 
 (defrecord StressRecord [data])
-(def stress-data "Reference data used for tests & benchmarks."
+(def stress-data "Reference data used for tests & benchmarks"
   (let []
     {:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
      :nil          nil
@@ -899,18 +891,18 @@
      :ex-info      (ex-info "ExInfo" {:data "data"})}))
 
 (def stress-data-comparable
-  "Reference data with stuff removed that breaks roundtrip equality."
+  "Reference data with stuff removed that breaks roundtrip equality"
   (dissoc stress-data :bytes :throwable :exception :ex-info))
 
 (def stress-data-benchable
   "Reference data with stuff removed that breaks reader or other utils we'll
-  be benching against."
+  be benching against"
   (dissoc stress-data :bytes :throwable :exception :ex-info :queue :queue-empty
                       :byte :stress-record))
 
 ;;;; Tools
 
-(defn inspect-ba "Alpha - subject to change."
+(defn inspect-ba "Alpha - subject to change"
   [ba & [thaw-opts]]
   (if-not (encore/bytes? ba) :not-ba
     (let [[first2bytes nextbytes] (encore/ba-split ba 2)
