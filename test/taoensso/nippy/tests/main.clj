@@ -14,6 +14,8 @@
 
 ;;;; Core
 
+(expect (do (println (str "Clojure version: " *clojure-version*)) true))
+
 (expect test-data ((comp thaw freeze) test-data))
 (expect test-data ((comp #(thaw   % {})
                          #(freeze % {:legacy-mode true}))
