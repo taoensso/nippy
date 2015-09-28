@@ -527,12 +527,12 @@
         id-boolean (.readBoolean in)
 
         id-char    (.readChar in)
-        id-string  (read-utf8 in)
+        id-string           (read-utf8 in)
         id-keyword (keyword (read-utf8 in))
 
         ;;; Optimized, common-case types (v2.6+)
-        id-string-small           (String. (read-bytes in :small) "UTF-8")
-        id-keyword-small (keyword (String. (read-bytes in :small) "UTF-8"))
+        id-string-small           (read-utf8 in :small)
+        id-keyword-small (keyword (read-utf8 in :small))
 
         id-queue      (read-coll in (PersistentQueue/EMPTY))
         id-sorted-set (read-coll in (sorted-set))
