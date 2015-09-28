@@ -66,6 +66,13 @@
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 3})
   ;; (bench {:laps 4})
   ;; (bench {:laps 1 :lzma2? true})
+  ;; (bench {:laps 1})
+
+  ;;; 2015 Sep 28, small collection optimizations
+  {:lzma2     {:round 56307, :freeze 36475, :thaw 19832, :size 11244}}
+  {:encrypted {:round 6062,  :freeze 3802,  :thaw 2260,  :size 16148}}
+  {:default   {:round 5482,  :freeze 3382,  :thaw 2100,  :size 16128}}
+  {:fast      {:round 4729,  :freeze 2826,  :thaw 1903,  :size 16972}}
 
   ;;; 2015 Sep 29, various micro optimizations (incl. &arg elimination)
   {:reader    {:round 63547, :freeze 19374, :thaw 44173, :size 27717}}
