@@ -435,12 +435,17 @@
 (declare thaw-from-in)
 
 (defmacro read-bytes [in & [small?]]
-  `(let [in#   ~in
-         size# (if ~small? ; Optimization, must be known before id's written
-                 (.readByte in#)
-                 (.readInt  in#))
-         ba#   (byte-array size#)]
-     (.readFully in# ba# 0 size#) ba#))
+  (if small? ; Optimization, must be known before id's written
+    `(let [in#   ~in
+           size# (.readByte in#)
+           ba#   (byte-array size#)]
+       (.readFully in# ba# 0 size#)
+       ba#)
+    `(let [in#   ~in
+           size# (.readInt in#)
+           ba#   (byte-array size#)]
+       (.readFully in# ba# 0 size#)
+       ba#)))
 
 (defmacro read-biginteger [in] `(BigInteger. (read-bytes ~in)))
 (defmacro read-utf8 [in & [small?]]
