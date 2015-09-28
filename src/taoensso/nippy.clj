@@ -120,9 +120,11 @@
   (def ^:const id-sm-string         (int 105)) ; 1 vs 4 byte length prefix
   (def ^:const id-sm-keyword        (int 106)) ; ''
   ;;
-  ;; (def ^:const id-sm-vector      (int 110)) ; ''
-  ;; (def ^:const id-sm-set         (int 111)) ; ''
-  ;; (def ^:const id-sm-map         (int 112)) ; ''
+  (def ^:const id-sm-vector         (int 110)) ; ''
+  (def ^:const id-sm-set            (int 111)) ; ''
+  (def ^:const id-sm-map            (int 112)) ; ''
+  ;;
+  ;; TODO Additional optimizations (types) for 2-vecs and 3-vecs?
 
   ;;; DEPRECATED (old types will be supported only for thawing)
   (def ^:const id-reader-depr1      (int 1))   ; v0.9.2+ for +64k support
@@ -154,19 +156,17 @@
   "Be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU"
   (freeze-to-out* [this out]))
 
+(defn small-count? [n] (<= (long n) 127 #_Byte/MAX_VALUE))
 (defmacro write-id    [out id] `(.writeByte ~out ~id))
 (defmacro write-bytes [out ba & [small?]]
-  (let [out (with-meta out {:tag 'java.io.DataOutput})
+  (let [wc  (if small? 'writeByte 'writeInt)
+        out (with-meta out {:tag 'java.io.DataOutput})
         ba  (with-meta ba  {:tag 'bytes})]
-    (if small? ; Optimization, must be known before id's written
-      `(let [out# ~out, ba# ~ba
-             size# (alength ba#)]
-         (.writeByte out# (byte size#))
-         (.write     out# ba# 0 size#))
-      `(let [out# ~out, ba# ~ba
-             size# (alength ba#)]
-         (.writeInt out#  (int size#))
-         (.write    out# ba# 0 size#)))))
+    `(let [out#  ~out
+           ba#   ~ba
+           size# (alength ba#)]
+       (. out# ~wc        size#)
+       (.write out# ba# 0 size#))))
 
 (defmacro write-biginteger [out x]
   (let [x (with-meta x {:tag 'java.math.BigInteger})]
@@ -185,6 +185,32 @@
        (freeze-to-out* m# out#))
      (freeze-to-out* x# out#)))
 
+(defmacro write-coll [out x & [small?]]
+  (let [wc (if small? 'writeByte 'writeInt)]
+    `(if (counted? ~'x)
+       (do
+         (. ~'out ~wc (count ~'x))
+         (encore/run!* (fn [i#] (freeze-to-out ~'out i#)) ~'x))
+       (let [bas#  (ByteArrayOutputStream. 64)
+             sout# (DataOutputStream. bas#)
+             cnt#  (reduce (fn [^long cnt# i#]
+                             (freeze-to-out sout# i#)
+                             (unchecked-inc cnt#))
+                     0 ~'x)
+             ba# (.toByteArray bas#)]
+         (. ~'out ~wc cnt#)
+         (.write ~'out ba# 0 (alength ba#))))))
+
+(defmacro write-kvs [out x & [small?]]
+  (let [wc (if small? 'writeByte 'writeInt)]
+    `(do
+       (. ~'out ~wc (count ~'x))
+       (encore/run-kv!
+         (fn [k# v#]
+           (freeze-to-out ~'out k#)
+           (freeze-to-out ~'out v#))
+         ~'x))))
+
 (defmacro ^:private freezer [type id & body]
   `(extend-type ~type
      Freezable
@@ -192,63 +218,57 @@
        (write-id ~'out ~id)
        ~@body)))
 
-(defmacro ^:private freezer-coll [type id & body]
-  `(freezer ~type ~id
-     (when-debug-mode
-      (when (instance? ISeq ~type)
-        (println (format "DEBUG - freezer-coll: %s for %s" ~type (type ~'x)))))
-     (if (counted? ~'x)
-       (do (.writeInt ~'out (count ~'x))
-           (encore/run!* (fn [i#] (freeze-to-out ~'out i#)) ~'x))
-       (let [bas#  (ByteArrayOutputStream. 64)
-             sout# (DataOutputStream. bas#)
-             cnt#  (reduce (fn [^long cnt# i#]
-                             (freeze-to-out sout# i#)
-                             (unchecked-inc cnt#))
-                           0 ~'x)
-             ba# (.toByteArray bas#)]
-         (.writeInt ~'out cnt#)
-         (.write ~'out ba# 0 (alength ba#))))))
+(defmacro ^:private freezer-coll [type id & [id-sm]]
+  (if-not id-sm
+    `(freezer     ~type ~id (write-coll ~'out ~'x))
+    `(extend-type ~type
+       Freezable
+       (~'freeze-to-out* [~'x ~(with-meta 'out {:tag 'DataOutput})]
+         (if (small-count? (count ~'x))
+           (do
+             (write-id   ~'out ~id-sm)
+             (write-coll ~'out ~'x :small))
+           (do
+             (write-id   ~'out ~id)
+             (write-coll ~'out ~'x)))))))
 
-(defmacro ^:private freezer-kvs [type id & body]
-  `(freezer ~type ~id
-    (.writeInt ~'out (count ~'x))
-    (encore/run-kv!
-      (fn [k# v#]
-        (freeze-to-out ~'out k#)
-        (freeze-to-out ~'out v#))
-      ~'x)))
+(defmacro ^:private freezer-kvs [type id & [id-sm]]
+  (if-not id-sm
+    `(freezer     ~type ~id (write-kvs ~'out ~'x))
+    `(extend-type ~type
+       Freezable
+       (~'freeze-to-out* [~'x ~(with-meta 'out {:tag 'DataOutput})]
+         (if (small-count? (count ~'x))
+           (do
+             (write-id  ~'out ~id-sm)
+             (write-kvs ~'out ~'x :small))
+           (do
+             (write-id  ~'out ~id)
+             (write-kvs ~'out ~'x)))))))
 
-(freezer (Class/forName "[B") id-bytes   (write-bytes out ^bytes x))
+(freezer (Class/forName "[B") id-bytes   (write-bytes   out ^bytes x))
 (freezer nil                  id-nil)
-(freezer Boolean              id-boolean (.writeBoolean out x))
+(freezer Boolean              id-boolean (.writeBoolean out        x))
+(freezer Character            id-char    (.writeChar    out   (int x)))
 
-(freezer Character id-char    (.writeChar out (int x)))
-;; (freezer String id-string  (write-utf8 out x))
-
-(extend-type String ; Optimized common-case type
+(extend-type String
   Freezable
   (freeze-to-out* [x ^DataOutput out]
     (let [ba (.getBytes x "UTF-8")]
-      (if (<= (alength ^bytes ba) Byte/MAX_VALUE)
+      (if (small-count? (alength ^bytes ba))
         (do (write-id    out id-sm-string)
             (write-bytes out ba :small))
-
         (do (write-id    out id-string)
             (write-bytes out ba))))))
 
-(extend-type Keyword ; Optimized common-case type
+(extend-type Keyword
   Freezable
   (freeze-to-out* [x ^DataOutput out]
-    (let [s (if-let [ns (namespace x)]
-              (str ns "/" (name x))
-              (name x))
+    (let [s (if-let [ns (namespace x)] (str ns "/" (name x)) (name x))
           ba (.getBytes s "UTF-8")]
-
-      (if (<= (alength ^bytes ba) Byte/MAX_VALUE)
+      (if (small-count? Byte/MAX_VALUE)
         (do (write-id    out id-sm-keyword)
             (write-bytes out ba :small))
-
         (do (write-id    out id-keyword)
             (write-bytes out ba))))))
 
@@ -256,9 +276,9 @@
 (freezer-coll PersistentTreeSet     id-sorted-set)
 (freezer-kvs  PersistentTreeMap     id-sorted-map)
 
-(freezer-kvs  APersistentMap        id-map)
-(freezer-coll APersistentVector     id-vector)
-(freezer-coll APersistentSet        id-set)
+(freezer-kvs  APersistentMap        id-map    id-sm-map)
+(freezer-coll APersistentVector     id-vector id-sm-vector)
+(freezer-coll APersistentSet        id-set    id-sm-set)
 (freezer-coll PersistentList        id-list) ; No APersistentList
 (freezer-coll (type '())            id-list)
 
@@ -270,11 +290,11 @@
          (write-utf8 out (.getName (class x))) ; Reflect
          (freeze-to-out out (into {} x)))
 
-(freezer Byte    id-byte    (.writeByte  out x))
-(freezer Short   id-short   (.writeShort out x))
-(freezer Integer id-integer (.writeInt   out x))
-;;(freezer Long  id-long    (.writeLong  out x))
-(extend-type Long ; Optimized common-case type
+(freezer Byte      id-byte    (.writeByte  out x))
+(freezer Short     id-short   (.writeShort out x))
+(freezer Integer   id-integer (.writeInt   out x))
+;;(freezer   Long  id-long    (.writeLong  out x))
+(extend-type Long
   Freezable
   (freeze-to-out* [x ^DataOutput out]
     (let [^long x x]
@@ -296,8 +316,6 @@
 
         :else (do (write-id   out id-long)
                   (.writeLong out x))))))
-
-;;
 
 (freezer BigInt     id-bigint     (write-biginteger out (.toBigInteger x)))
 (freezer BigInteger id-biginteger (write-biginteger out x))
@@ -439,14 +457,9 @@
 (declare thaw-from-in)
 
 (defmacro read-bytes [in & [small?]]
-  (if small? ; Optimization, must be known before id's written
+  (let [rc (if small? 'readByte 'readInt)]
     `(let [in#   ~in
-           size# (.readByte in#)
-           ba#   (byte-array size#)]
-       (.readFully in# ba# 0 size#)
-       ba#)
-    `(let [in#   ~in
-           size# (.readInt in#)
+           size# (. in# ~rc)
            ba#   (byte-array size#)]
        (.readFully in# ba# 0 size#)
        ba#)))
@@ -455,14 +468,17 @@
 (defmacro read-utf8 [in & [small?]]
   `(String. (read-bytes ~in ~small?) "UTF-8"))
 
-(defmacro ^:private read-coll [in coll]
-  `(let [in# ~in] (encore/repeatedly-into ~coll (.readInt in#)
-                    (fn [] (thaw-from-in in#)))))
+(defmacro ^:private read-coll [in coll & [small?]]
+  (let [rc (if small? 'readByte 'readInt)]
+    `(let [in# ~in]
+       (encore/repeatedly-into ~coll (. in# ~rc)
+         (fn [] (thaw-from-in in#))))))
 
-(defmacro ^:private read-kvs [in coll]
-  `(let [in# ~in]
-     (encore/repeatedly-into ~coll (.readInt in#)
-       (fn [] [(thaw-from-in in#) (thaw-from-in in#)]))))
+(defmacro ^:private read-kvs [in coll & [small?]]
+  (let [rc (if small? 'readByte 'readInt)]
+    `(let [in# ~in]
+       (encore/repeatedly-into ~coll (. in# ~rc)
+         (fn [] [(thaw-from-in in#) (thaw-from-in in#)])))))
 
 (defmacro ^:private read-kvs-depr1 [in coll]
   `(let [in# ~in]
@@ -551,13 +567,17 @@
         id-sorted-set (read-coll in (sorted-set))
         id-sorted-map (read-kvs  in (sorted-map))
 
-        id-list    (into '() (rseq (read-coll in [])))
-        id-vector  (read-coll in  [])
-        id-set     (read-coll in #{})
-        id-map     (read-kvs  in  {})
-        id-seq     (or (seq (read-coll in []))
-                       (lazy-seq nil) ; Empty coll
-                       )
+        id-vector     (read-coll in  [])
+        id-sm-vector  (read-coll in  [] :small)
+        id-set        (read-coll in #{})
+        id-sm-set     (read-coll in #{} :small)
+        id-map        (read-kvs  in  {})
+        id-sm-map     (read-kvs  in  {} :small)
+
+        id-list (into '() (rseq (read-coll in [])))
+        id-seq  (or (seq (read-coll in []))
+                    (lazy-seq nil) ; Empty coll
+                    )
 
         id-meta (let [m (thaw-from-in in)] (with-meta (thaw-from-in in) m))
 
