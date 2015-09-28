@@ -124,10 +124,10 @@
   ;; (def ^:const id-map-small    (int 112)) ; ''
 
   ;;; DEPRECATED (old types will be supported only for thawing)
-  (def ^:const id-old-reader      (int 1))   ; v0.9.2+ for +64k support
-  (def ^:const id-old-string      (int 11))  ; v0.9.2+ for +64k support
-  (def ^:const id-old-map         (int 22))  ; v0.9.0+ for more efficient thaw
-  (def ^:const id-old-keyword     (int 12))  ; v2.0.0-alpha5+ for str consistecy
+  (def ^:const id-reader-depr1    (int 1))   ; v0.9.2+ for +64k support
+  (def ^:const id-string-depr1    (int 11))  ; v0.9.2+ for +64k support
+  (def ^:const id-map-depr1       (int 22))  ; v0.9.0+ for more efficient thaw
+  (def ^:const id-keyword-depr1   (int 12))  ; v2.0.0-alpha5+ for str consistecy
   )
 
 ;;;; Ns imports (mostly for convenience of lib consumers)
@@ -577,11 +577,11 @@
         id-uuid  (UUID. (.readLong in) (.readLong in))
 
         ;;; DEPRECATED
-        id-old-reader (encore/read-edn (.readUTF in))
-        id-old-string (.readUTF in)
-        id-old-map    (apply hash-map (encore/repeatedly-into [] (* 2 (.readInt in))
+        id-reader-depr1 (encore/read-edn (.readUTF in))
+        id-string-depr1 (.readUTF in)
+        id-map-depr1    (apply hash-map (encore/repeatedly-into [] (* 2 (.readInt in))
                                         (fn [] (thaw-from-in in))))
-        id-old-keyword (keyword (.readUTF in))
+        id-keyword-depr1 (keyword (.readUTF in))
 
         id-prefixed-custom ; Prefixed custom type
         (let [hash-id (.readShort in)]
