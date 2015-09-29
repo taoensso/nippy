@@ -154,7 +154,7 @@
 
 (defprotocol Freezable
   "Be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU"
-  (freeze-to-out* [this out]))
+  (-freeze-to-out [this out]))
 
 (defn small-count? [n] (<= (long n) 127 #_Byte/MAX_VALUE))
 (defmacro write-id    [out id] `(.writeByte ~out ~id))
@@ -176,25 +176,25 @@
   (let [x (with-meta x {:tag 'String})]
     `(write-bytes ~out (.getBytes ~x "UTF-8") ~small?)))
 
-(defmacro ^:private freeze-to-out
-  "Like `freeze-to-out*` but with metadata support"
-  [out x]
-  `(let [out# ~out, x# ~x]
-     (when-let [m# (meta x#)]
-       (write-id  out# ~id-meta)
-       (freeze-to-out* m# out#))
-     (freeze-to-out* x# out#)))
+(defn freeze-to-out!
+  "Serializes arg (any Clojure data type) to a DataOutput"
+  ;; Basically just wraps `-freeze-to-out` with different arg order + metadata support
+  [^DataOutput data-output x]
+  (when-let [m (meta x)]
+    (write-id data-output id-meta)
+    (-freeze-to-out m data-output))
+  (-freeze-to-out x data-output))
 
 (defmacro write-coll [out x & [small?]]
   (let [wc (if small? 'writeByte 'writeInt)]
     `(if (counted? ~'x)
        (do
          (. ~'out ~wc (count ~'x))
-         (encore/run!* (fn [i#] (freeze-to-out ~'out i#)) ~'x))
+         (encore/run!* (fn [i#] (freeze-to-out! ~'out i#)) ~'x))
        (let [bas#  (ByteArrayOutputStream. 64)
              sout# (DataOutputStream. bas#)
              cnt#  (reduce (fn [^long cnt# i#]
-                             (freeze-to-out sout# i#)
+                             (freeze-to-out! sout# i#)
                              (unchecked-inc cnt#))
                      0 ~'x)
              ba# (.toByteArray bas#)]
@@ -207,14 +207,14 @@
        (. ~'out ~wc (count ~'x))
        (encore/run-kv!
          (fn [k# v#]
-           (freeze-to-out ~'out k#)
-           (freeze-to-out ~'out v#))
+           (freeze-to-out! ~'out k#)
+           (freeze-to-out! ~'out v#))
          ~'x))))
 
 (defmacro ^:private freezer [type id & body]
   `(extend-type ~type
      Freezable
-     (~'freeze-to-out* [~'x ~(with-meta 'out {:tag 'DataOutput})]
+     (~'-freeze-to-out [~'x ~(with-meta 'out {:tag 'DataOutput})]
        (write-id ~'out ~id)
        ~@body)))
 
@@ -223,7 +223,7 @@
     `(freezer     ~type ~id (write-coll ~'out ~'x))
     `(extend-type ~type
        Freezable
-       (~'freeze-to-out* [~'x ~(with-meta 'out {:tag 'DataOutput})]
+       (~'-freeze-to-out [~'x ~(with-meta 'out {:tag 'DataOutput})]
          (if (small-count? (count ~'x))
            (do
              (write-id   ~'out ~id-sm)
@@ -237,7 +237,7 @@
     `(freezer     ~type ~id (write-kvs ~'out ~'x))
     `(extend-type ~type
        Freezable
-       (~'freeze-to-out* [~'x ~(with-meta 'out {:tag 'DataOutput})]
+       (~'-freeze-to-out [~'x ~(with-meta 'out {:tag 'DataOutput})]
          (if (small-count? (count ~'x))
            (do
              (write-id  ~'out ~id-sm)
@@ -253,7 +253,7 @@
 
 (extend-type String
   Freezable
-  (freeze-to-out* [x ^DataOutput out]
+  (-freeze-to-out [x ^DataOutput out]
     (let [ba (.getBytes x "UTF-8")]
       (if (small-count? (alength ^bytes ba))
         (do (write-id    out id-sm-string)
@@ -263,7 +263,7 @@
 
 (extend-type Keyword
   Freezable
-  (freeze-to-out* [x ^DataOutput out]
+  (-freeze-to-out [x ^DataOutput out]
     (let [s (if-let [ns (namespace x)] (str ns "/" (name x)) (name x))
           ba (.getBytes s "UTF-8")]
       (if (small-count? Byte/MAX_VALUE)
@@ -288,7 +288,7 @@
 
 (freezer IRecord id-record
          (write-utf8 out (.getName (class x))) ; Reflect
-         (freeze-to-out out (into {} x)))
+         (freeze-to-out! out (into {} x)))
 
 (freezer Byte      id-byte    (.writeByte  out x))
 (freezer Short     id-short   (.writeShort out x))
@@ -296,7 +296,7 @@
 ;;(freezer   Long  id-long    (.writeLong  out x))
 (extend-type Long
   Freezable
-  (freeze-to-out* [x ^DataOutput out]
+  (-freeze-to-out [x ^DataOutput out]
     (let [^long x x]
       (cond
         (and (<= x #_Byte/MAX_VALUE  127)
@@ -337,7 +337,7 @@
 
 (def ^:dynamic *final-freeze-fallback* "Alpha - subject to change." nil)
 (defn freeze-fallback-as-str "Alpha-subject to change." [x out]
-  (freeze-to-out* {:nippy/unfreezable (encore/pr-edn x) :type (type x)} out))
+  (-freeze-to-out {:nippy/unfreezable (encore/pr-edn x) :type (type x)} out))
 
 (comment
   (require '[clojure.core.async :as async])
@@ -348,7 +348,7 @@
 ;; interfering with higher-level implementations, Ref. http://goo.gl/6f7SKl
 (extend-type Object
   Freezable
-  (freeze-to-out* [x ^DataOutput out]
+  (-freeze-to-out [x ^DataOutput out]
     (cond
      (utils/serializable? x) ; Fallback #1: Java's Serializable interface
      (do (when-debug-mode
@@ -384,11 +384,6 @@
 
 (comment (wrap-header (.getBytes "foo") {:compressor-id :lz4
                                          :encryptor-id  nil}))
-
-(defn freeze-to-out!
-  "Low-level API. Serializes arg (any Clojure data type) to a DataOutput."
-  [^DataOutput data-output x]
-  (freeze-to-out data-output x))
 
 (defn default-freeze-compressor-selector
   "Strategy:
@@ -790,7 +785,7 @@
   [type custom-type-id [x out] & body]
   (assert-custom-type-id custom-type-id)
   `(extend-type ~type Freezable
-     (~'freeze-to-out* [~x ~(with-meta out {:tag 'java.io.DataOutput})]
+     (~'-freeze-to-out [~x ~(with-meta out {:tag 'java.io.DataOutput})]
        (if-not ~(keyword? custom-type-id)
          ;; Unprefixed [cust byte id][payload]:
          (write-id ~out ~(coerce-custom-type-id custom-type-id))
