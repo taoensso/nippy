@@ -335,7 +335,7 @@
          (.writeLong out (.getMostSignificantBits  x))
          (.writeLong out (.getLeastSignificantBits x)))
 
-(def ^:dynamic *final-freeze-fallback* nil)
+(encore/defonce* ^:dynamic *final-freeze-fallback* nil)
 (defn freeze-fallback-as-str [out x]
   (-freeze-to-out {:nippy/unfreezable (encore/pr-edn x) :type (type x)} out))
 
@@ -491,7 +491,7 @@
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
-(def ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
+(encore/defonce* ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
 (defn swap-custom-readers! [f] (alter-var-root #'*custom-readers* f))
 
 (defn- read-custom! [type-id in]
