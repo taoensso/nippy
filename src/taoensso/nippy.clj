@@ -190,15 +190,18 @@
 
 (defn write-ided-long [^DataOutput out ^long n]
   (cond
-    (and (<= n Byte/MAX_VALUE) (<= Byte/MIN_VALUE n))
+    (and (<= n 127 #_Byte/MAX_VALUE)
+         (<=  -128 #_Byte/MIN_VALUE n))
     (do (write-id   out id-byte-as-long)
         (.writeByte out n))
 
-    (and (<= n Short/MAX_VALUE) (<= Short/MIN_VALUE n))
+    (and (<= n 32767 #_Short/MAX_VALUE)
+         (<=  -32768 #_Short/MIN_VALUE n))
     (do (write-id    out id-short-as-long)
         (.writeShort out n))
 
-    (and (<= n Integer/MAX_VALUE) (<= Integer/MIN_VALUE n))
+    (and (<= n 2147483647 #_Integer/MAX_VALUE)
+         (<=  -2147483648 #_Integer/MIN_VALUE n))
     (do (write-id  out id-int-as-long)
         (.writeInt out n))
 
