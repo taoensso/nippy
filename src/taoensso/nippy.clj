@@ -458,36 +458,41 @@
 
 ;;;; Thawing
 
-(declare thaw-from-in)
+(declare thaw-from-in!)
 
-(defmacro read-bytes [in & [small?]]
-  (let [rc (if small? 'readByte 'readInt)]
-    `(let [in#   ~in
-           size# (. in# ~rc)
-           ba#   (byte-array size#)]
-       (.readFully in# ba# 0 size#)
-       ba#)))
+(defn read-bytes ^bytes [^DataInput in]
+  (let [size (.readInt in)
+        ba   (byte-array size)]
+    (.readFully in ba 0 size)
+    ba))
 
-(defmacro read-biginteger [in] `(BigInteger. (read-bytes ~in)))
-(defmacro read-utf8 [in & [small?]]
-  `(String. (read-bytes ~in ~small?) "UTF-8"))
+(defn read-sm-bytes ^bytes [^DataInput in]
+  (let [size (.readByte in)
+        ba   (byte-array size)]
+    (.readFully in ba 0 size)
+    ba))
 
-(defmacro ^:private read-coll [in coll & [small?]]
-  (let [rc (if small? 'readByte 'readInt)]
-    `(let [in# ~in]
-       (enc/repeatedly-into ~coll (. in# ~rc)
-         (fn [] (thaw-from-in in#))))))
+(defn read-biginteger ^BigInteger [^DataInput in] (BigInteger. (read-bytes    in)))
+(defn read-utf8           ^String [^DataInput in] (String.     (read-bytes    in) "UTF-8"))
+(defn read-sm-utf8        ^String [^DataInput in] (String.     (read-sm-bytes in) "UTF-8"))
 
-(defmacro ^:private read-kvs [in coll & [small?]]
-  (let [rc (if small? 'readByte 'readInt)]
-    `(let [in# ~in]
-       (enc/repeatedly-into ~coll (. in# ~rc)
-         (fn [] [(thaw-from-in in#) (thaw-from-in in#)])))))
+(defn read-coll [^DataInput in to-coll]
+  (enc/repeatedly-into to-coll (.readInt in) (fn [] (thaw-from-in! in))))
 
-(defmacro ^:private read-kvs-depr1 [in coll]
-  `(let [in# ~in]
-     (enc/repeatedly-into ~coll (quot (.readInt in#) 2)
-       (fn [] [(thaw-from-in in#) (thaw-from-in in#)]))))
+(defn read-sm-coll [^DataInput in to-coll]
+  (enc/repeatedly-into to-coll (.readByte in) (fn [] (thaw-from-in! in))))
+
+(defn read-kvs [^DataInput in to-coll]
+  (enc/repeatedly-into to-coll (.readInt in)
+    (fn [] [(thaw-from-in! in) (thaw-from-in! in)])))
+
+(defn read-sm-kvs [^DataInput in to-coll]
+  (enc/repeatedly-into to-coll (.readByte in)
+    (fn [] [(thaw-from-in! in) (thaw-from-in! in)])))
+
+(defn read-kvs-depr1 [^DataInput in to-coll]
+  (enc/repeatedly-into to-coll (quot (.readInt in) 2)
+    (fn [] [(thaw-from-in! in) (thaw-from-in! in)])))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
@@ -509,9 +514,12 @@
           type-id)
         {:internal-type-id type-id}))))
 
-(defn- thaw-from-in
-  [^DataInput in]
-  (let [type-id (.readByte in)]
+(defn thaw-from-in!
+  "Deserializes a frozen object from given DataInput to its original Clojure
+  data type"
+  [^DataInput data-input]
+  (let [in      data-input
+        type-id (.readByte in)]
     (try
       (when-debug-mode
        (println (format "DEBUG - thawing type-id: %s" type-id)))
@@ -544,8 +552,8 @@
                :nippy/unthawable {:class-name class-name :content nil}})))
 
         id-record
-        (let [class-name (read-utf8    in)
-              content    (thaw-from-in in)]
+        (let [class-name (read-utf8     in)
+              content    (thaw-from-in! in)]
           (try
             (let [class  (Class/forName class-name)
                   method (.getMethod class "create" class-method-sig)]
@@ -564,26 +572,26 @@
         id-keyword (keyword (read-utf8 in))
 
         ;;; Optimized, common-case types (v2.6+)
-        id-sm-string           (read-utf8 in :small)
-        id-sm-keyword (keyword (read-utf8 in :small))
+        id-sm-string           (read-sm-utf8 in)
+        id-sm-keyword (keyword (read-sm-utf8 in))
 
         id-queue      (read-coll in (PersistentQueue/EMPTY))
         id-sorted-set (read-coll in (sorted-set))
         id-sorted-map (read-kvs  in (sorted-map))
 
-        id-vector     (read-coll in  [])
-        id-sm-vector  (read-coll in  [] :small)
-        id-set        (read-coll in #{})
-        id-sm-set     (read-coll in #{} :small)
-        id-map        (read-kvs  in  {})
-        id-sm-map     (read-kvs  in  {} :small)
+        id-vector     (read-coll    in  [])
+        id-sm-vector  (read-sm-coll in  [])
+        id-set        (read-coll    in #{})
+        id-sm-set     (read-sm-coll in #{})
+        id-map        (read-kvs     in  {})
+        id-sm-map     (read-sm-kvs  in  {})
 
         id-list (into '() (rseq (read-coll in [])))
         id-seq  (or (seq (read-coll in []))
                     (lazy-seq nil) ; Empty coll
                     )
 
-        id-meta (let [m (thaw-from-in in)] (with-meta (thaw-from-in in) m))
+        id-meta (let [m (thaw-from-in! in)] (with-meta (thaw-from-in! in) m))
 
         id-byte    (.readByte  in)
         id-short   (.readShort in)
@@ -618,7 +626,7 @@
         id-reader-depr1 (enc/read-edn (.readUTF in))
         id-string-depr1 (.readUTF in)
         id-map-depr1    (apply hash-map (enc/repeatedly-into [] (* 2 (.readInt in))
-                                        (fn [] (thaw-from-in in))))
+                                        (fn [] (thaw-from-in! in))))
         id-keyword-depr1 (keyword (.readUTF in))
 
         id-prefixed-custom ; Prefixed custom type
@@ -631,12 +639,6 @@
       (catch Exception e
         (throw (ex-info (format "Thaw failed against type-id: %s" type-id)
                  {:type-id type-id} e))))))
-
-(defn thaw-from-in!
-  "Low-level API. Deserializes a frozen object from given DataInput to its
-  original Clojure data type."
-  [data-input]
-  (thaw-from-in data-input))
 
 (defn- try-parse-header [ba]
   (when-let [[head-ba data-ba] (enc/ba-split ba 4)]
