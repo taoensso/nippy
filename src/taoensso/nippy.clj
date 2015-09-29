@@ -19,8 +19,8 @@
              IRecord ISeq]))
 
 (if (vector? taoensso.encore/encore-version)
-  (encore/assert-min-encore-version [1 38 0]) ; Note v1.x for Clojure 1.4 support
-  (encore/assert-min-encore-version  1.38))
+  (encore/assert-min-encore-version [2 16 0])
+  (encore/assert-min-encore-version  2.16))
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1].
@@ -202,7 +202,7 @@
         (println (format "DEBUG - freezer-coll: %s for %s" ~type (type ~'x)))))
      (if (counted? ~'x)
        (do (.writeInt ~'out (count ~'x))
-           (encore/backport-run! (fn [i#] (freeze-to-out ~'out i#)) ~'x))
+           (encore/run!* (fn [i#] (freeze-to-out ~'out i#)) ~'x))
        (let [bas#  (ByteArrayOutputStream.)
              sout# (DataOutputStream. bas#)
              cnt#  (reduce (fn [^long cnt# i#]
@@ -216,8 +216,8 @@
 (defmacro ^:private freezer-kvs [type id & body]
   `(freezer ~type ~id
     (.writeInt ~'out (* 2 (count ~'x))) ; *2 here is vestigial
-    (encore/backport-run!
-      (fn [[k# v#]]
+    (encore/run-kv!
+      (fn [k# v#]
         (freeze-to-out ~'out k#)
         (freeze-to-out ~'out v#))
       ~'x)))
