@@ -807,35 +807,6 @@
   (extend-thaw 1 [in] (->MyType (.readUTF in)))
   (thaw (freeze (->MyType "Joe"))))
 
-;;; Some useful custom types - EXPERIMENTAL
-
-;; Mostly deprecated by :auto compressor selection
-(defrecord Compressable-LZMA2 [value]) ; Why was this `LZMA2` instead of `lzma2`?
-(extend-freeze Compressable-LZMA2 128 [x out]
-  (let [ba (freeze (:value x) {:skip-header? true :compressor nil})
-        ba-len    (alength ba)
-        compress? (> ba-len 1024)]
-    (.writeBoolean out compress?)
-    (if compress?
-      (write-bytes out (compress lzma2-compressor ba))
-      (write-bytes out ba))))
-
-(extend-thaw 128 [in]
-  (let [compressed? (.readBoolean in)
-        ba          (read-bytes   in)]
-    (thaw ba {:compressor (when compressed? lzma2-compressor)
-              :encryptor  nil})))
-
-(comment
-  (->> (apply str (repeatedly 1000 rand))
-       (->Compressable-LZMA2)
-       (freeze)
-       (thaw))
-  (count (->> (apply str (repeatedly 1000 rand)) (freeze)))
-  (count (->> (apply str (repeatedly 1000 rand))
-              (->Compressable-LZMA2)
-              (freeze))))
-
 ;;;; Stress data
 
 (defrecord StressRecord [data])
@@ -935,3 +906,32 @@
 
 (comment (inspect-ba (freeze "hello"))
          (seq (:data-ba (inspect-ba (freeze "hello")))))
+
+;;;; Deprecated
+
+;; Deprecated by :auto compressor selection
+(defrecord     Compressable-LZMA2 [value]) ; Why was this `LZMA2` instead of `lzma2`?
+(extend-freeze Compressable-LZMA2 128 [x out]
+  (let [ba (freeze (:value x) {:skip-header? true :compressor nil})
+        ba-len    (alength ba)
+        compress? (> ba-len 1024)]
+    (.writeBoolean out compress?)
+    (if compress?
+      (write-bytes out (compress lzma2-compressor ba))
+      (write-bytes out ba))))
+
+(extend-thaw 128 [in]
+  (let [compressed? (.readBoolean in)
+        ba          (read-bytes   in)]
+    (thaw ba {:compressor (when compressed? lzma2-compressor)
+              :encryptor  nil})))
+
+(comment
+  (->> (apply str (repeatedly 1000 rand))
+       (->Compressable-LZMA2)
+       (freeze)
+       (thaw))
+  (count (->> (apply str (repeatedly 1000 rand)) (freeze)))
+  (count (->> (apply str (repeatedly 1000 rand))
+              (->Compressable-LZMA2)
+              (freeze))))
