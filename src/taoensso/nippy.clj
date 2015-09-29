@@ -64,74 +64,74 @@
 (do
   ;; ** Negative ids reserved for user-defined types **
   ;;
-  (def ^:const id-reserved          (int 0))
-  ;;                                     1     ; Deprecated
-  (def ^:const id-bytes             (int 2))
-  (def ^:const id-nil               (int 3))
-  (def ^:const id-boolean           (int 4))
-  (def ^:const id-reader            (int 5))   ; Fallback #2
-  (def ^:const id-serializable      (int 6))   ; Fallback #1
+  (def ^:const id-reserved          (byte 0))
+  ;;                                      1     ; Deprecated
+  (def ^:const id-bytes             (byte 2))
+  (def ^:const id-nil               (byte 3))
+  (def ^:const id-boolean           (byte 4))
+  (def ^:const id-reader            (byte 5))   ; Fallback #2
+  (def ^:const id-serializable      (byte 6))   ; Fallback #1
 
-  (def ^:const id-char              (int 10))
-  ;;                                     11    ; Deprecated
-  ;;                                     12    ; Deprecated
-  (def ^:const id-string            (int 13))
-  (def ^:const id-keyword           (int 14))
+  (def ^:const id-char              (byte 10))
+  ;;                                      11    ; Deprecated
+  ; ;                                     12    ; Deprecated
+  (def ^:const id-string            (byte 13))
+  (def ^:const id-keyword           (byte 14))
 
-  (def ^:const id-list              (int 20))
-  (def ^:const id-vector            (int 21))
-  ;;                                     22    ; Deprecated
-  (def ^:const id-set               (int 23))
-  (def ^:const id-seq               (int 24))
-  (def ^:const id-meta              (int 25))
-  (def ^:const id-queue             (int 26))
-  ;;                                     27    ; Deprecated
-  (def ^:const id-sorted-set        (int 28))
-  ;;                                     29    ; Deprecated
-  (def ^:const id-map               (int 30))
-  (def ^:const id-sorted-map        (int 31))
+  (def ^:const id-list              (byte 20))
+  (def ^:const id-vector            (byte 21))
+   ;;                                     22    ; Deprecated
+  (def ^:const id-set               (byte 23))
+  (def ^:const id-seq               (byte 24))
+  (def ^:const id-meta              (byte 25))
+  (def ^:const id-queue             (byte 26))
+   ;;                                     27    ; Deprecated
+  (def ^:const id-sorted-set        (byte 28))
+   ;;                                     29    ; Deprecated
+  (def ^:const id-map               (byte 30))
+  (def ^:const id-sorted-map        (byte 31))
 
-  (def ^:const id-byte              (int 40))
-  (def ^:const id-short             (int 41))
-  (def ^:const id-integer           (int 42))
-  (def ^:const id-long              (int 43))
-  (def ^:const id-bigint            (int 44))
-  (def ^:const id-biginteger        (int 45))
+  (def ^:const id-byte              (byte 40))
+  (def ^:const id-short             (byte 41))
+  (def ^:const id-integer           (byte 42))
+  (def ^:const id-long              (byte 43))
+  (def ^:const id-bigint            (byte 44))
+  (def ^:const id-biginteger        (byte 45))
 
-  (def ^:const id-float             (int 60))
-  (def ^:const id-double            (int 61))
-  (def ^:const id-bigdec            (int 62))
+  (def ^:const id-float             (byte 60))
+  (def ^:const id-double            (byte 61))
+  (def ^:const id-bigdec            (byte 62))
 
-  (def ^:const id-ratio             (int 70))
+  (def ^:const id-ratio             (byte 70))
 
-  (def ^:const id-record            (int 80))
-  ;; (def ^:const id-type           (int 81))  ; TODO?
-  (def ^:const id-prefixed-custom   (int 82))
+  (def ^:const id-record            (byte 80))
+  ;; (def ^:const id-type           (byte 81))  ; TODO?
+  (def ^:const id-prefixed-custom   (byte 82))
 
-  (def ^:const id-date              (int 90))
-  (def ^:const id-uuid              (int 91))
+  (def ^:const id-date              (byte 90))
+  (def ^:const id-uuid              (byte 91))
 
   ;;; Optimized, common-case types (v2.6+)
-  (def ^:const id-byte-as-long      (int 100)) ; 1 vs 8 bytes
-  (def ^:const id-short-as-long     (int 101)) ; 2 vs 8 bytes
-  (def ^:const id-int-as-long       (int 102)) ; 4 vs 8 bytes
+  (def ^:const id-byte-as-long      (byte 100)) ; 1 vs 8 bytes
+  (def ^:const id-short-as-long     (byte 101)) ; 2 vs 8 bytes
+  (def ^:const id-int-as-long       (byte 102)) ; 4 vs 8 bytes
   ;;
-  (def ^:const id-sm-string         (int 105)) ; 1 vs 4 byte length prefix
-  (def ^:const id-sm-keyword        (int 106)) ; ''
+  (def ^:const id-sm-string         (byte 105)) ; 1 vs 4 byte length prefix
+  (def ^:const id-sm-keyword        (byte 106)) ; ''
   ;;
-  (def ^:const id-sm-vector         (int 110)) ; ''
-  (def ^:const id-sm-set            (int 111)) ; ''
-  (def ^:const id-sm-map            (int 112)) ; ''
+  (def ^:const id-sm-vector         (byte 110)) ; ''
+  (def ^:const id-sm-set            (byte 111)) ; ''
+  (def ^:const id-sm-map            (byte 112)) ; ''
   ;;
   ;; TODO Additional optimizations (types) for 2-vecs and 3-vecs?
 
   ;;; DEPRECATED (old types will be supported only for thawing)
-  (def ^:const id-reader-depr1      (int 1))   ; v0.9.2+ for +64k support
-  (def ^:const id-string-depr1      (int 11))  ; v0.9.2+ for +64k support
-  (def ^:const id-map-depr1         (int 22))  ; v0.9.0+ for more efficient thaw
-  (def ^:const id-keyword-depr1     (int 12))  ; v2.0.0-alpha5+ for str consistecy
-  (def ^:const id-map-depr2         (int 27))  ; v2.11+ for count/2
-  (def ^:const id-sorted-map-depr1  (int 29))  ; v2.11+ for count/2
+  (def ^:const id-reader-depr1      (byte 1))   ; v0.9.2+ for +64k support
+  (def ^:const id-string-depr1      (byte 11))  ; v0.9.2+ for +64k support
+  (def ^:const id-map-depr1         (byte 22))  ; v0.9.0+ for more efficient thaw
+  (def ^:const id-keyword-depr1     (byte 12))  ; v2.0.0-alpha5+ for str consistecy
+  (def ^:const id-map-depr2         (byte 27))  ; v2.11+ for count/2
+  (def ^:const id-sorted-map-depr1  (byte 29))  ; v2.11+ for count/2
   )
 
 ;;;; Ns imports (mostly for convenience of lib consumers)
