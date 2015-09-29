@@ -378,7 +378,6 @@
 
 (defn- wrap-header [data-ba head-meta]
   (if-let [head-ba (get-head-ba head-meta)]
-    ;; TODO Would be nice if we could avoid the array copy here:
     (encore/ba-concat head-ba data-ba)
     (throw (ex-info (format "Unrecognized header meta: %s" head-meta)
              {:head-meta head-meta}))))
@@ -425,32 +424,44 @@
           compressor   (if legacy-mode? snappy-compressor compressor)
           encryptor    (when password (if-not legacy-mode? encryptor nil))
           skip-header? (or skip-header? legacy-mode?)
+          zero-copy-mode? (and (nil? compressor) (nil? encryptor))
           baos (ByteArrayOutputStream. 64)
           dos  (DataOutputStream. baos)]
-      (freeze-to-out! dos x)
-      (let [ba (.toByteArray baos)
 
-            compressor
-            (if (identical? compressor :auto)
-              (if skip-header?
-                lz4-compressor
-                (*default-freeze-compressor-selector* ba))
-              (if (fn? compressor)
-                (compressor ba) ; Assume compressor selector fn
-                compressor      ; Assume compressor
-                ))
+      (if zero-copy-mode?
+        (do ; Optimized case
+          (when-not skip-header? ; Avoid `wrap-header`'s array copy:
+            (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
+              (.write dos head-ba 0 4)))
+          (freeze-to-out! dos x)
+          (.toByteArray baos))
 
-            ba (if compressor (compress compressor         ba) ba)
-            ba (if encryptor  (encrypt  encryptor password ba) ba)]
+        (do
+          (freeze-to-out! dos x)
+          (let [ba (.toByteArray baos)
 
-        (if skip-header? ba
-          (wrap-header ba
-            {:compressor-id (when-let [c compressor]
-                              (or (compression/standard-header-ids
-                                  (compression/header-id c)) :else))
-             :encryptor-id  (when-let [e encryptor]
-                              (or (encryption/standard-header-ids
-                                  (encryption/header-id e)) :else))}))))))
+                compressor
+                (if (identical? compressor :auto)
+                  (if skip-header?
+                    lz4-compressor
+                    (*default-freeze-compressor-selector* ba))
+                  (if (fn? compressor)
+                    (compressor ba) ; Assume compressor selector fn
+                    compressor      ; Assume compressor
+                    ))
+
+                ba (if compressor (compress compressor         ba) ba)
+                ba (if encryptor  (encrypt  encryptor password ba) ba)]
+
+            (if skip-header?
+              ba
+              (wrap-header ba
+                {:compressor-id (when-let [c compressor]
+                                  (or (compression/standard-header-ids
+                                      (compression/header-id c)) :else))
+                 :encryptor-id  (when-let [e encryptor]
+                                  (or (encryption/standard-header-ids
+                                      (encryption/header-id e)) :else))}))))))))
 
 ;;;; Thawing
 
