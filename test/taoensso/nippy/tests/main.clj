@@ -17,8 +17,8 @@
 (expect (do (println (str "Clojure version: " *clojure-version*)) true))
 
 (expect test-data ((comp thaw freeze) test-data))
-(expect test-data ((comp #(thaw   % {})
-                         #(freeze % {:legacy-mode true}))
+(expect test-data ((comp #(thaw   % {:compressor nippy/lz4-compressor})
+                         #(freeze % {:skip-header? true}))
                    test-data))
 (expect test-data ((comp #(thaw   % {:password [:salted "p"]})
                          #(freeze % {:password [:salted "p"]}))

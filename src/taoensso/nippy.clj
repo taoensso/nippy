@@ -27,7 +27,7 @@
 ;; { * 1-byte type id.
 ;;   * Arb-length payload. } ...
 ;;
-;; [1] Inclusion of header is strongly recommended. Purpose:
+;; [1] Inclusion of header is *strongly* recommended. Purpose:
 ;;   * Sanity check (confirm that data appears to be Nippy data)
 ;;   * Nippy version check (=> supports changes to data schema over time)
 ;;   * Supports :auto thaw compressor, encryptor
@@ -420,10 +420,7 @@
               :or   {compressor :auto
                      encryptor  aes128-encryptor}
               :as   opts}]
-    (let [legacy-mode? (:legacy-mode opts) ; DEPRECATED Nippy v1-compatible freeze
-          compressor   (if legacy-mode? snappy-compressor compressor)
-          encryptor    (when password (if-not legacy-mode? encryptor nil))
-          skip-header? (or skip-header? legacy-mode?)
+    (let [encryptor       (when password encryptor)
           zero-copy-mode? (and (nil? compressor) (nil? encryptor))
           baos (ByteArrayOutputStream. 64)
           dos  (DataOutputStream. baos)]
