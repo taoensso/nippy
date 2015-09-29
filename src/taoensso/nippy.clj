@@ -335,8 +335,8 @@
          (.writeLong out (.getMostSignificantBits  x))
          (.writeLong out (.getLeastSignificantBits x)))
 
-(def ^:dynamic *final-freeze-fallback* "Alpha - subject to change." nil)
-(defn freeze-fallback-as-str "Alpha-subject to change." [x out]
+(def ^:dynamic *final-freeze-fallback* nil)
+(defn freeze-fallback-as-str [out x]
   (-freeze-to-out {:nippy/unfreezable (encore/pr-edn x) :type (type x)} out))
 
 (comment
@@ -364,7 +364,8 @@
          (write-utf8 out (encore/pr-edn x)))
 
      :else ; Fallback #3: *final-freeze-fallback*
-     (if-let [ffb *final-freeze-fallback*] (ffb x out)
+     (if-let [ffb *final-freeze-fallback*]
+       (ffb x out)
        (throw (ex-info (format "Unfreezable type: %s %s" (type x) (str x))
                 {:type   (type x)
                  :as-str (encore/pr-edn x)}))))))
