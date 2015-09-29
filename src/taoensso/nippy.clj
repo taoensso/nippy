@@ -882,30 +882,32 @@
 ;;;; Tools
 
 (defn inspect-ba "Alpha - subject to change"
-  [ba & [thaw-opts]]
-  (if-not (enc/bytes? ba) :not-ba
-    (let [[first2bytes nextbytes] (enc/ba-split ba 2)
-          known-wrapper
-          (cond
-           (enc/ba= first2bytes (.getBytes "\u0000<" "UTF8")) :carmine/bin
-           (enc/ba= first2bytes (.getBytes "\u0000>" "UTF8")) :carmine/clj)
+  ([ba          ] (inspect-ba ba nil))
+  ([ba thaw-opts]
+   (when (enc/bytes? ba)
+     (let [[first2bytes nextbytes] (enc/ba-split ba 2)
+           ?known-wrapper
+           (cond
+             (enc/ba= first2bytes (.getBytes "\u0000<" "UTF8")) :carmine/bin
+             (enc/ba= first2bytes (.getBytes "\u0000>" "UTF8")) :carmine/clj)
 
-          unwrapped-ba (if known-wrapper nextbytes ba)
-          [data-ba nippy-header] (or (try-parse-header unwrapped-ba)
-                                     [unwrapped-ba :no-header])]
+           unwrapped-ba (if ?known-wrapper nextbytes ba)
+           [data-ba ?nippy-header] (or (try-parse-header unwrapped-ba)
+                                       [unwrapped-ba :no-header])]
 
-      {:known-wrapper   known-wrapper
-       :nippy-v2-header nippy-header ; Nippy v1.x didn't have a header
-       :thawable?       (try (thaw unwrapped-ba thaw-opts) true
-                             (catch Exception _ false))
-       :unwrapped-ba    unwrapped-ba
-       :data-ba         data-ba
-       :unwrapped-len   (alength ^bytes unwrapped-ba)
-       :ba-len          (alength ^bytes ba)
-       :data-len        (alength ^bytes data-ba)})))
+       {:?known-wrapper  ?known-wrapper
+        :?header         ?nippy-header
+        :thawable?       (try (thaw unwrapped-ba thaw-opts) true
+                              (catch Exception _ false))
+        :unwrapped-ba    unwrapped-ba
+        :data-ba         data-ba
+        :unwrapped-len   (alength ^bytes unwrapped-ba)
+        :ba-len          (alength ^bytes ba)
+        :data-len        (alength ^bytes data-ba)}))))
 
-(comment (inspect-ba (freeze "hello"))
-         (seq (:data-ba (inspect-ba (freeze "hello")))))
+(comment
+  (inspect-ba (freeze "hello"))
+  (seq (:data-ba (inspect-ba (freeze "hello")))))
 
 ;;;; Deprecated
 
