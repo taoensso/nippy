@@ -1,7 +1,7 @@
 (ns taoensso.nippy.benchmarks
   {:author "Peter Taoussanis"}
-  (:require [clojure.data.fressian    :as fressian]
-            [taoensso.encore          :as encore]
+  (:require [clojure.data.fressian :as fressian]
+            [taoensso.encore       :as enc]
             [taoensso.nippy :as nippy :refer (freeze thaw)]))
 
 (def data nippy/stress-data-benchable)
@@ -19,7 +19,7 @@
 
 (comment (fressian-thaw (fressian-freeze data)))
 
-(defmacro bench* [& body] `(encore/bench 10000 {:warmup-laps 20000} ~@body))
+(defmacro bench* [& body] `(enc/bench 10000 {:warmup-laps 20000} ~@body))
 (defn     bench1 [freezer thawer & [sizer]]
   (let [data-frozen (freezer data)
         time-freeze (bench* (freezer data))
@@ -36,7 +36,7 @@
     (println (str "\nLap " (inc l) "/" laps "..."))
 
     (when reader? ; Slow
-      (println {:reader (bench1 encore/pr-edn encore/read-edn
+      (println {:reader (bench1 enc/pr-edn enc/read-edn
                           #(count (.getBytes ^String % "UTF-8")))}))
 
     (println {:default   (bench1 #(freeze % {})
@@ -58,7 +58,7 @@
   (println "\nDone! (Time for cake?)")
   true)
 
-(comment (encore/read-edn (encore/pr-edn data))
+(comment (enc/read-edn (enc/pr-edn data))
          (bench1 fressian-freeze fressian-thaw))
 
 (comment

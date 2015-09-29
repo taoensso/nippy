@@ -2,7 +2,7 @@
   "High-performance JVM Clojure serialization library. Originally adapted from
   Deep-Freeze (https://goo.gl/OePPGr)."
   {:author "Peter Taoussanis (@ptaoussanis)"}
-  (:require [taoensso.encore :as encore]
+  (:require [taoensso.encore :as enc]
             [taoensso.nippy
              (utils       :as utils)
              (compression :as compression)
@@ -18,9 +18,9 @@
              PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList ; LazySeq
              IRecord ISeq]))
 
-(if (vector? taoensso.encore/encore-version)
-  (encore/assert-min-encore-version [2 16 0])
-  (encore/assert-min-encore-version  2.16))
+(if (vector? enc/encore-version)
+  (enc/assert-min-encore-version [2 16 0])
+  (enc/assert-min-encore-version  2.16))
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
@@ -137,18 +137,18 @@
 
 ;;;; Ns imports (mostly for convenience of lib consumers)
 
-(encore/defalias compress          compression/compress)
-(encore/defalias decompress        compression/decompress)
-(encore/defalias snappy-compressor compression/snappy-compressor)
-(encore/defalias lzma2-compressor  compression/lzma2-compressor)
-(encore/defalias lz4-compressor    compression/lz4-compressor)
-(encore/defalias lz4hc-compressor  compression/lz4hc-compressor)
+(enc/defalias compress          compression/compress)
+(enc/defalias decompress        compression/decompress)
+(enc/defalias snappy-compressor compression/snappy-compressor)
+(enc/defalias lzma2-compressor  compression/lzma2-compressor)
+(enc/defalias lz4-compressor    compression/lz4-compressor)
+(enc/defalias lz4hc-compressor  compression/lz4hc-compressor)
 
-(encore/defalias encrypt           encryption/encrypt)
-(encore/defalias decrypt           encryption/decrypt)
-(encore/defalias aes128-encryptor  encryption/aes128-encryptor)
+(enc/defalias encrypt           encryption/encrypt)
+(enc/defalias decrypt           encryption/decrypt)
+(enc/defalias aes128-encryptor  encryption/aes128-encryptor)
 
-(encore/defalias freezable?        utils/freezable?)
+(enc/defalias freezable?        utils/freezable?)
 
 ;;;; Freezing
 
@@ -190,7 +190,7 @@
     `(if (counted? ~'x)
        (do
          (. ~'out ~wc (count ~'x))
-         (encore/run!* (fn [i#] (freeze-to-out! ~'out i#)) ~'x))
+         (enc/run!* (fn [i#] (freeze-to-out! ~'out i#)) ~'x))
        (let [bas#  (ByteArrayOutputStream. 64)
              sout# (DataOutputStream. bas#)
              cnt#  (reduce (fn [^long cnt# i#]
@@ -205,7 +205,7 @@
   (let [wc (if small? 'writeByte 'writeInt)]
     `(do
        (. ~'out ~wc (count ~'x))
-       (encore/run-kv!
+       (enc/run-kv!
          (fn [k# v#]
            (freeze-to-out! ~'out k#)
            (freeze-to-out! ~'out v#))
@@ -335,9 +335,9 @@
          (.writeLong out (.getMostSignificantBits  x))
          (.writeLong out (.getLeastSignificantBits x)))
 
-(encore/defonce* ^:dynamic *final-freeze-fallback* nil)
+(enc/defonce* ^:dynamic *final-freeze-fallback* nil)
 (defn freeze-fallback-as-str [out x]
-  (-freeze-to-out {:nippy/unfreezable (encore/pr-edn x) :type (type x)} out))
+  (-freeze-to-out {:nippy/unfreezable (enc/pr-edn x) :type (type x)} out))
 
 (comment
   (require '[clojure.core.async :as async])
@@ -361,25 +361,25 @@
      (do (when-debug-mode
           (println (format "DEBUG - Reader fallback: %s" (type x))))
          (write-id out id-reader)
-         (write-utf8 out (encore/pr-edn x)))
+         (write-utf8 out (enc/pr-edn x)))
 
      :else ; Fallback #3: *final-freeze-fallback*
      (if-let [ffb *final-freeze-fallback*]
        (ffb x out)
        (throw (ex-info (format "Unfreezable type: %s %s" (type x) (str x))
                 {:type   (type x)
-                 :as-str (encore/pr-edn x)}))))))
+                 :as-str (enc/pr-edn x)}))))))
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 (def ^:private get-head-ba
   (memoize
    (fn [head-meta]
      (when-let [meta-id (get head-meta-id (assoc head-meta :version head-version))]
-       (encore/ba-concat head-sig (byte-array [meta-id]))))))
+       (enc/ba-concat head-sig (byte-array [meta-id]))))))
 
 (defn- wrap-header [data-ba head-meta]
   (if-let [head-ba (get-head-ba head-meta)]
-    (encore/ba-concat head-ba data-ba)
+    (enc/ba-concat head-ba data-ba)
     (throw (ex-info (format "Unrecognized header meta: %s" head-meta)
              {:head-meta head-meta}))))
 
@@ -399,7 +399,7 @@
          (> ba-len 1024) lz4-compressor
       :else              nil)))
 
-(encore/defonce* ^:dynamic *default-freeze-compressor-selector*
+(enc/defonce* ^:dynamic *default-freeze-compressor-selector*
   "(fn selector [^bytes ba])->compressor used by `(freeze <x> {:compressor :auto})."
   default-freeze-compressor-selector)
 
@@ -475,23 +475,23 @@
 (defmacro ^:private read-coll [in coll & [small?]]
   (let [rc (if small? 'readByte 'readInt)]
     `(let [in# ~in]
-       (encore/repeatedly-into ~coll (. in# ~rc)
+       (enc/repeatedly-into ~coll (. in# ~rc)
          (fn [] (thaw-from-in in#))))))
 
 (defmacro ^:private read-kvs [in coll & [small?]]
   (let [rc (if small? 'readByte 'readInt)]
     `(let [in# ~in]
-       (encore/repeatedly-into ~coll (. in# ~rc)
+       (enc/repeatedly-into ~coll (. in# ~rc)
          (fn [] [(thaw-from-in in#) (thaw-from-in in#)])))))
 
 (defmacro ^:private read-kvs-depr1 [in coll]
   `(let [in# ~in]
-     (encore/repeatedly-into ~coll (quot (.readInt in#) 2)
+     (enc/repeatedly-into ~coll (quot (.readInt in#) 2)
        (fn [] [(thaw-from-in in#) (thaw-from-in in#)]))))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
-(encore/defonce* ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
+(enc/defonce* ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
 (defn swap-custom-readers! [f] (alter-var-root #'*custom-readers* f))
 
 (defn- read-custom! [type-id in]
@@ -516,12 +516,12 @@
       (when-debug-mode
        (println (format "DEBUG - thawing type-id: %s" type-id)))
 
-      (encore/case-eval type-id
+      (enc/case-eval type-id
 
         id-reader
         (let [edn (read-utf8 in)]
           (try
-            (encore/read-edn {:readers *data-readers*} edn)
+            (enc/read-edn {:readers *data-readers*} edn)
             (catch Exception e
               {:type :reader
                :throwable e
@@ -615,9 +615,9 @@
         ;;; DEPRECATED
         id-sorted-map-depr1 (read-kvs-depr1 in (sorted-map))
         id-map-depr2        (read-kvs-depr1 in {})
-        id-reader-depr1 (encore/read-edn (.readUTF in))
+        id-reader-depr1 (enc/read-edn (.readUTF in))
         id-string-depr1 (.readUTF in)
-        id-map-depr1    (apply hash-map (encore/repeatedly-into [] (* 2 (.readInt in))
+        id-map-depr1    (apply hash-map (enc/repeatedly-into [] (* 2 (.readInt in))
                                         (fn [] (thaw-from-in in))))
         id-keyword-depr1 (keyword (.readUTF in))
 
@@ -639,9 +639,9 @@
   (thaw-from-in data-input))
 
 (defn- try-parse-header [ba]
-  (when-let [[head-ba data-ba] (encore/ba-split ba 4)]
-    (let [[head-sig* [meta-id]] (encore/ba-split head-ba 3)]
-      (when (encore/ba= head-sig* head-sig) ; Header appears to be well-formed
+  (when-let [[head-ba data-ba] (enc/ba-split ba 4)]
+    (let [[head-sig* [meta-id]] (enc/ba-split head-ba 3)]
+      (when (enc/ba= head-sig* head-sig) ; Header appears to be well-formed
         [data-ba (get head-meta meta-id {:unrecognized-meta? true})]))))
 
 (defn- get-auto-compressor [compressor-id]
@@ -928,12 +928,12 @@
 
 (defn inspect-ba "Alpha - subject to change"
   [ba & [thaw-opts]]
-  (if-not (encore/bytes? ba) :not-ba
-    (let [[first2bytes nextbytes] (encore/ba-split ba 2)
+  (if-not (enc/bytes? ba) :not-ba
+    (let [[first2bytes nextbytes] (enc/ba-split ba 2)
           known-wrapper
           (cond
-           (encore/ba= first2bytes (.getBytes "\u0000<" "UTF8")) :carmine/bin
-           (encore/ba= first2bytes (.getBytes "\u0000>" "UTF8")) :carmine/clj)
+           (enc/ba= first2bytes (.getBytes "\u0000<" "UTF8")) :carmine/bin
+           (enc/ba= first2bytes (.getBytes "\u0000>" "UTF8")) :carmine/clj)
 
           unwrapped-ba (if known-wrapper nextbytes ba)
           [data-ba nippy-header] (or (try-parse-header unwrapped-ba)
