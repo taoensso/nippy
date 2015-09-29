@@ -9,7 +9,7 @@
   :min-lein-version "2.3.3"
   :global-vars {*warn-on-reflection* true
                 *assert*             true
-                *unchecked-math*     :warn-on-boxed}
+                *unchecked-math*     false}
 
   :dependencies
   [[org.clojure/clojure      "1.5.1"]

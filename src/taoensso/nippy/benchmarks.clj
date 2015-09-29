@@ -66,13 +66,13 @@
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 3})
   ;; (bench {:laps 4})
   ;; (bench {:laps 2 :lzma2? true})
-  ;; (bench {:laps 1})
+  ;; (bench {:laps 2})
 
   ;;; 2015 Sep 29, after read/write API refactor
-  {:lzma2     {:round 54319, :freeze 36084, :thaw 18235, :size 11264}}
-  {:default   {:round 5597,  :freeze 3592,  :thaw 2005,  :size 16109}}
-  {:fast      {:round 4889,  :freeze 2979,  :thaw 1910,  :size 16972}}
-  {:encrypted {:round 6228,  :freeze 4031,  :thaw 2197,  :size 16132}}
+  {:lzma2     {:round 51640, :freeze 33699, :thaw 17941, :size 11240}}
+  {:encrypted {:round 5922,  :freeze 3734,  :thaw 2188,  :size 16132}}
+  {:default   {:round 5588,  :freeze 3658,  :thaw 1930,  :size 16113}}
+  {:fast      {:round 4533,  :freeze 2688,  :thaw 1845,  :size 16972}}
 
   ;;; 2015 Sep 28, small collection optimizations
   {:lzma2     {:round 56307, :freeze 36475, :thaw 19832, :size 11244}}
