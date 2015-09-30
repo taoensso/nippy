@@ -203,7 +203,7 @@
      (if (counted? ~'x)
        (do (.writeInt ~'out (count ~'x))
            (encore/run!* (fn [i#] (freeze-to-out ~'out i#)) ~'x))
-       (let [bas#  (ByteArrayOutputStream.)
+       (let [bas#  (ByteArrayOutputStream. 64)
              sout# (DataOutputStream. bas#)
              cnt#  (reduce (fn [^long cnt# i#]
                              (freeze-to-out sout# i#)
@@ -377,9 +377,9 @@
   [^bytes ba]
   (let [ba-len (alength ba)]
     (cond
-      ;; (> ba-len 1024) lzma2-compressor
-      ;; (> ba-len 512)  lz4hc-compressor
-      (> ba-len 128)     lz4-compressor
+      ;; (> ba-len 4098) lzma2-compressor
+      ;; (> ba-len 2048) lz4hc-compressor
+         (> ba-len 1024) lz4-compressor
       :else              nil)))
 
 (encore/defonce* ^:dynamic *default-freeze-compressor-selector*
@@ -403,7 +403,7 @@
           compressor   (if legacy-mode? snappy-compressor compressor)
           encryptor    (when password (if-not legacy-mode? encryptor nil))
           skip-header? (or skip-header? legacy-mode?)
-          baos (ByteArrayOutputStream.)
+          baos (ByteArrayOutputStream. 64)
           dos  (DataOutputStream. baos)]
       (freeze-to-out! dos x)
       (let [ba (.toByteArray baos)
