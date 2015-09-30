@@ -71,6 +71,7 @@
   (def ^:const id-boolean           (byte 4))
   (def ^:const id-reader            (byte 5))   ; Fallback #2
   (def ^:const id-serializable      (byte 6))   ; Fallback #1
+  (def ^:const id-sm-bytes          (byte 7))
 
   (def ^:const id-char              (byte 10))
   ;;                                      11    ; Deprecated
@@ -176,12 +177,14 @@
 (defn  byte-sized? [^long n] (<= n 127    #_Byte/MAX_VALUE))
 (defn short-sized? [^long n] (<= n 32767 #_Short/MAX_VALUE))
 
-(defn write-ided-bytes [^DataOutput out id-sm id ^bytes ba]
-  (if (byte-sized? (alength ba))
-    (do (write-id       out id-sm)
-        (write-sm-bytes out ba))
-    (do (write-id       out id)
-        (write-bytes    out ba))))
+(defn write-ided-bytes
+  ([            out                 ba] (write-ided-bytes out id-sm-bytes id-bytes ba))
+  ([^DataOutput out id-sm id ^bytes ba]
+   (if (byte-sized? (alength ba))
+     (do (write-id       out id-sm)
+         (write-sm-bytes out ba))
+     (do (write-id       out id)
+         (write-bytes    out ba)))))
 
 (defn write-ided-string [out ^String s]
   (write-ided-bytes out id-sm-string id-string (.getBytes s "UTF-8")))
@@ -277,9 +280,9 @@
        ~@body)))
 
 (freezer  nil                  id-nil)
-(freezer  (Class/forName "[B") id-bytes   (write-bytes   out        x))
 (freezer  Boolean              id-boolean (.writeBoolean out        x))
 (freezer  Character            id-char    (.writeChar    out   (int x)))
+(freezer* (Class/forName "[B")            (write-ided-bytes   out x))
 (freezer* String                          (write-ided-string  out x))
 (freezer* Keyword                         (write-ided-keyword out x))
 
@@ -551,15 +554,15 @@
                :nippy/unthawable {:class-name class-name :content content}})))
 
         id-nil     nil
-        id-bytes   (read-bytes   in)
         id-boolean (.readBoolean in)
         id-char    (.readChar    in)
 
-        id-string           (read-utf8 in)
-        id-keyword (keyword (read-utf8 in))
+        id-bytes    (read-bytes    in)
+        id-sm-bytes (read-sm-bytes in)
 
-        ;;; Optimized, common-case types (v2.6+)
+        id-string              (read-utf8    in)
         id-sm-string           (read-sm-utf8 in)
+        id-keyword    (keyword (read-utf8    in))
         id-sm-keyword (keyword (read-sm-utf8 in))
 
         id-queue      (read-coll in (PersistentQueue/EMPTY))
