@@ -400,10 +400,12 @@
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
   types, extend the Clojure reader or see `extend-freeze`."
   (^bytes [x] (freeze x nil))
-  (^bytes [x {:keys [compressor encryptor password skip-header?]
+  (^bytes [x {:keys [compressor encryptor password]
               :or   {compressor :auto
-                     encryptor  aes128-encryptor}}]
-    (let [encryptor       (when password encryptor)
+                     encryptor  aes128-encryptor}
+              :as   opts}]
+    (let [skip-header?    (:skip-header? opts) ; Want this *un*documented
+          encryptor       (when password encryptor)
           zero-copy-mode? (and (nil? compressor) (nil? encryptor))
           baos (ByteArrayOutputStream. 64)
           dos  (DataOutputStream. baos)]
