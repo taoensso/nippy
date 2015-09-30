@@ -282,16 +282,23 @@
   (freeze-to-out* [x ^DataOutput out]
     (let [^long x x]
       (cond
-        (and (<= Byte/MIN_VALUE x) (<= x Byte/MAX_VALUE))
-        (do (write-id out id-byte-as-long) (.writeByte out x))
+        (and (<= x #_Byte/MAX_VALUE  127)
+             (<=   #_Byte/MIN_VALUE -128 x))
+        (do (write-id   out id-byte-as-long)
+            (.writeByte out x))
 
-        (and (<= Short/MIN_VALUE x) (<= x Short/MAX_VALUE))
-        (do (write-id out id-short-as-long) (.writeShort out x))
+        (and (<= x #_Short/MAX_VALUE  32767)
+             (<=   #_Short/MIN_VALUE -32768 x))
+        (do (write-id    out id-short-as-long)
+            (.writeShort out x))
 
-        (and (<= Integer/MIN_VALUE x) (<= x Integer/MAX_VALUE))
-        (do (write-id out id-int-as-long) (.writeInt out x))
+        (and (<= x #_Integer/MAX_VALUE  2147483647)
+             (<=   #_Integer/MIN_VALUE -2147483648 x))
+        (do (write-id  out id-int-as-long)
+            (.writeInt out x))
 
-        :else (do (write-id out id-long) (.writeLong out x))))))
+        :else (do (write-id   out id-long)
+                  (.writeLong out x))))))
 
 ;;
 
