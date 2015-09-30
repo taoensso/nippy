@@ -1,17 +1,17 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
-## v2.10.0-RC1 / 2015 Sep 26
+## v2.10.0 / 2015 Sep 30
 
-> This is a major **non-breaking** feature/performance release
+> This is a major feature/performance release that **drops support for Clojure 1.4** but is otherwise non-breaking
 
-* **DEPRECATION NOTICE**: this will be the last major release with support for Clojure 1.4
+* **BREAKING**: drop support for Clojure 1.4 (**now requires Clojure 1.5+**)
 * **Performance**: various small performance improvements
 * **New**: dynamic `*default-freeze-compressor-selector*`, `set-default-freeze-compressor-selector!` util
 * **New**: dynamic `*custom-readers*`, `swap-custom-readers!` util
 * **New**: edn writes now override dynamic `*print-level*`, `*print-length*` for safety
 
 ```clojure
-[com.taoensso/nippy "2.10.0-RC1"]
+[com.taoensso/nippy "2.10.0"]
 ```
 
 
