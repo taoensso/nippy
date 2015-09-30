@@ -14,6 +14,8 @@
 
 ;;;; Core
 
+(expect (do (println (str "Clojure version: " *clojure-version*)) true))
+
 (expect test-data ((comp thaw freeze) test-data))
 (expect test-data ((comp #(thaw   % {})
                          #(freeze % {:legacy-mode true}))
@@ -38,7 +40,7 @@
             (check-props/for-all [val check-gen/any]
               (= val (thaw (freeze val)))))))
 
-;;; These can sometimes crash the JVM
+;;; Trying to decrypt random (invalid) data can actually crash JVM
 ;; (expect Exception (thaw (freeze test-data {:password "malformed"})))
 ;; (expect Exception (thaw (freeze test-data {:password [:salted "p"]})))
 ;; (expect Exception (thaw (freeze test-data {:password [:salted "p"]})
@@ -75,25 +77,26 @@
       (nippy/extend-thaw :nippy-tests/MyType [s] (->MyType (.readUTF s)))
       (let [type (->MyType "val")] (= type (thaw (freeze type))))))
 
-;;;; Stable binary representation of vals ; EXPERIMENTAL
+;;;; Stable binary representation of vals
 
 (expect (seq (freeze test-data))
         (seq (freeze test-data))) ; f(x)=f(y) | x=y
 
-;;; As above, but try multiple times (catch protocol interface races):
+;; As above, but try multiple times to catch possible protocol interface races:
 (expect #(every? true? %)
         (repeatedly 1000 (fn [] (= (seq (freeze test-data))
                                   (seq (freeze test-data))))))
 
-(expect (seq (-> test-data freeze)) ; f(x)=f(f-1(f(x)))
-        (seq (-> test-data freeze thaw freeze)))
-
-;;; As above, but with repeated refreeze (catch protocol interface races):
-(expect (= (seq (freeze test-data))
-           (seq (reduce (fn [frozen _] (freeze (thaw frozen)))
-                  (freeze test-data) (range 1000)))))
-
-;;;
+;; NB abandoning - no way to do this reliably w/o appropriate contracts from
+;; (seq <unordered-coll>):
+;;
+;; (expect (seq (-> test-data freeze)) ; f(x)=f(f-1(f(x)))
+;;         (seq (-> test-data freeze thaw freeze)))
+;;
+;; As above, but with repeated refreeze to catch possible protocol interface races:
+;; (expect (= (seq (freeze test-data))
+;;            (seq (reduce (fn [frozen _] (freeze (thaw frozen)))
+;;                   (freeze test-data) (range 1000)))))
 
 (defn qc-prop-bijection [& [n]]
   (let [bin->val (atom {})
@@ -123,7 +126,6 @@
   (let [{:keys [result bin->val val->bin]} (qc-prop-bijection 10)]
     [result (vals bin->val)]))
 
-;; (expect #(:result %) (qc-prop-bijection 120)) ; Time is n-non-linear
 (expect #(:result %) (qc-prop-bijection 80))
 
 ;;;; Thread safety
@@ -164,4 +166,4 @@
 
 ;;;; Benchmarks
 
-;; (expect (benchmarks/bench {})) ; Also tests :cached passwords
+(expect (benchmarks/bench {})) ; Also tests :cached passwords

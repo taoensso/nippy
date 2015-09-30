@@ -1,7 +1,6 @@
 (ns taoensso.nippy.benchmarks
   {:author "Peter Taoussanis"}
-  (:require [clojure.tools.reader.edn :as edn]
-            [clojure.data.fressian    :as fressian]
+  (:require [clojure.data.fressian    :as fressian]
             [taoensso.encore          :as encore]
             [taoensso.nippy :as nippy :refer (freeze thaw)]))
 
@@ -37,8 +36,8 @@
     (println (str "\nLap " (inc l) "/" laps "..."))
 
     (when reader? ; Slow
-      (println {:reader (bench1 #(pr-str %) #(edn/read-string %)
-                                #(count (.getBytes ^String % "UTF-8")))}))
+      (println {:reader (bench1 encore/pr-edn encore/read-edn
+                          #(count (.getBytes ^String % "UTF-8")))}))
 
     (println {:default   (bench1 #(freeze % {})
                                  #(thaw   % {}))})
@@ -59,12 +58,35 @@
   (println "\nDone! (Time for cake?)")
   true)
 
-(comment (edn/read-string (pr-str data))
+(comment (encore/read-edn (encore/pr-edn data))
          (bench1 fressian-freeze fressian-thaw))
 
 (comment
+  (set! *unchecked-math* false)
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 3})
   ;; (bench {:laps 4})
+  ;; (bench {:laps 1 :lzma2? true})
+
+  ;;; 2015 Sep 29, various micro optimizations (incl. &arg elimination)
+  {:reader    {:round 63547, :freeze 19374, :thaw 44173, :size 27717}}
+  {:lzma2     {:round 51724, :freeze 33502, :thaw 18222, :size 11248}}
+  {:fressian  {:round 8813,  :freeze 6460,  :thaw 2353,  :size 16985}}
+  {:encrypted {:round 6005,  :freeze 3768,  :thaw 2237,  :size 16164}}
+  {:default   {:round 5417,  :freeze 3354,  :thaw 2063,  :size 16145}}
+  {:fast      {:round 4659,  :freeze 2712,  :thaw 1947,  :size 17026}}
+
+  ;;; 2015 Sep 15 - v2.10.0-alpha6, Clojure 1.7.0
+  {:reader    {:round 94901, :freeze 25781, :thaw 69120, :size 27686}}
+  {:lzma2     {:round 65127, :freeze 43150, :thaw 21977, :size 11244}}
+  {:encrypted {:round 12590, :freeze 7565,  :thaw 5025,  :size 16148}}
+  {:fressian  {:round 12085, :freeze 9168,  :thaw 2917,  :size 16972}}
+  {:default   {:round 6974,  :freeze 4582,  :thaw 2392,  :size 16123}}
+  {:fast      {:round 6255,  :freeze 3724,  :thaw 2531,  :size 17013}}
+
+  ;;; 2015 Sep 14 - v2.10.0-alpha5, Clojure 1.7.0-RC1
+  {:default   {:round 6870,  :freeze 4376, :thaw 2494, :size 16227}}
+  {:fast      {:round 6104,  :freeze 3743, :thaw 2361, :size 17013}}
+  {:encrypted {:round 12155, :freeze 6908, :thaw 5247, :size 16244}}
 
   ;;; 2015 June 4 - v2.9.0, Clojure 1.7.0-RC1
   {:reader    {:round 155353, :freeze 44192, :thaw 111161, :size 27693}}
