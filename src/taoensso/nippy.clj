@@ -356,7 +356,7 @@
 
      :else ; Fallback #3: *final-freeze-fallback*
      (if-let [ffb *final-freeze-fallback*]
-       (ffb x out)
+       (ffb out x)
        (throw (ex-info (format "Unfreezable type: %s %s" (type x) (str x))
                 {:type   (type x)
                  :as-str (enc/pr-edn x)}))))))
