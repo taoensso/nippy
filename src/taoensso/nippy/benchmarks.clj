@@ -4,7 +4,7 @@
             [taoensso.encore       :as enc]
             [taoensso.nippy :as nippy :refer (freeze thaw)]))
 
-(def data nippy/stress-data-benchable)
+(def data #_22 nippy/stress-data-benchable)
 
 (defn fressian-freeze [value]
   (let [^java.nio.ByteBuffer bb (fressian/write value)
@@ -39,21 +39,24 @@
       (println {:reader (bench1 enc/pr-edn enc/read-edn
                           #(count (.getBytes ^String % "UTF-8")))}))
 
-    (println {:default   (bench1 #(freeze % {})
-                                 #(thaw   % {}))})
-    (println {:fast      (bench1 #(freeze % {:compressor nil
-                                             :skip-header? true})
-                                 #(thaw   % {:compressor nil
-                                             :encryptor  nil}))})
-    (println {:encrypted (bench1 #(freeze % {:password [:cached "p"]})
-                                 #(thaw   % {:password [:cached "p"]}))})
-
-    (when lzma2? ; Slow as molasses
+    (when lzma2? ; Slow
       (println {:lzma2 (bench1 #(freeze % {:compressor nippy/lzma2-compressor})
-                               #(thaw   % {:compressor nippy/lzma2-compressor}))}))
+                         #(thaw   % {:compressor nippy/lzma2-compressor}))}))
 
     (when fressian?
-      (println {:fressian (bench1 fressian-freeze fressian-thaw)})))
+      (println {:fressian (bench1 fressian-freeze fressian-thaw)}))
+
+    (println {:encrypted (bench1 #(freeze % {:password [:cached "p"]})
+                                 #(thaw   % {:password [:cached "p"]}))})
+    (println {:default   (bench1 #(freeze % {})
+                                 #(thaw   % {}))})
+    (println {:fast1     (bench1 #(freeze % {:compressor nil})
+                                 #(thaw   % {:compressor nil}))})
+    (println {:fast2     (bench1 #(freeze % {:no-header? true
+                                             :compressor nil})
+                                 #(thaw   % {:no-header? true
+                                             :compressor nil
+                                             :encryptor  nil}))}))
 
   (println "\nDone! (Time for cake?)")
   true)
@@ -67,6 +70,23 @@
   ;; (bench {:laps 4})
   ;; (bench {:laps 2 :lzma2? true})
   ;; (bench {:laps 2})
+
+  ;;; 2015 Oct 6, v2.11.0-alpha4
+  {:reader    {:round 73409, :freeze 21823, :thaw 51586, :size 27672}}
+  {:lzma2     {:round 56689, :freeze 37222, :thaw 19467, :size 11252}}
+  {:fressian  {:round 10666, :freeze 7737,  :thaw 2929,  :size 16985}}
+  {:encrypted {:round 6885,  :freeze 4227,  :thaw 2658,  :size 16148}}
+  {:default   {:round 6304,  :freeze 3824,  :thaw 2480,  :size 16122}}
+  {:fast1     {:round 5352,  :freeze 3272,  :thaw 2080,  :size 16976}}
+  {:fast2     {:round 5243,  :freeze 3238,  :thaw 2005,  :size 16972}}
+  ;;
+  {:reader    {:round 26,   :freeze 17,   :thaw 9,   :size 2}}
+  {:lzma2     {:round 3648, :freeze 3150, :thaw 498, :size 68}}
+  {:fressian  {:round 19,   :freeze 7,    :thaw 12,  :size 1}}
+  {:encrypted {:round 63,   :freeze 40,   :thaw 23,  :size 36}}
+  {:default   {:round 24,   :freeze 17,   :thaw 7,   :size 6}}
+  {:fast1     {:round 19,   :freeze 12,   :thaw 7,   :size 6}}
+  {:fast2     {:round 4,    :freeze 2,    :thaw 2,   :size 2}}
 
   ;;; 2015 Sep 29, after read/write API refactor
   {:lzma2     {:round 51640, :freeze 33699, :thaw 17941, :size 11240}}
