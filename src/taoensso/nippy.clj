@@ -407,7 +407,8 @@
               :or   {compressor :auto
                      encryptor  aes128-encryptor}
               :as   opts}]
-    (let [skip-header?    (:skip-header? opts) ; Want this *un*documented
+    (let [;; Intentionally undocumented:
+          no-header?      (or (:no-header? opts) (:skip-header? opts))
           encryptor       (when password encryptor)
           zero-copy-mode? (and (nil? compressor) (nil? encryptor))
           baos (ByteArrayOutputStream. 64)
@@ -415,7 +416,7 @@
 
       (if zero-copy-mode?
         (do ; Optimized case
-          (when-not skip-header? ; Avoid `wrap-header`'s array copy:
+          (when-not no-header? ; Avoid `wrap-header`'s array copy:
             (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
               (.write dos head-ba 0 4)))
           (freeze-to-out! dos x)
@@ -427,7 +428,7 @@
 
                 compressor
                 (if (identical? compressor :auto)
-                  (if skip-header?
+                  (if no-header?
                     lz4-compressor
                     (*default-freeze-compressor-selector* ba))
                   (if (fn? compressor)
@@ -438,7 +439,7 @@
                 ba (if compressor (compress compressor         ba) ba)
                 ba (if encryptor  (encrypt  encryptor password ba) ba)]
 
-            (if skip-header?
+            (if no-header?
               ba
               (wrap-header ba
                 {:compressor-id (when-let [c compressor]
@@ -654,6 +655,12 @@
     (throw (ex-info (format "Unrecognized :auto encryptor id: %s" encryptor-id)
                     {:encryptor-id encryptor-id}))))
 
+(def ^:private err-msg-unknown-thaw-failure
+  "Decryption/decompression failure, or data unfrozen/damaged.")
+
+(def ^:private err-msg-unrecognized-header
+  "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?")
+
 (defn thaw
   "Deserializes a frozen object from given byte array to its original Clojure
   data type. To thaw custom types, extend the Clojure reader or see `extend-thaw`.
@@ -669,7 +676,7 @@
 
   ([ba] (thaw ba nil))
   ([^bytes ba
-    {:keys [v1-compatibility? compressor encryptor password]
+    {:keys [v1-compatibility? compressor encryptor password no-header?]
      :or   {compressor :auto
             encryptor  :auto}
      :as   opts}]
@@ -677,13 +684,17 @@
    (assert (not (:headerless-meta opts))
      ":headerless-meta `thaw` opt removed in Nippy v2.7+")
 
-   (let [ex (fn [msg & [e]] (throw (ex-info (format "Thaw failed: %s" msg)
-                                    {:opts (merge opts
-                                             {:compressor compressor
-                                              :encryptor  encryptor})}
-                                    e)))
+   (let [v2+? (not v1-compatibility?)
+         ex   (fn ex
+                ([  msg] (ex nil msg))
+                ([e msg] (throw (ex-info (format "Thaw failed: %s" msg)
+                                  {:opts (merge opts
+                                           {:compressor compressor
+                                            :encryptor  encryptor})}
+                                  e))))
+
          thaw-data
-         (fn [data-ba compressor-id encryptor-id]
+         (fn [data-ba compressor-id encryptor-id ex-fn]
            (let [compressor (if (identical? compressor :auto)
                               (get-auto-compressor compressor-id)
                               compressor)
@@ -701,43 +712,65 @@
                      dis (DataInputStream. (ByteArrayInputStream. ba))]
                  (thaw-from-in! dis))
 
-               (catch Exception e
-                 (ex "Decryption/decompression failure, or data unfrozen/damaged."
-                   e)))))
+               (catch Exception e (ex-fn e)))))
 
          ;; This is hackish and can actually currently result in JVM core dumps
-         ;; due to buggy Snappy behaviour, Ref. http://goo.gl/mh7Rpy.
-         thaw-nippy-v1-data
-         (fn [data-ba]
-           (if-not v1-compatibility?
-             (throw (Exception. "v1 compatibility disabled"))
-             (try (thaw-data data-ba :snappy nil)
-                  (catch Exception _
-                    (thaw-data data-ba nil nil)))))]
+         ;; due to buggy Snappy behaviour, Ref. http://goo.gl/mh7Rpy
+         thaw-legacy-data
+         (fn [data-ba ex-fn]
+           (thaw-data data-ba :snappy nil
+             (fn [_] (thaw-data data-ba nil nil
+                      (fn [_] (ex-fn nil))))))]
 
-     (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
-                        :as   head-meta}] (try-parse-header ba)]
+     (if no-header?
+       (if v2+?
+         (thaw-data ba :no-header :no-header
+           (fn [e] (ex e err-msg-unknown-thaw-failure)))
 
-       ;; A well-formed header _appears_ to be present (it's possible though
-       ;; unlikely that this is a fluke and data is actually headerless):
-       (try (thaw-data data-ba compressor-id encryptor-id)
-            (catch Exception e
-              (try (thaw-nippy-v1-data data-ba)
-                   (catch Exception _
-                     (if unrecognized-meta?
-                       (ex "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?"
-                         e)
-                       (throw e))))))
+         (thaw-data ba :no-header :no-header
+           (fn [e]
+             (thaw-legacy-data ba
+               (fn [_] (ex e err-msg-unknown-thaw-failure))))))
 
-       ;; Well-formed header definitely not present
-       (try (thaw-nippy-v1-data ba)
-            (catch Exception _
-              (thaw-data ba :no-header :no-header)))))))
+       (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
+                          :as   head-meta}] (try-parse-header ba)]
 
-(comment (thaw (freeze "hello"))
-         (thaw (freeze "hello" {:compressor nil}))
-         (thaw (freeze "hello" {:password [:salted "p"]})) ; ex: no pwd
-         (thaw (freeze "hello") {:password [:salted "p"]}))
+         ;; A well-formed header _appears_ to be present (it's possible though
+         ;; unlikely that this is a fluke and data is actually headerless):
+         (if v2+?
+           (thaw-data data-ba compressor-id encryptor-id
+             (fn [e]
+               (thaw-data ba :no-header :no-header
+                 (fn [_]
+                   (if unrecognized-meta?
+                     (ex e err-msg-unrecognized-header)
+                     (ex e err-msg-unknown-thaw-failure))))))
+
+           (thaw-data data-ba compressor-id encryptor-id
+             (fn [e]
+               (thaw-data ba :no-header :no-header
+                 (fn [_]
+                   (thaw-legacy-data ba
+                     (fn [_]
+                       (if unrecognized-meta?
+                         (ex e err-msg-unrecognized-header)
+                         (ex e err-msg-unknown-thaw-failure)))))))))
+
+         ;; Well-formed header definitely not present
+         (if v2+?
+           (thaw-data ba :no-header :no-header
+             (fn [e] (ex e err-msg-unknown-thaw-failure)))
+
+           (thaw-data ba :no-header :no-header
+             (fn [e]
+               (thaw-legacy-data ba
+                 (fn [_] (ex e err-msg-unknown-thaw-failure)))))))))))
+
+(comment
+  (thaw (freeze "hello"))
+  (thaw (freeze "hello" {:compressor nil}))
+  (thaw (freeze "hello" {:password [:salted "p"]})) ; ex: no pwd
+  (thaw (freeze "hello") {:password [:salted "p"]}))
 
 ;;;; Custom types
 
@@ -922,7 +955,7 @@
 ;; Deprecated by :auto compressor selection
 (defrecord     Compressable-LZMA2 [value]) ; Why was this `LZMA2` instead of `lzma2`?
 (extend-freeze Compressable-LZMA2 128 [x out]
-  (let [ba (freeze (:value x) {:skip-header? true :compressor nil})
+  (let [ba (freeze (:value x) {:no-header? true :compressor nil})
         ba-len    (alength ba)
         compress? (> ba-len 1024)]
     (.writeBoolean out compress?)
