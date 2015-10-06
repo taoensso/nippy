@@ -680,7 +680,7 @@
 
   ([ba] (thaw ba nil))
   ([^bytes ba
-    {:keys [v1-compatibility? compressor encryptor password no-header?]
+    {:keys [v1-compatibility? compressor encryptor password]
      :or   {compressor :auto
             encryptor  :auto}
      :as   opts}]
@@ -688,14 +688,15 @@
    (assert (not (:headerless-meta opts))
      ":headerless-meta `thaw` opt removed in Nippy v2.7+")
 
-   (let [v2+? (not v1-compatibility?)
-         ex   (fn ex
-                ([  msg] (ex nil msg))
-                ([e msg] (throw (ex-info (format "Thaw failed: %s" msg)
-                                  {:opts (merge opts
-                                           {:compressor compressor
-                                            :encryptor  encryptor})}
-                                  e))))
+   (let [v2+?       (not v1-compatibility?)
+         no-header? (:no-header? opts) ; Intentionally undocumented
+         ex (fn ex
+              ([  msg] (ex nil msg))
+              ([e msg] (throw (ex-info (format "Thaw failed: %s" msg)
+                                {:opts (merge opts
+                                         {:compressor compressor
+                                          :encryptor  encryptor})}
+                                e))))
 
          thaw-data
          (fn [data-ba compressor-id encryptor-id ex-fn]
@@ -718,57 +719,40 @@
 
                (catch Exception e (ex-fn e)))))
 
-         ;; This is hackish and can actually currently result in JVM core dumps
-         ;; due to buggy Snappy behaviour, Ref. http://goo.gl/mh7Rpy
-         thaw-legacy-data
+         ;; Hackish + can actually segfault JVM due to Snappy bug,
+         ;; Ref. http://goo.gl/mh7Rpy - no better alternatives, unfortunately
+         thaw-v1-data
          (fn [data-ba ex-fn]
            (thaw-data data-ba :snappy nil
-             (fn [_] (thaw-data data-ba nil nil
-                      (fn [_] (ex-fn nil))))))]
+             (fn [_] (thaw-data data-ba nil nil (fn [_] (ex-fn nil))))))]
 
      (if no-header?
        (if v2+?
+         (thaw-data ba :no-header :no-header (fn [e] (ex e err-msg-unknown-thaw-failure)))
          (thaw-data ba :no-header :no-header
-           (fn [e] (ex e err-msg-unknown-thaw-failure)))
+           (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure))))))
 
-         (thaw-data ba :no-header :no-header
-           (fn [e]
-             (thaw-legacy-data ba
-               (fn [_] (ex e err-msg-unknown-thaw-failure))))))
-
+       ;; At this point we assume that we have a header iff we have v2+ data
        (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
                           :as   head-meta}] (try-parse-header ba)]
 
          ;; A well-formed header _appears_ to be present (it's possible though
          ;; unlikely that this is a fluke and data is actually headerless):
          (if v2+?
-           (thaw-data data-ba compressor-id encryptor-id
-             (fn [e]
-               (thaw-data ba :no-header :no-header
-                 (fn [_]
-                   (if unrecognized-meta?
-                     (ex e err-msg-unrecognized-header)
-                     (ex e err-msg-unknown-thaw-failure))))))
+           (if unrecognized-meta?
+             (ex err-msg-unrecognized-header)
+             (thaw-data data-ba compressor-id encryptor-id
+               (fn [e] (ex e err-msg-unknown-thaw-failure))))
 
-           (thaw-data data-ba compressor-id encryptor-id
-             (fn [e]
-               (thaw-data ba :no-header :no-header
-                 (fn [_]
-                   (thaw-legacy-data ba
-                     (fn [_]
-                       (if unrecognized-meta?
-                         (ex e err-msg-unrecognized-header)
-                         (ex e err-msg-unknown-thaw-failure)))))))))
+           (if unrecognized-meta?
+             (thaw-v1-data ba (fn [_] (ex err-msg-unrecognized-header)))
+             (thaw-data data-ba compressor-id encryptor-id
+               (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure)))))))
 
          ;; Well-formed header definitely not present
          (if v2+?
-           (thaw-data ba :no-header :no-header
-             (fn [e] (ex e err-msg-unknown-thaw-failure)))
-
-           (thaw-data ba :no-header :no-header
-             (fn [e]
-               (thaw-legacy-data ba
-                 (fn [_] (ex e err-msg-unknown-thaw-failure)))))))))))
+           (ex err-msg-unknown-thaw-failure)
+           (thaw-v1-data ba (fn [_] (ex err-msg-unknown-thaw-failure)))))))))
 
 (comment
   (thaw (freeze "hello"))
@@ -970,7 +954,8 @@
 (extend-thaw 128 [in]
   (let [compressed? (.readBoolean in)
         ba          (read-bytes   in)]
-    (thaw ba {:compressor (when compressed? lzma2-compressor)
+    (thaw ba {:no-header? true
+              :compressor (when compressed? lzma2-compressor)
               :encryptor  nil})))
 
 (comment
