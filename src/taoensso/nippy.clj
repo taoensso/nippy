@@ -408,13 +408,12 @@
                      encryptor  aes128-encryptor}
               :as   opts}]
     (let [;; Intentionally undocumented:
-          no-header?      (or (:no-header? opts) (:skip-header? opts))
-          encryptor       (when password encryptor)
-          zero-copy-mode? (and (nil? compressor) (nil? encryptor))
+          no-header? (or (:no-header? opts) (:skip-header? opts))
+          encryptor  (when password encryptor)
           baos (ByteArrayOutputStream. 64)
           dos  (DataOutputStream. baos)]
 
-      (if zero-copy-mode?
+      (if (and (nil? compressor) (nil? encryptor))
         (do ; Optimized case
           (when-not no-header? ; Avoid `wrap-header`'s array copy:
             (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
@@ -442,12 +441,17 @@
             (if no-header?
               ba
               (wrap-header ba
-                {:compressor-id (when-let [c compressor]
-                                  (or (compression/standard-header-ids
-                                      (compression/header-id c)) :else))
-                 :encryptor-id  (when-let [e encryptor]
-                                  (or (encryption/standard-header-ids
-                                      (encryption/header-id e)) :else))}))))))))
+                {:compressor-id
+                 (when-let [c compressor]
+                   (or (compression/standard-header-ids
+                       (compression/header-id c))
+                       :else))
+
+                 :encryptor-id
+                 (when-let [e encryptor]
+                   (or (encryption/standard-header-ids
+                       (encryption/header-id e))
+                       :else))}))))))))
 
 ;;;; Thawing
 
@@ -671,8 +675,8 @@
 
   Options include:
     :v1-compatibility? - support data frozen by legacy versions of Nippy?
-    :compressor - An ICompressor, :auto (requires Nippy header), or nil
-    :encryptor  - An IEncryptor,  :auto (requires Nippy header), or nil"
+    :compressor - :auto (checks header, default)  an ICompressor, or nil
+    :encryptor  - :auto (checks header, default), an IEncryptor,  or nil"
 
   ([ba] (thaw ba nil))
   ([^bytes ba
@@ -785,7 +789,7 @@
   (assert-custom-type-id custom-type-id)
   (if-not (keyword? custom-type-id)
     (int (- ^long custom-type-id))
-    (let [^long hash-id (hash custom-type-id)
+    (let [^int hash-id  (hash custom-type-id)
           short-hash-id (if (pos? hash-id)
                           (mod hash-id Short/MAX_VALUE)
                           (mod hash-id Short/MIN_VALUE))]
