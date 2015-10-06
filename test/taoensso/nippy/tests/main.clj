@@ -41,11 +41,14 @@
             (check-props/for-all [val check-gen/any]
               (= val (thaw (freeze val)))))))
 
-;;; Trying to decrypt random (invalid) data can actually crash JVM
-;; (expect Exception (thaw (freeze test-data {:password "malformed"})))
-;; (expect Exception (thaw (freeze test-data {:password [:salted "p"]})))
-;; (expect Exception (thaw (freeze test-data {:password [:salted "p"]})
-;;                         {:compressor nil}))
+(expect Exception (thaw (freeze test-data {:password "malformed"})))
+(expect Exception (thaw (freeze test-data {:password [:salted "p"]})
+                        {;; Necessary to prevent against JVM segfault due to
+                         ;; https://goo.gl/t0OUIo:
+                         :v1-compatibility? false}))
+(expect Exception (thaw (freeze test-data {:password [:salted "p"]})
+                        {:v1-compatibility? false ; Ref. https://goo.gl/t0OUIo
+                         :compressor nil}))
 
 (expect ; Snappy lib compatibility (for legacy versions of Nippy)
  (let [^bytes raw-ba    (freeze test-data {:compressor nil})
