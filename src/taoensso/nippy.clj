@@ -656,19 +656,22 @@
 
 (defn thaw
   "Deserializes a frozen object from given byte array to its original Clojure
-  data type. Supports data frozen with current and all previous versions of
-  Nippy. To thaw custom types, extend the Clojure reader or see `extend-thaw`.
+  data type. To thaw custom types, extend the Clojure reader or see `extend-thaw`.
+
+  ** By default, supports data frozen with Nippy v2+ ONLY **
+  Add `{:v1-compatibility? true}` option to support thawing of data frozen with
+  legacy versions of Nippy.
 
   Options include:
+    :v1-compatibility? - support data frozen by legacy versions of Nippy?
     :compressor - An ICompressor, :auto (requires Nippy header), or nil
     :encryptor  - An IEncryptor,  :auto (requires Nippy header), or nil"
 
   ([ba] (thaw ba nil))
   ([^bytes ba
     {:keys [v1-compatibility? compressor encryptor password]
-     :or   {v1-compatibility? true ; Recommend disabling when possible
-            compressor        :auto
-            encryptor         :auto}
+     :or   {compressor :auto
+            encryptor  :auto}
      :as   opts}]
 
    (assert (not (:headerless-meta opts))
