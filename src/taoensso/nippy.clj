@@ -205,8 +205,8 @@
     (do (write-id    out id-short-as-long)
         (.writeShort out n))
 
-    (and (<= n 2147483647 #_Integer/MAX_VALUE)
-         (>=  -2147483648 #_Integer/MIN_VALUE))
+    (and (<= n  2147483647 #_Integer/MAX_VALUE)
+         (>= n -2147483648 #_Integer/MIN_VALUE))
     (do (write-id  out id-int-as-long)
         (.writeInt out n))
 
