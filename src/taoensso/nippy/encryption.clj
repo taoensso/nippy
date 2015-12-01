@@ -76,13 +76,14 @@
 
 (defrecord AES128Encryptor [key-gen key-cache]
   IEncryptor
-  (header-id [_] (if (= key-gen sha512-key) :aes128-sha512 :aes128-other))
+  (header-id [_] (if (identical? key-gen :sha512) :aes128-sha512 :aes128-other))
   (encrypt   [_ typed-pwd data-ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
           salt?      (identical? type :salted)
           iv-ba      (rand-bytes aes128-block-size)
           salt-ba    (when salt? (rand-bytes salt-size))
           prefix-ba  (if-not salt? iv-ba (enc/ba-concat iv-ba salt-ba))
+          key-gen    (if (identical? key-gen :sha512) sha512-key key-gen)
           key        (if salt?
                        (key-gen salt-ba pwd)
                        (enc/memoized key-cache key-gen salt-ba pwd))
@@ -98,7 +99,8 @@
           prefix-size (+ aes128-block-size (if salt? salt-size 0))
           [prefix-ba data-ba] (enc/ba-split ba prefix-size)
           [iv-ba salt-ba]     (if-not salt? [prefix-ba nil]
-                                (enc/ba-split prefix-ba aes128-block-size))
+                                      (enc/ba-split prefix-ba aes128-block-size))
+          key-gen (if (identical? key-gen :sha512) sha512-key key-gen)
           key (if salt?
                 (key-gen salt-ba pwd)
                 (enc/memoized key-cache key-gen salt-ba pwd))
@@ -143,7 +145,7 @@
 
   Faster than `aes128-salted`, and harder to attack any particular key - but
   increased danger if a key is somehow compromised."
-  (->AES128Encryptor sha512-key (atom {})))
+  (->AES128Encryptor :sha512 (atom {})))
 
 ;;;; Default implementation
 
