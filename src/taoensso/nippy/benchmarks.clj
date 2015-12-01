@@ -1,10 +1,10 @@
 (ns taoensso.nippy.benchmarks
   {:author "Peter Taoussanis"}
-  (:require [clojure.data.fressian    :as fressian]
-            [taoensso.encore          :as encore]
+  (:require [clojure.data.fressian :as fressian]
+            [taoensso.encore       :as enc]
             [taoensso.nippy :as nippy :refer (freeze thaw)]))
 
-(def data nippy/stress-data-benchable)
+(def data #_22 nippy/stress-data-benchable)
 
 (defn fressian-freeze [value]
   (let [^java.nio.ByteBuffer bb (fressian/write value)
@@ -19,7 +19,7 @@
 
 (comment (fressian-thaw (fressian-freeze data)))
 
-(defmacro bench* [& body] `(encore/bench 10000 {:warmup-laps 20000} ~@body))
+(defmacro bench* [& body] `(enc/bench 10000 {:warmup-laps 20000} ~@body))
 (defn     bench1 [freezer thawer & [sizer]]
   (let [data-frozen (freezer data)
         time-freeze (bench* (freezer data))
@@ -36,36 +36,69 @@
     (println (str "\nLap " (inc l) "/" laps "..."))
 
     (when reader? ; Slow
-      (println {:reader (bench1 encore/pr-edn encore/read-edn
+      (println {:reader (bench1 enc/pr-edn enc/read-edn
                           #(count (.getBytes ^String % "UTF-8")))}))
 
-    (println {:default   (bench1 #(freeze % {})
-                                 #(thaw   % {}))})
-    (println {:fast      (bench1 #(freeze % {:compressor nil
-                                             :skip-header? true})
-                                 #(thaw   % {:compressor nil
-                                             :encryptor  nil}))})
-    (println {:encrypted (bench1 #(freeze % {:password [:cached "p"]})
-                                 #(thaw   % {:password [:cached "p"]}))})
-
-    (when lzma2? ; Slow as molasses
+    (when lzma2? ; Slow
       (println {:lzma2 (bench1 #(freeze % {:compressor nippy/lzma2-compressor})
-                               #(thaw   % {:compressor nippy/lzma2-compressor}))}))
+                         #(thaw   % {:compressor nippy/lzma2-compressor}))}))
 
     (when fressian?
-      (println {:fressian (bench1 fressian-freeze fressian-thaw)})))
+      (println {:fressian (bench1 fressian-freeze fressian-thaw)}))
+
+    (println {:encrypted (bench1 #(freeze % {:password [:cached "p"]})
+                                 #(thaw   % {:password [:cached "p"]}))})
+    (println {:default   (bench1 #(freeze % {})
+                                 #(thaw   % {}))})
+    (println {:fast1     (bench1 #(freeze % {:compressor nil})
+                                 #(thaw   % {:compressor nil}))})
+    (println {:fast2     (bench1 #(freeze % {:no-header? true
+                                             :compressor nil})
+                                 #(thaw   % {:no-header? true
+                                             :compressor nil
+                                             :encryptor  nil}))}))
 
   (println "\nDone! (Time for cake?)")
   true)
 
-(comment (encore/read-edn (encore/pr-edn data))
+(comment (enc/read-edn (enc/pr-edn data))
          (bench1 fressian-freeze fressian-thaw))
 
 (comment
   (set! *unchecked-math* false)
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 3})
   ;; (bench {:laps 4})
-  ;; (bench {:laps 1 :lzma2? true})
+  ;; (bench {:laps 2 :lzma2? true})
+  ;; (bench {:laps 2})
+
+  ;;; 2015 Oct 6, v2.11.0-alpha4
+  {:reader    {:round 73409, :freeze 21823, :thaw 51586, :size 27672}}
+  {:lzma2     {:round 56689, :freeze 37222, :thaw 19467, :size 11252}}
+  {:fressian  {:round 10666, :freeze 7737,  :thaw 2929,  :size 16985}}
+  {:encrypted {:round 6885,  :freeze 4227,  :thaw 2658,  :size 16148}}
+  {:default   {:round 6304,  :freeze 3824,  :thaw 2480,  :size 16122}}
+  {:fast1     {:round 5352,  :freeze 3272,  :thaw 2080,  :size 16976}}
+  {:fast2     {:round 5243,  :freeze 3238,  :thaw 2005,  :size 16972}}
+  ;;
+  {:reader    {:round 26,   :freeze 17,   :thaw 9,   :size 2}}
+  {:lzma2     {:round 3648, :freeze 3150, :thaw 498, :size 68}}
+  {:fressian  {:round 19,   :freeze 7,    :thaw 12,  :size 1}}
+  {:encrypted {:round 63,   :freeze 40,   :thaw 23,  :size 36}}
+  {:default   {:round 24,   :freeze 17,   :thaw 7,   :size 6}}
+  {:fast1     {:round 19,   :freeze 12,   :thaw 7,   :size 6}}
+  {:fast2     {:round 4,    :freeze 2,    :thaw 2,   :size 2}}
+
+  ;;; 2015 Sep 29, after read/write API refactor
+  {:lzma2     {:round 51640, :freeze 33699, :thaw 17941, :size 11240}}
+  {:encrypted {:round 5922,  :freeze 3734,  :thaw 2188,  :size 16132}}
+  {:default   {:round 5588,  :freeze 3658,  :thaw 1930,  :size 16113}}
+  {:fast      {:round 4533,  :freeze 2688,  :thaw 1845,  :size 16972}}
+
+  ;;; 2015 Sep 28, small collection optimizations
+  {:lzma2     {:round 56307, :freeze 36475, :thaw 19832, :size 11244}}
+  {:encrypted {:round 6062,  :freeze 3802,  :thaw 2260,  :size 16148}}
+  {:default   {:round 5482,  :freeze 3382,  :thaw 2100,  :size 16128}}
+  {:fast      {:round 4729,  :freeze 2826,  :thaw 1903,  :size 16972}}
 
   ;;; 2015 Sep 29, various micro optimizations (incl. &arg elimination)
   {:reader    {:round 63547, :freeze 19374, :thaw 44173, :size 27717}}

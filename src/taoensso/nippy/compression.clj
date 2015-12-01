@@ -1,6 +1,6 @@
 (ns taoensso.nippy.compression
   {:author "Peter Taoussanis"}
-  (:require [taoensso.encore :as encore])
+  (:require [taoensso.encore :as enc])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
              DataOutputStream]))
 
@@ -122,10 +122,10 @@
 (comment
   (def  ba-bench (.getBytes (apply str (repeatedly 1000 rand)) "UTF-8"))
   (defn bench1 [compressor]
-    {:time  (encore/bench 10000 {:nlaps-warmup 10000}
+    {:time  (enc/bench 10000 {:nlaps-warmup 10000}
               (->> ba-bench (compress compressor) (decompress compressor)))
-     :ratio (encore/round2 (/ (count (compress compressor ba-bench))
-                              (count ba-bench)))})
+     :ratio (enc/round2 (/ (count (compress compressor ba-bench))
+                           (count ba-bench)))})
 
   (println
    {:snappy (bench1 snappy-compressor)

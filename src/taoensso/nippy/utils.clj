@@ -1,7 +1,7 @@
 (ns taoensso.nippy.utils
   {:author "Peter Taoussanis"}
   (:require [clojure.string  :as str]
-            [taoensso.encore :as encore])
+            [taoensso.encore :as enc])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream Serializable
              ObjectOutputStream ObjectInputStream]))
 
@@ -17,7 +17,7 @@
             cacheable? (not (re-find #"__\d+" (str t))) ; gensym form
             test (fn [] (try (f-test x) (catch Exception _ false)))]
         (if-not cacheable? (test)
-          @(encore/swap-val! cache t #(if % % (delay (test)))))))))
+          @(enc/swap-val! cache t #(if % % (delay (test)))))))))
 
 (def serializable?
   (memoize-type-test
@@ -33,7 +33,7 @@
          (cast class object)
          true)))))
 
-(def readable? (memoize-type-test (fn [x] (-> x encore/pr-edn encore/read-edn) true)))
+(def readable? (memoize-type-test (fn [x] (-> x enc/pr-edn enc/read-edn) true)))
 
 (comment
   (serializable? "Hello world")
