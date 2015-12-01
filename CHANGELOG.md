@@ -1,5 +1,23 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.11.0-alpha1 / 2015 Dec 1
+
+> This is a major performance release that **drops default support for thawing Nippy v1 archives** but is otherwise non-breaking
+
+* **BREAKING**: `thaw` now has `:v1-compatibility?` opt set to false by default (was true before) [1]
+* **Performance**: optimize serialized size of small maps, sets, vectors, bytes
+* **Performance**: optimized (no copy) `freeze` when using no compression or encryption
+* **Implementation**: swap most macros for fns (make low-level utils easier to use)
+
+```clojure
+[com.taoensso/nippy "2.11.0-alpha1"]
+```
+
+#### Notes
+
+**[1]** Use `(thaw <frozen-byte-array> {:v1-compatibility? true})` to support thawing of data frozen with Nippy v1 (before ~June 2013)
+
+
 ## v2.10.0 / 2015 Sep 30
 
 > This is a major feature/performance release that **drops support for Clojure 1.4** but is otherwise non-breaking
