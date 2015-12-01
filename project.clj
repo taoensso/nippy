@@ -28,8 +28,7 @@
    :1.7  {:dependencies [[org.clojure/clojure "1.7.0"]]}
    :1.8  {:dependencies [[org.clojure/clojure "1.8.0-RC2"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
-          :dependencies [[expectations                  "2.1.4"]
-                         [org.clojure/test.check        "0.9.0"]
+          :dependencies [[org.clojure/test.check        "0.9.0"]
                          [org.clojure/data.fressian     "0.2.1"]
                          [org.xerial.snappy/snappy-java "1.1.2"]]}
    :dev [:1.7 :test
@@ -45,8 +44,7 @@
    :source-uri "https://github.com/ptaoussanis/nippy/blob/master/{filepath}#L{line}"}
 
   :aliases
-  {"test-all"   ["with-profile" "+1.5:+1.6:+1.7:+1.8" "expectations"]
-   "test-auto"  ["with-profile" "+test" "autoexpect"]
+  {"test-all"   ["with-profile" "+1.5:+1.6:+1.7:+1.8" "test"]
    "deploy-lib" ["do" "deploy" "clojars," "install"]
    "start-dev"  ["with-profile" "+server-jvm" "repl" ":headless"]}
 
