@@ -1,12 +1,11 @@
 (ns taoensso.nippy.encryption
-  "Simple no-nonsense crypto with reasonable defaults. Because your Clojure data
-  deserves some privacy."
+  "Simple no-nonsense crypto with reasonable defaults."
   {:author "Peter Taoussanis"}
   (:require [taoensso.encore :as enc]))
 
 ;;;; Interface
 
-(def standard-header-ids "These'll support :auto thaw." #{:aes128-sha512})
+(def standard-header-ids "These'll support :auto thaw" #{:aes128-sha512})
 
 (defprotocol IEncryptor
   (header-id      [encryptor])
@@ -40,11 +39,13 @@
 
 (defn- sha512-key
   "SHA512-based key generator. Good JVM availability without extra dependencies
-  (PBKDF2, bcrypt, scrypt, etc.). Decent security with multiple rounds."
+  (PBKDF2, bcrypt, scrypt, etc.). Decent security when using many rounds."
+  ;; [salt-ba ^String pwd & [n]]
   [salt-ba ^String pwd]
   (let [md (sha512-md)]
     (loop [^bytes ba (let [pwd-ba (.getBytes pwd "UTF-8")]
                        (if salt-ba (enc/ba-concat salt-ba pwd-ba) pwd-ba))
+           ;; n (or n (* (int Short/MAX_VALUE) (if salt-ba 5 64)))
            n (* (int Short/MAX_VALUE) (if salt-ba 5 64))]
       (if-not (zero? n)
         (recur (.digest md ba) (dec n))
@@ -111,7 +112,7 @@
       (.doFinal cipher data-ba))))
 
 (def aes128-encryptor
-  "Default 128bit AES encryptor with multi-round SHA-512 key-gen.
+  "Default 128bit AES encryptor with many-round SHA-512 key-gen.
 
   Password form [:salted \"my-password\"]
   ---------------------------------------
