@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.11.0-alpha6"
+(defproject com.taoensso/nippy "2.11.0-beta1"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "Clojure serialization library"
   :url "https://github.com/ptaoussanis/nippy"
@@ -15,7 +15,7 @@
   :dependencies
   [[org.clojure/clojure      "1.5.1"]
    [org.clojure/tools.reader "0.10.0"]
-   [com.taoensso/encore      "2.26.1"]
+   [com.taoensso/encore      "2.28.0"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.5"]
    [net.jpountz.lz4/lz4      "1.3"]]
@@ -26,12 +26,12 @@
    :1.5  {:dependencies [[org.clojure/clojure "1.5.1"]]}
    :1.6  {:dependencies [[org.clojure/clojure "1.6.0"]]}
    :1.7  {:dependencies [[org.clojure/clojure "1.7.0"]]}
-   :1.8  {:dependencies [[org.clojure/clojure "1.8.0-RC2"]]}
+   :1.8  {:dependencies [[org.clojure/clojure "1.8.0-RC3"]]}
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
           :dependencies [[org.clojure/test.check        "0.9.0"]
                          [org.clojure/data.fressian     "0.2.1"]
                          [org.xerial.snappy/snappy-java "1.1.2"]]}
-   :dev [:1.7 :test
+   :dev [:1.8 :test
          {:plugins
           [[lein-pprint  "1.1.2"]
            [lein-ancient "0.6.8"]
@@ -40,7 +40,7 @@
   :test-paths ["test" "src"]
 
   :codox
-  {:language :clojure ; [:clojure :clojurescript] ; No support?
+  {:language :clojure
    :source-uri "https://github.com/ptaoussanis/nippy/blob/master/{filepath}#L{line}"}
 
   :aliases
