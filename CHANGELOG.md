@@ -1,5 +1,14 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.11.0-RC1 / 2016 Jan 23
+
+> Identical to v2.11.0-beta1 (published December 13 2015)
+
+```clojure
+[com.taoensso/nippy "2.11.0-RC1"]
+```
+
+
 ## v2.11.0-beta1 / 2015 Dec 13
 
 > This is a major performance release that **drops default support for thawing Nippy v1 archives** but is otherwise non-breaking
