@@ -1,42 +1,50 @@
-**[API docs][]** | **[CHANGELOG][]** | [other Clojure libs][] | [Twitter][] | [contact/contrib](#contact--contributing) | current [Break Version][]:
+<a href="https://www.taoensso.com" title="More stuff by @ptaoussanis at www.taoensso.com">
+<img src="https://www.taoensso.com/taoensso-open-source.png" alt="Taoensso open-source" width="400"/></a>
+
+**[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "2.10.0"]       ; Stable
-[com.taoensso/nippy "2.11.0-beta1"] ; Dev, see CHANGELOG for details
+[com.taoensso/nippy "2.10.0"]     ; Stable
+[com.taoensso/nippy "2.11.0-RC1"] ; See CHANGELOG for details
 ```
 
-# Nippy, a Clojure serialization library
+# Nippy
 
-Clojure's [rich data types](http://clojure.org/datatypes) are *awesome*. And its [reader](http://clojure.org/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
+## The fastest serialization library for Clojure
 
-Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**. It's used as the serializer for the [Carmine Redis client](https://github.com/ptaoussanis/carmine), the [Faraday DynamoDB client](https://github.com/ptaoussanis/faraday), and a number of other projects.
+Clojure's [rich data types] are *awesome*. And its [reader] allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
-## What's in the box™?
-  * Small, uncomplicated **all-Clojure** library
-  * **Terrific performance** (the fastest for Clojure that I'm aware of)
-  * Comprehesive **support for all standard data types**
-  * **Easily extendable to custom data types** (v2.1+)
-  * Java's **Serializable** fallback when available (v2.5+)
-  * **Reader-fallback** for all other types (including Clojure 1.4+ tagged literals)
-  * **Full test coverage** for every supported type
-  * Fully pluggable **compression**, including built-in high-performance [LZ4](https://code.google.com/p/lz4/) compressor
-  * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option (v2+)
-  * Utils for **easy integration into 3rd-party tools/libraries** (v2+)
+Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**. Used by the [Carmine Redis client], the [Faraday DynamoDB client], [PigPen], [Onyx] and others.
+
+## Features
+ * Small, uncomplicated **all-Clojure** library
+ * **Terrific performance** (the fastest for Clojure that I'm aware of)
+ * Comprehesive **support for all standard data types**
+ * **Easily extendable to custom data types** (v2.1+)
+ * Java's **Serializable** fallback when available (v2.5+)
+ * **Reader-fallback** for all other types (including Clojure 1.4+ tagged literals)
+ * **Full test coverage** for every supported type
+ * Fully pluggable **compression**, including built-in high-performance [LZ4] compressor
+ * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option (v2+)
+ * Utils for **easy integration into 3rd-party tools/libraries** (v2+)
 
 ## Getting started
 
-### Dependencies
-
-Add the necessary dependency to your [Leiningen][] `project.clj` and `require` the library in your ns:
+Add the necessary dependency to your project:
 
 ```clojure
-[com.taoensso/nippy "2.10.0"] ; project.clj
-(ns my-app (:require [taoensso.nippy :as nippy])) ; ns
+[com.taoensso/nippy "2.10.0"]
+```
+
+And setup your namespace imports:
+
+```clojure
+(ns my-ns (:require [taoensso.nippy :as nippy]))
 ```
 
 ### De/serializing
 
-As an example of what Nippy can do, let's take a look at its own reference stress data:
+As an example of what it can do, let's take a look at Nippy's own reference stress data:
 
 ```clojure
 nippy/stress-data
@@ -120,7 +128,7 @@ Nippy also gives you **dead simple data encryption**. Add a single option to you
 (nippy/thaw   <encrypted-data>  {:password [:salted "my-password"]}) ; Decrypt
 ```
 
-There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-encryptor` [docstring](http://ptaoussanis.github.io/nippy/taoensso.nippy.encryption.html) for a detailed explanation of why/when you'd want one or the other.
+There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-encryptor` [API] docs for a detailed explanation of why/when you'd want one or the other.
 
 ### Custom types (v2.1+)
 
@@ -140,33 +148,45 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 
 ## Performance
 
-![Comparison chart](https://github.com/ptaoussanis/nippy/raw/master/benchmarks.png)
+![benchmarks-png]
 
-[Detailed benchmark information](https://docs.google.com/spreadsheet/ccc?key=0AuSXb68FH4uhdE5kTTlocGZKSXppWG9sRzA5Y2pMVkE) is available on Google Docs.
+[Detailed benchmark info] is available on Google Docs.
 
-## Contact & contributing
+## Contacting me / contributions
 
-`lein start-dev` to get a (headless) development repl that you can connect to with [Cider][] (Emacs) or your IDE.
+Please use the project's [GitHub issues page] for all questions, ideas, etc. **Pull requests welcome**. See the project's [GitHub contributors page] for a list of contributors.
 
-Please use the project's GitHub [issues page][] for project questions/comments/suggestions/whatever **(pull requests welcome!)**. Am very open to ideas if you have any!
+Otherwise, you can reach me at [Taoensso.com]. Happy hacking!
 
-Otherwise reach me (Peter Taoussanis) at [taoensso.com][] or on [Twitter][]. Cheers!
+\- [Peter Taoussanis]
 
 ## License
 
-Copyright &copy; 2012-2015 Peter Taoussanis. Distributed under the [Eclipse Public License][], the same as Clojure.
+Distributed under the [EPL v1.0] \(same as Clojure).  
+Copyright &copy; 2012-2016 [Peter Taoussanis].
 
-
-[API docs]: http://ptaoussanis.github.io/nippy/
-[CHANGELOG]: https://github.com/ptaoussanis/nippy/releases
-[other Clojure libs]: https://www.taoensso.com/clojure
-[taoensso.com]: https://www.taoensso.com
-[Twitter]: https://twitter.com/ptaoussanis
-[issues page]: https://github.com/ptaoussanis/nippy/issues
-[commit history]: https://github.com/ptaoussanis/nippy/commits/master
+<!--- Standard links -->
+[Taoensso.com]: https://www.taoensso.com
+[Peter Taoussanis]: https://www.taoensso.com
+[@ptaoussanis]: https://www.taoensso.com
+[More by @ptaoussanis]: https://www.taoensso.com
 [Break Version]: https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md
-[Leiningen]: http://leiningen.org/
-[Cider]: https://github.com/clojure-emacs/cider
-[CDS]: http://clojure-doc.org/
-[ClojureWerkz]: http://clojurewerkz.org/
-[Eclipse Public License]: https://raw2.github.com/ptaoussanis/nippy/master/LICENSE
+
+<!--- Standard links (repo specific) -->
+[CHANGELOG]: https://github.com/ptaoussanis/nippy/releases
+[API]: http://ptaoussanis.github.io/nippy/
+[GitHub issues page]: https://github.com/ptaoussanis/nippy/issues
+[GitHub contributors page]: https://github.com/ptaoussanis/nippy/graphs/contributors
+[EPL v1.0]: https://raw.githubusercontent.com/ptaoussanis/nippy/master/LICENSE
+[Hero]: https://raw.githubusercontent.com/ptaoussanis/nippy/master/hero.png "Title"
+
+<!--- Unique links -->
+[rich data types]: http://clojure.org/reference/datatypes
+[reader]: http://clojure.org/reference/reader
+[Carmine Redis client]: https://github.com/ptaoussanis/carmine
+[Faraday DynamoDB client]: https://github.com/ptaoussanis/faraday
+[PigPen]: https://github.com/Netflix/PigPen
+[Onyx]: https://github.com/onyx-platform/onyx
+[LZ4]: https://code.google.com/p/lz4/
+[benchmarks-png]: https://github.com/ptaoussanis/nippy/raw/master/benchmarks.png
+[Detailed benchmark info]: https://docs.google.com/spreadsheet/ccc?key=0AuSXb68FH4uhdE5kTTlocGZKSXppWG9sRzA5Y2pMVkE

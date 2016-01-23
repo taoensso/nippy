@@ -1,6 +1,6 @@
-(defproject com.taoensso/nippy "2.11.0-beta1"
+(defproject com.taoensso/nippy "2.11.0-RC1"
   :author "Peter Taoussanis <https://www.taoensso.com>"
-  :description "Clojure serialization library"
+  :description "High-performance serialization library for Clojure"
   :url "https://github.com/ptaoussanis/nippy"
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"
@@ -15,7 +15,7 @@
   :dependencies
   [[org.clojure/clojure      "1.5.1"]
    [org.clojure/tools.reader "0.10.0"]
-   [com.taoensso/encore      "2.28.0"]
+   [com.taoensso/encore      "2.32.0"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.5"]
    [net.jpountz.lz4/lz4      "1.3"]]
@@ -30,12 +30,12 @@
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
           :dependencies [[org.clojure/test.check        "0.9.0"]
                          [org.clojure/data.fressian     "0.2.1"]
-                         [org.xerial.snappy/snappy-java "1.1.2"]]}
+                         [org.xerial.snappy/snappy-java "1.1.2.1"]]}
    :dev [:1.8 :test
          {:plugins
           [[lein-pprint  "1.1.2"]
            [lein-ancient "0.6.8"]
-           [lein-codox   "0.9.0"]]}]}
+           [lein-codox   "0.9.1"]]}]}
 
   :test-paths ["test" "src"]
 

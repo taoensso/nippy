@@ -1,6 +1,6 @@
 (ns taoensso.nippy
-  "High-performance JVM Clojure serialization library. Originally adapted from
-  Deep-Freeze (https://goo.gl/OePPGr)."
+  "High-performance serialization library for Clojure.
+  Originally adapted from Deep-Freeze (Ref. https://goo.gl/OePPGr)."
   {:author "Peter Taoussanis (@ptaoussanis)"}
   (:require [taoensso.encore :as enc]
             [taoensso.nippy
