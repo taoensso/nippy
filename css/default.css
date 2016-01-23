@@ -65,7 +65,7 @@ h2 {
 
 .sidebar.secondary {
    background: #f2f2f2;
-   border-right: solid 1px #cccccc;
+   border-right: solid 1px #d7d7d7;
    left: 251px;
    width: 200px;
 }
@@ -101,7 +101,7 @@ h2 {
 }
 
 .project-version {
-    padding-left: 5px;
+    padding-left: 0.15em;
 }
 
 #header a, .sidebar a {
@@ -419,10 +419,6 @@ p {
     margin-bottom: 10px;
 }
 
-.markdown {
-    font-size: 14px;
-}
-
 .markdown p, .markdown li, .markdown dt, .markdown dd, .markdown td {
     line-height: 18px;
 }
@@ -451,7 +447,7 @@ p {
     border-radius: 2px;
 }
 
-.markdown pre {
+.markdown pre, pre.deps {
     background: #f4f4f4;
     border: 1px solid #e0e0e0;
     border-radius: 2px;
@@ -459,9 +455,19 @@ p {
     margin: 0 10px;
 }
 
+pre.deps {
+    display: inline-block;
+}
+
 .markdown pre code {
     background: transparent;
     border: none;
+}
+
+.markdown hr {
+    border-style: solid;
+    border-top: none;
+    color: #ccc;
 }
 
 .doc ul, .doc ol {
