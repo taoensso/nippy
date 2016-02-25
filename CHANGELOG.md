@@ -1,5 +1,13 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.11.1 / 2016 Feb 25
+
+> **Hotfix** for broken Clojure 1.5 support
+
+```clojure
+[com.taoensso/nippy "2.11.1"]
+```
+
 ## v2.11.0 / 2016 Feb 25
 
 > Identical to v2.11.0-beta1 (published December 13 2015)
