@@ -19,8 +19,8 @@
              IRecord ISeq]))
 
 (if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [2 16 0])
-  (enc/assert-min-encore-version  2.16))
+  (enc/assert-min-encore-version [2 41 0])
+  (enc/assert-min-encore-version  2.41))
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
@@ -473,23 +473,28 @@
 (defn read-utf8           ^String [^DataInput in] (String.     (read-bytes    in) "UTF-8"))
 (defn read-sm-utf8        ^String [^DataInput in] (String.     (read-sm-bytes in) "UTF-8"))
 
-(defn read-coll [^DataInput in to-coll]
-  (enc/repeatedly-into to-coll (.readInt in) (fn [] (thaw-from-in! in))))
+(defn- -read-coll [^DataInput in to-coll ^long n]
+  (if (and (> n 10) (enc/editable? to-coll))
+    (persistent!
+      (enc/reduce-n (fn [acc _] (conj! acc (thaw-from-in! in)))
+        (transient to-coll) n))
 
-(defn read-sm-coll [^DataInput in to-coll]
-  (enc/repeatedly-into to-coll (.readByte in) (fn [] (thaw-from-in! in))))
+    (enc/reduce-n (fn [acc _] (conj acc (thaw-from-in! in))) to-coll n)))
 
-(defn read-kvs [^DataInput in to-coll]
-  (enc/repeatedly-into to-coll (.readInt in)
-    (fn [] [(thaw-from-in! in) (thaw-from-in! in)])))
+(defn- -read-kvs [^DataInput in to-coll ^long n]
+  (if (and (> n 10) (enc/editable? to-coll))
+    (persistent!
+      (enc/reduce-n (fn [acc _] (assoc! acc (thaw-from-in! in) (thaw-from-in! in)))
+        (transient to-coll) n))
 
-(defn read-sm-kvs [^DataInput in to-coll]
-  (enc/repeatedly-into to-coll (.readByte in)
-    (fn [] [(thaw-from-in! in) (thaw-from-in! in)])))
+    (enc/reduce-n (fn [acc _] (assoc acc (thaw-from-in! in) (thaw-from-in! in)))
+      to-coll n)))
 
-(defn read-kvs-depr1 [^DataInput in to-coll]
-  (enc/repeatedly-into to-coll (quot (.readInt in) 2)
-    (fn [] [(thaw-from-in! in) (thaw-from-in! in)])))
+(defn read-coll      [^DataInput in to-coll] (-read-coll in to-coll (.readInt  in)))
+(defn read-sm-coll   [^DataInput in to-coll] (-read-coll in to-coll (.readByte in)))
+(defn read-kvs       [^DataInput in to-coll] (-read-kvs  in to-coll (.readInt  in)))
+(defn read-sm-kvs    [^DataInput in to-coll] (-read-kvs  in to-coll (.readByte in)))
+(defn read-kvs-depr1 [^DataInput in to-coll] (-read-kvs  in to-coll (quot (.readInt in) 2)))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 

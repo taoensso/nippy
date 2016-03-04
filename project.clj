@@ -15,7 +15,7 @@
   :dependencies
   [[org.clojure/clojure      "1.5.1"]
    [org.clojure/tools.reader "0.10.0"]
-   [com.taoensso/encore      "2.36.2"]
+   [com.taoensso/encore      "2.41.0"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.5"]
    [net.jpountz.lz4/lz4      "1.3"]]
