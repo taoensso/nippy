@@ -68,8 +68,15 @@
   (set! *unchecked-math* false)
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 3})
   ;; (bench {:laps 4})
-  ;; (bench {:laps 2 :lzma2? true})
-  ;; (bench {:laps 2})
+
+  ;;; 2016 Mar 8, v2.12.0-SNAPSHOT, new hardware
+  {:reader    {:round 51217, :freeze 16729, :thaw 34488, :size 27698}}
+  {:lzma2     {:round 42066, :freeze 27249, :thaw 14817, :size 11232}}
+  {:fressian  {:round 6594,  :freeze 4789,  :thaw 1805,  :size 16985}}
+  {:encrypted {:round 4664,  :freeze 2856,  :thaw 1808,  :size 16132}}
+  {:default   {:round 4127,  :freeze 2546,  :thaw 1581,  :size 16113}}
+  {:fast1     {:round 3541,  :freeze 2024,  :thaw 1517,  :size 16975}}
+  {:fast2     {:round 3497,  :freeze 2018,  :thaw 1479,  :size 16971}}
 
   ;;; 2015 Oct 6, v2.11.0-alpha4
   {:reader    {:round 73409, :freeze 21823, :thaw 51586, :size 27672}}

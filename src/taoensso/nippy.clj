@@ -124,7 +124,8 @@
   (def ^:const id-sm-set            (byte 111)) ; ''
   (def ^:const id-sm-map            (byte 112)) ; ''
   ;;
-  ;; TODO Additional optimizations (types) for 2-vecs and 3-vecs?
+  (def ^:const id-2-vec             (byte 113))
+  (def ^:const id-3-vec             (byte 114))
 
   ;;; DEPRECATED (old types will be supported only for thawing)
   (def ^:const id-reader-depr1      (byte 1))   ; v0.9.2+ for +64k support
@@ -262,9 +263,22 @@
         (freeze-to-out! out v))
       coll)))
 
-(defn write-ided-vec [out v] (write-ided-coll out id-sm-vec id-vec v))
+;; (defn write-ided-vec [out v] (write-ided-coll out id-sm-vec id-vec v))
 (defn write-ided-set [out s] (write-ided-coll out id-sm-set id-set s))
 (defn write-ided-map [out m] (write-ided-kvs  out id-sm-map id-map m))
+(defn write-ided-vec [^DataOutput out v]
+  (let [cnt (count v)]
+    (cond
+      (== cnt 2) (write-id out id-2-vec)
+      (== cnt 3) (write-id out id-3-vec)
+      (byte-sized? cnt)
+      (do (write-id   out id-sm-vec)
+          (.writeByte out cnt))
+      :else
+      (do (write-id   out id-vec)
+          (.writeInt  out cnt)))
+
+    (enc/run!* (fn [in] (freeze-to-out! out in)) v)))
 
 (defmacro ^:private freezer* [type & body]
   `(extend-type ~type
@@ -290,7 +304,7 @@
 (freezer* PersistentTreeSet (write-ided-coll out nil        id-sorted-set x))
 (freezer* PersistentTreeMap (write-ided-kvs  out nil        id-sorted-map x))
 (freezer* APersistentMap    (write-ided-kvs  out id-sm-map  id-map        x))
-(freezer* APersistentVector (write-ided-coll out id-sm-vec  id-vec        x))
+(freezer* APersistentVector (write-ided-vec  out                          x))
 (freezer* APersistentSet    (write-ided-coll out id-sm-set  id-set        x))
 
 ;; No APersistentList:
@@ -581,6 +595,10 @@
 
         id-vec        (read-coll    in  [])
         id-sm-vec     (read-sm-coll in  [])
+        id-2-vec      [(thaw-from-in! in) (thaw-from-in! in)]
+        id-3-vec      [(thaw-from-in! in) (thaw-from-in! in)
+                       (thaw-from-in! in)]
+
         id-set        (read-coll    in #{})
         id-sm-set     (read-sm-coll in #{})
         id-map        (read-kvs     in  {})
