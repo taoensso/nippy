@@ -216,7 +216,8 @@
         (.writeLong out n))))
 
 (defn freeze-to-out!
-  "Serializes arg (any Clojure data type) to a DataOutput"
+  "Serializes arg (any Clojure data type) to a DataOutput. Please note that
+  this is a low-level util: in most cases you'll want `freeze` instead."
   ;; Basically just wraps `-freeze-to-out` with different arg order + metadata support
   [^DataOutput data-output x]
   (when-let [m (meta x)]
@@ -532,7 +533,8 @@
 
 (defn thaw-from-in!
   "Deserializes a frozen object from given DataInput to its original Clojure
-  data type"
+  data type. Please note that this is a low-level util: in most cases you'll
+  want `thaw` instead."
   [^DataInput data-input]
   (let [in      data-input
         type-id (.readByte in)]
@@ -689,8 +691,8 @@
   "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?")
 
 (defn thaw
-  "Deserializes a frozen object from given byte array to its original Clojure
-  data type. To thaw custom types, extend the Clojure reader or see `extend-thaw`.
+  "Deserializes a frozen Nippy byte array to its original Clojure data type.
+  To thaw custom types, extend the Clojure reader or see `extend-thaw`.
 
   ** By default, supports data frozen with Nippy v2+ ONLY **
   Add `{:v1-compatibility? true}` option to support thawing of data frozen with
