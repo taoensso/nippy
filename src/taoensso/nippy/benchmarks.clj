@@ -1,5 +1,4 @@
 (ns taoensso.nippy.benchmarks
-  {:author "Peter Taoussanis"}
   (:require [clojure.data.fressian :as fressian]
             [taoensso.encore       :as enc]
             [taoensso.nippy :as nippy :refer (freeze thaw)]))

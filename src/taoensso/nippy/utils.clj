@@ -1,5 +1,4 @@
 (ns taoensso.nippy.utils
-  {:author "Peter Taoussanis"}
   (:require [clojure.string  :as str]
             [taoensso.encore :as enc])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream Serializable
@@ -29,22 +28,17 @@
              _   (.writeObject (ObjectOutputStream. bas) x)
              ba  (.toByteArray bas)
              object (.readObject (ObjectInputStream.
-                                  (ByteArrayInputStream. ba)))]
+                                   (ByteArrayInputStream. ba)))]
          (cast class object)
          true)))))
 
 (def readable? (memoize-type-test (fn [x] (-> x enc/pr-edn enc/read-edn) true)))
 
 (comment
-  (serializable? "Hello world")
-  (serializable? (fn []))
-  (readable? "Hello world")
-  (readable? (fn []))
-
-  (time (dotimes [_ 10000] (serializable? "Hello world"))) ; Cacheable
-  (time (dotimes [_ 10000] (serializable? (fn []))))        ; Uncacheable
-  (time (dotimes [_ 10000] (readable? "Hello world")))     ; Cacheable
-  (time (dotimes [_ 10000] (readable? (fn [])))))           ; Uncacheable
+  (enc/qb 1000 (serializable? "Hello world")) ; Cacheable
+  (enc/qb 1000 (serializable? (fn [])))        ; Uncacheable
+  (enc/qb 1000 (readable? "Hello world"))     ; Cacheable
+  (enc/qb 1000 (readable? (fn []))))           ; Uncacheable
 
 ;;;;
 
@@ -77,49 +71,49 @@
 (comment (is-coll? (clojure.lang.PersistentVector$ChunkedSeq. [1 2 3] 0 0)))
 
 (defn freezable?
-  "Alpha - subject to change, MAY BE BUGGY!
-  Returns truthy value iff Nippy supports de/serialization of given argument.
-  Conservative with default options.
+  "Alpha - subject to change.
+  Returns truthy iff Nippy *appears* to support freezing the given argument.
 
-  `:allow-clojure-reader?` and `:allow-java-serializable?` options may be used
-  to also enable the relevant roundtrip fallback test(s). These tests are only
-  **moderately reliable** since they're cached by arg type and don't test for
-  pre/post serialization equality (there's no good general way of doing so)."
-  [x & [{:keys [allow-clojure-reader? allow-java-serializable?]}]]
-  (let [is? #(when (instance? % x) %)]
-    (if (is-coll? x)
-      (try
-        (when (every? freezable? x) (type x))
-        (catch Exception _ false))
-      (or
-       (is? clojure.lang.Keyword)
-       (is? java.lang.String)
-       (is? java.lang.Long)
-       (is? java.lang.Double)
+  `:allow-clojure-reader?` and `:allow-java-serializable?` options may be
+  used to enable the relevant roundtrip fallback test(s). These tests are
+  only **moderately reliable** since they're cached by arg type and don't
+  test for pre/post serialization value equality (there's no good general
+  way of doing so)."
 
-       (is? clojure.lang.BigInt)
-       (is? clojure.lang.Ratio)
+  ([x] (freezable? x nil))
+  ([x {:keys [allow-clojure-reader? allow-java-serializable?]}]
+   (let [is? #(when (instance? % x) %)]
+     (if (is-coll? x)
+       (when (enc/revery? freezable? x) (type x))
+       (or
+         (is? clojure.lang.Keyword)
+         (is? java.lang.String)
+         (is? java.lang.Long)
+         (is? java.lang.Double)
 
-       (is? java.lang.Boolean)
-       (is? java.lang.Integer)
-       (is? java.lang.Short)
-       (is? java.lang.Byte)
-       (is? java.lang.Character)
-       (is? java.math.BigInteger)
-       (is? java.math.BigDecimal)
-       (is? #=(java.lang.Class/forName "[B"))
+         (is? clojure.lang.BigInt)
+         (is? clojure.lang.Ratio)
 
-       (is? java.util.Date)
-       (is? java.util.UUID)
+         (is? java.lang.Boolean)
+         (is? java.lang.Integer)
+         (is? java.lang.Short)
+         (is? java.lang.Byte)
+         (is? java.lang.Character)
+         (is? java.math.BigInteger)
+         (is? java.math.BigDecimal)
+         (is? #=(java.lang.Class/forName "[B"))
 
-       (when (and allow-clojure-reader? (readable? x)) :clojure-reader)
-       (when (and allow-java-serializable?
-                  ;; Reports as true but is unreliable:
-                  (not (is? clojure.lang.Fn))
-                  (serializable? x)) :java-serializable)))))
+         (is? java.util.Date)
+         (is? java.util.UUID)
+
+         (when (and allow-clojure-reader? (readable? x)) :clojure-reader)
+         (when (and allow-java-serializable?
+                 ;; Reports as true but is unreliable:
+                 (not (is? clojure.lang.Fn))
+                 (serializable? x)) :java-serializable))))))
 
 (comment
-  (time (dotimes [_ 10000] (freezable? "hello")))
+  (enc/qb 10000 (freezable? "hello"))
   (freezable? [:a :b])
   (freezable? [:a (fn [x] (* x x))])
   (freezable? (.getBytes "foo"))

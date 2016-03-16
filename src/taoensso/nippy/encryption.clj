@@ -1,6 +1,5 @@
 (ns taoensso.nippy.encryption
-  "Simple no-nonsense crypto with reasonable defaults."
-  {:author "Peter Taoussanis"}
+  "Simple no-nonsense crypto with reasonable defaults"
   (:require [taoensso.encore :as enc]))
 
 ;;;; Interface

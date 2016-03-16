@@ -1,33 +1,42 @@
 (ns taoensso.nippy.tools
-  "Utilities for third-party tools that want to add fully-user-configurable
-  Nippy support. Used by Carmine and Faraday."
-  {:author "Peter Taoussanis"}
+  "Utils for 3rd-party tools that want to add user-configurable Nippy support.
+  Used by Carmine, Faraday, etc."
   (:require [taoensso.nippy :as nippy]))
+
+(def ^:dynamic *freeze-opts* nil)
+(def ^:dynamic *thaw-opts*   nil)
+
+(defmacro with-freeze-opts [opts & body] `(binding [*freeze-opts* ~opts] ~@body))
+(defmacro with-thaw-opts   [opts & body] `(binding [*thaw-opts*   ~opts] ~@body))
 
 (defrecord WrappedForFreezing [value opts])
 (defn wrapped-for-freezing? [x] (instance? WrappedForFreezing x))
 (defn wrap-for-freezing
-  "Wraps arg (any freezable data type) so that (tools/freeze <wrapped-arg>)
-  will serialize the arg using given options."
-  [value & [opts]] (->WrappedForFreezing value opts))
+  "Ensures that given arg (any freezable data type) is wrapped so that
+  (tools/freeze <wrapped-arg>) will serialize as
+  (nippy/freeze <unwrapped-arg> <opts>)."
+  ([x     ] (wrap-for-freezing x nil))
+  ([x opts]
+   (if (wrapped-for-freezing? x)
+     (if (= (:opts x) opts)
+       x
+       (WrappedForFreezing. (:value x) opts))
+     (WrappedForFreezing. x opts))))
 
 (defn freeze
-  "Like `nippy/freeze` but takes options from special argument wrapper when
-  present."
-  [x & [{:keys [default-opts]}]]
-  (if (wrapped-for-freezing? x)
-    (nippy/freeze (:value x) (or (:opts x) default-opts))
-    (nippy/freeze x default-opts)))
+  "Like `nippy/freeze` but merges opts from *freeze-opts*, `wrap-for-freezing`."
+  ([x             ] (freeze x nil))
+  ([x default-opts]
+   (let [default-opts (or (:default-opts default-opts) default-opts)] ; Back compat
+     (if (wrapped-for-freezing? x)
+       (nippy/freeze (:value x) (merge default-opts *freeze-opts* (:opts x)))
+       (nippy/freeze x default-opts)))))
 
-(comment (freeze (wrap-for-freezing "wrapped"))
-         (freeze "unwrapped"))
+(defn thaw
+  "Like `nippy/thaw` but merges opts  from `*thaw-opts*`."
+  ([ba             ] (thaw ba nil))
+  ([ba default-opts]
+   (let [default-opts (or (:default-opts default-opts) default-opts)] ; Back compat
+     (nippy/thaw ba (merge default-opts *thaw-opts*)))))
 
-(def ^:dynamic *thaw-opts* nil)
-(defmacro with-thaw-opts
-  "Evaluates body using given options for any automatic deserialization in
-  context."
-  [opts & body] `(binding [*thaw-opts* ~opts] ~@body))
-
-(defn thaw "Like `nippy/thaw` but takes options from *thaw-opts* binding."
-  [ba & [{:keys [default-opts]}]]
-  (nippy/thaw ba (merge default-opts *thaw-opts*)))
+(comment (thaw (freeze (wrap-for-freezing "wrapped"))))

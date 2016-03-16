@@ -1,5 +1,4 @@
 (ns taoensso.nippy.compression
-  {:author "Peter Taoussanis"}
   (:require [taoensso.encore :as enc])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
              DataOutputStream]))
@@ -13,7 +12,7 @@
 
 ;;;; Default implementations
 
-(def standard-header-ids "These'll support :auto thaw." #{:snappy :lzma2 :lz4})
+(def standard-header-ids "These'll support :auto thaw" #{:snappy :lzma2 :lz4})
 
 (deftype SnappyCompressor []
   ICompressor

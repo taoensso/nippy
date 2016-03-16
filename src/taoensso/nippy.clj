@@ -343,6 +343,7 @@
   (.writeLong out (.getMostSignificantBits  x))
   (.writeLong out (.getLeastSignificantBits x)))
 
+;; TODO Deprecate, move to `thaw` opt?
 (enc/defonce* ^:dynamic *final-freeze-fallback* nil)
 (defn freeze-fallback-as-str [out x]
   (-freeze-to-out {:nippy/unfreezable (enc/pr-edn x) :type (type x)} out))
@@ -513,6 +514,7 @@
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
+;; TODO Deprecate, move to `thaw` opt?
 (enc/defonce* ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
 (defn swap-custom-readers! [f] (alter-var-root #'*custom-readers* f))
 
