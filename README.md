@@ -50,18 +50,22 @@ As an example of what it can do, let's take a look at Nippy's own reference stre
 ```clojure
 nippy/stress-data
 =>
-{:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
- :nil          nil
- :boolean      true
-
- :char-utf8    \ಬ
- :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
- :string-long  (apply str (range 1000))
- :keyword      :keyword
- :ns-keyword   ::keyword
+{:bytes     (byte-array [(byte 1) (byte 2) (byte 3)])
+ :nil       nil
+ :true      true
+ :false     false
+ :char      \ಬ
+ :str-short "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
+ :str-long  (apply str (range 1000))
+ :kw        :keyword
+ :kw-ns     ::keyword
+ :sym       'foo
+ :sym-ns    'foo/bar
+ :regex     #"^(https?:)?//(www\?|\?)?"
 
  :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
  :queue-empty  (PersistentQueue/EMPTY)
+ :queue-empty  (enc/queue)
  :sorted-set   (sorted-set 1 2 3 4 5)
  :sorted-map   (sorted-map :b 2 :a 1 :d 4 :c 3)
 
@@ -75,7 +79,12 @@ nippy/stress-data
  :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
  :set-empty    #{}
  :meta         (with-meta {:a :A} {:metakey :metaval})
- :lazy-seq     (repeatedly 1000 rand)
+ :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [] #{:a :b}}
+                #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [] #{:a :b}}
+                [1 [1 2 [1 2 3 [1 2 3 4 [1 2 3 4 5]]]]]]
+
+ :lazy-seq       (repeatedly 1000 rand)
+ :lazy-seq-empty (map identity '())
 
  :byte         (byte 16)
  :short        (short 42)

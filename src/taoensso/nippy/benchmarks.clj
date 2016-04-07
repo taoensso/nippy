@@ -65,17 +65,18 @@
 
 (comment
   (set! *unchecked-math* false)
-  ;; (bench {:reader? true :lzma2? true :fressian? true :laps 3})
-  ;; (bench {:laps 4})
+  ;; (bench {:reader? true :lzma2? true :fressian? true :laps 2})
+  ;; (bench {:laps 2})
 
-  ;;; 2016 Mar 8, v2.12.0-SNAPSHOT, new hardware
-  {:reader    {:round 51217, :freeze 16729, :thaw 34488, :size 27698}}
-  {:lzma2     {:round 42066, :freeze 27249, :thaw 14817, :size 11232}}
-  {:fressian  {:round 6594,  :freeze 4789,  :thaw 1805,  :size 16985}}
-  {:encrypted {:round 4664,  :freeze 2856,  :thaw 1808,  :size 16132}}
-  {:default   {:round 4127,  :freeze 2546,  :thaw 1581,  :size 16113}}
-  {:fast1     {:round 3541,  :freeze 2024,  :thaw 1517,  :size 16975}}
-  {:fast2     {:round 3497,  :freeze 2018,  :thaw 1479,  :size 16971}}
+  ;;; 2016 Apr 12, v2.12.0-SNAPSHOT, refactor + larger data + new hardware
+  {:reader    {:round 52734, :freeze 18066, :thaw 34668, :size 27839}}
+  {:lzma2     {:round 42746, :freeze 27586, :thaw 15160, :size 11252}}
+  {:fressian  {:round 6700,  :freeze 4968,  :thaw 1732,  :size 17074}}
+  {:encrypted {:round 4819,  :freeze 3024,  :thaw 1795,  :size 16164}}
+  {:default   {:round 4362,  :freeze 2695,  :thaw 1667,  :size 16134}}
+  {:fast1     {:round 3754,  :freeze 2149,  :thaw 1605,  :size 17052}}
+  {:fast2     {:round 3730,  :freeze 2156,  :thaw 1574,  :size 17048}}
+  ;; :reader/:default ratio: ~12.09
 
   ;;; 2015 Oct 6, v2.11.0-alpha4
   {:reader    {:round 73409, :freeze 21823, :thaw 51586, :size 27672}}
@@ -85,6 +86,7 @@
   {:default   {:round 6304,  :freeze 3824,  :thaw 2480,  :size 16122}}
   {:fast1     {:round 5352,  :freeze 3272,  :thaw 2080,  :size 16976}}
   {:fast2     {:round 5243,  :freeze 3238,  :thaw 2005,  :size 16972}}
+  ;; :reader/:default ratio: 11.64
   ;;
   {:reader    {:round 26,   :freeze 17,   :thaw 9,   :size 2}}
   {:lzma2     {:round 3648, :freeze 3150, :thaw 498, :size 68}}

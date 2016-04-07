@@ -1,6 +1,5 @@
 (ns taoensso.nippy
-  "High-performance serialization library for Clojure.
-  Originally adapted from Deep-Freeze (Ref. https://goo.gl/OePPGr)."
+  "High-performance serialization library for Clojure"
   {:author "Peter Taoussanis (@ptaoussanis)"}
   (:require [taoensso.encore :as enc]
             [taoensso.nippy
@@ -11,21 +10,28 @@
              DataOutputStream Serializable ObjectOutputStream ObjectInputStream
              DataOutput DataInput]
             [java.lang.reflect Method]
+            [java.net URI]
             [java.util Date UUID]
-            [clojure.lang Keyword BigInt Ratio
+            [java.util.regex Pattern]
+            [clojure.lang Keyword Symbol BigInt Ratio
              APersistentMap APersistentVector APersistentSet
              IPersistentMap ; IPersistentVector IPersistentSet IPersistentList
-             PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList ; LazySeq
-             IRecord ISeq]))
+             PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
+             LazySeq IRecord ISeq]))
 
 (if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [2 41 0])
-  (enc/assert-min-encore-version  2.41))
+  (enc/assert-min-encore-version [2 49 0])
+  (enc/assert-min-encore-version  2.49))
+
+(comment
+  (set! *unchecked-math* :warn-on-boxed)
+  (set! *unchecked-math* false)
+  (thaw (freeze stress-data)))
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
-;; { * 1-byte type id.
-;;   * Arb-length payload. } ...
+;; { * 1-byte type id
+;;   * Arb-length payload determined by freezer for this type [2] } ...
 ;;
 ;; [1] Inclusion of header is *strongly* recommended. Purpose:
 ;;   * Sanity check (confirm that data appears to be Nippy data)
@@ -34,9 +40,13 @@
 ;;   * Supports :auto freeze compressor (since this depends on :auto thaw
 ;;     compressor)
 ;;
-(def ^:private ^:const head-version 1)
-(def ^:private head-sig (.getBytes "NPY" "UTF-8"))
-(def ^:private ^:const head-meta "Final byte stores version-dependent metadata"
+;; [2] See `Freezable` protocol for type-specific payload formats,
+;;     `thaw-from-in!` for reference type-specific thaw implementations
+;;
+(def ^:private head-sig "First 3 bytes of Nippy header" (.getBytes "NPY" "UTF-8"))
+(def ^:private ^:const head-version "Current Nippy header format version" 1)
+(def ^:private ^:const head-meta
+  "Final byte of 4-byte Nippy header stores version-dependent metadata"
   {(byte 0)  {:version 1 :compressor-id nil     :encryptor-id nil}
    (byte 4)  {:version 1 :compressor-id nil     :encryptor-id :else}
    (byte 5)  {:version 1 :compressor-id :else   :encryptor-id nil}
@@ -57,86 +67,147 @@
    (byte 12) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-sha512}
    (byte 13) {:version 1 :compressor-id :lzma2  :encryptor-id :else}})
 
-(defmacro when-debug [& body] (when #_true false `(do ~@body)))
+(defmacro ^:private when-debug [& body] (when #_true false `(do ~@body)))
 
-;;;; Data type IDs
+(def ^:private type-ids
+  "{<byte-id> <type-name-kw>}, ~random ordinal ids for historical reasons.
+  -ive ids reserved for custom (user-defined) types.
 
-(do
-  ;; ** Negative ids reserved for user-defined types **
-  ;;
-  (def ^:const id-reserved          (byte 0))
-  ;;                                      1     ; Deprecated
-  (def ^:const id-bytes             (byte 2))
-  (def ^:const id-nil               (byte 3))
-  (def ^:const id-boolean           (byte 4))
-  (def ^:const id-reader            (byte 5))   ; Fallback #2
-  (def ^:const id-serializable      (byte 6))   ; Fallback #1
-  (def ^:const id-sm-bytes          (byte 7))
+  Size-optimized suffixes:
+    -0  (empty       => 0-sized)
+    -sm (small       => byte-sized)
+    -md (medium      => short-sized)
+    -lg (large       => int-sized)   ; Default when no suffix
+    -xl (extra large => long-sized)"
 
-  (def ^:const id-char              (byte 10))
-  ;;                                      11    ; Deprecated
-  ; ;                                     12    ; Deprecated
-  (def ^:const id-string            (byte 13))
-  (def ^:const id-keyword           (byte 14))
+  {82  :prefixed-custom
 
-  (def ^:const id-list              (byte 20))
-  (def ^:const id-vec               (byte 21))
-   ;;                                     22    ; Deprecated
-  (def ^:const id-set               (byte 23))
-  (def ^:const id-seq               (byte 24))
-  (def ^:const id-meta              (byte 25))
-  (def ^:const id-queue             (byte 26))
-   ;;                                     27    ; Deprecated
-  (def ^:const id-sorted-set        (byte 28))
-   ;;                                     29    ; Deprecated
-  (def ^:const id-map               (byte 30))
-  (def ^:const id-sorted-map        (byte 31))
+   46  :serializable-sm
+   50  :serializable-md
 
-  (def ^:const id-byte              (byte 40))
-  (def ^:const id-short             (byte 41))
-  (def ^:const id-integer           (byte 42))
-  (def ^:const id-long              (byte 43))
-  (def ^:const id-bigint            (byte 44))
-  (def ^:const id-biginteger        (byte 45))
+   47  :reader-sm
+   51  :reader-md
+   52  :reader-lg
 
-  (def ^:const id-float             (byte 60))
-  (def ^:const id-double            (byte 61))
-  (def ^:const id-bigdec            (byte 62))
+   48  :record-sm
+   49  :record-md
+   81  :type ; TODO Implement?
 
-  (def ^:const id-ratio             (byte 70))
+   3   :nil
+   8   :true
+   9   :false
+   10  :char
 
-  (def ^:const id-record            (byte 80))
-  ;; (def ^:const id-type           (byte 81))  ; TODO?
-  (def ^:const id-prefixed-custom   (byte 82))
+   34  :str-0
+   105 :str-sm
+   16  :str-md
+   13  :str-lg
 
-  (def ^:const id-date              (byte 90))
-  (def ^:const id-uuid              (byte 91))
+   106 :kw-sm
+   14  :kw-lg
 
-  ;;; Optimized, common-case types (v2.6+)
-  (def ^:const id-byte-as-long      (byte 100)) ; 1 vs 8 bytes
-  (def ^:const id-short-as-long     (byte 101)) ; 2 vs 8 bytes
-  (def ^:const id-int-as-long       (byte 102)) ; 4 vs 8 bytes
-  ;;
-  (def ^:const id-sm-string         (byte 105)) ; 1 vs 4 byte length prefix
-  (def ^:const id-sm-keyword        (byte 106)) ; ''
-  ;;
-  (def ^:const id-sm-vec            (byte 110)) ; ''
-  (def ^:const id-sm-set            (byte 111)) ; ''
-  (def ^:const id-sm-map            (byte 112)) ; ''
-  ;;
-  (def ^:const id-2-vec             (byte 113))
-  (def ^:const id-3-vec             (byte 114))
+   56  :sym-sm
+   57  :sym-lg
 
-  ;;; DEPRECATED (old types will be supported only for thawing)
-  (def ^:const id-reader-depr1      (byte 1))   ; v0.9.2+ for +64k support
-  (def ^:const id-string-depr1      (byte 11))  ; v0.9.2+ for +64k support
-  (def ^:const id-map-depr1         (byte 22))  ; v0.9.0+ for more efficient thaw
-  (def ^:const id-keyword-depr1     (byte 12))  ; v2.0.0-alpha5+ for str consistecy
-  (def ^:const id-map-depr2         (byte 27))  ; v2.11+ for count/2
-  (def ^:const id-sorted-map-depr1  (byte 29))  ; v2.11+ for count/2
-  )
+   58  :regex
+   71  :uri ; TODO Implement?
 
-;;;; Ns imports (mostly for convenience of lib consumers)
+   53  :bytes-0
+   7   :bytes-sm
+   15  :bytes-md
+   2   :bytes-lg
+
+   17  :vec-0
+   113 :vec-2
+   114 :vec-3
+   110 :vec-sm
+   69  :vec-md
+   21  :vec-lg
+
+   18  :set-0
+   111 :set-sm
+   32  :set-md
+   23  :set-lg
+
+   19  :map-0
+   112 :map-sm
+   33  :map-md
+   30  :map-lg
+
+   35  :list-0
+   36  :list-sm
+   54  :list-md
+   20  :list-lg
+
+   37  :seq-0
+   38  :seq-sm
+   39  :seq-md
+   24  :seq-lg
+
+   28  :sorted-set
+   31  :sorted-map
+   26  :queue
+   25  :meta
+
+   40  :byte
+   41  :short
+   42  :integer
+
+   0   :long-zero
+   100 :long-sm
+   101 :long-md
+   102 :long-lg
+   43  :long-xl
+
+   44  :bigint
+   45  :biginteger
+
+   60  :float
+   55  :double-zero
+   61  :double
+   62  :bigdec
+   70  :ratio
+
+   90  :date
+   91  :uuid
+
+   ;;; DEPRECATED (old types are supported only for thawing)
+   1   :reader-depr1       ; v0.9.2+ for +64k support
+   11  :str-depr1          ; v0.9.2+ for +64k support
+   22  :map-depr1          ; v0.9.0+ for more efficient thaw
+   12  :kw-depr1           ; v2.0.0-alpha5+ for str consistecy
+   27  :map-depr2          ; v2.11+ for count/2
+   29  :sorted-map-depr1   ; v2.11+ for count/2
+   4   :boolean-depr1      ; v2.12+ for switch to true/false ids
+
+   6   :serializable-depr1 ; v2.12+ = serializable-lg -> sm, md
+   5   :reader-depr2       ; v2.12+ = reader-lg -> sm, md, lg
+   80  :record-depr1       ; v2.12+ = record-lg -> sm, md
+   })
+
+(comment
+  (defn- get-free-byte-ids [ids-map]
+    (reduce (fn [acc in] (if-not (ids-map in) (conj acc in) acc))
+      [] (range 0 Byte/MAX_VALUE)))
+
+  (- Byte/MAX_VALUE (count type-ids))
+  (get-free-byte-ids type-ids))
+
+(defmacro ^:private defids []
+  `(do
+     ~@(map
+         (fn [[id# name#]]
+           (let [name# (str "id-" (name name#))
+                 sym#  (with-meta (symbol name#)
+                         {:const true :private true})]
+             `(def ~sym# (byte ~id#))))
+         type-ids)))
+
+(comment (macroexpand '(defids)))
+
+(defids)
+
+;;;; Ns imports (for convenience of lib consumers)
 
 (do
   (enc/defalias compress          compression/compress)
@@ -152,268 +223,527 @@
 
   (enc/defalias freezable?        utils/freezable?))
 
+;;;; Dynamic config
+;; See also `nippy.tools` ns for further dynamic config support
+
+(enc/defonce* ^:dynamic *freeze-fallback* "(fn [data-output x]), nil => default" nil)
+(enc/defonce* ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
+(enc/defonce* ^:dynamic *auto-freeze-compressor*
+  "(fn [byte-array])->compressor used by `(freeze <x> {:compressor :auto}),
+  nil => default"
+  nil)
+
+(defn set-freeze-fallback!        [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
+(defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
+(defn swap-custom-readers!        [f] (alter-var-root #'*custom-readers* f))
+
 ;;;; Freezing
 
 (defprotocol Freezable
   "Implementation detail. Be careful about extending to interfaces,
   Ref. http://goo.gl/6gGRlU."
-  (-freeze-to-out [this out]))
+  (-freeze-to-out! [this out]))
 
-(defmacro write-id [out id] `(.writeByte ~out ~id))
-(defn write-bytes [^DataOutput out ^bytes ba]
+(defmacro ^:private byte-sized?  [n] `(<= ~n 127    #_Byte/MAX_VALUE))
+(defmacro ^:private short-sized? [n] `(<= ~n 32767 #_Short/MAX_VALUE))
+
+(defn- write-bytes-sm [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
-    (.writeInt  out      len)
+    (.writeByte out (byte len))
     (.write     out ba 0 len)))
 
-(defn write-sm-bytes [^DataOutput out ^bytes ba]
+(defn- write-bytes-md [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
-    (byte len) ; Safety check
-    (.writeByte out      len)
-    (.write     out ba 0 len)))
+    (.writeShort out (short len))
+    (.write      out ba 0 len)))
 
-(defn write-biginteger [out ^BigInteger n] (write-bytes    out (.toByteArray n)))
-(defn write-utf8       [out     ^String s] (write-bytes    out (.getBytes s "UTF-8")))
-(defn write-sm-utf8    [out     ^String s] (write-sm-bytes out (.getBytes s "UTF-8")))
+(defn- write-bytes-lg [^DataOutput out ^bytes ba]
+  (let [len (alength ba)]
+    (.writeInt out (int len))
+    (.write    out ba 0 len)))
 
-(defn  byte-sized? [^long n] (<= n 127    #_Byte/MAX_VALUE))
-(defn short-sized? [^long n] (<= n 32767 #_Short/MAX_VALUE))
+(defn- write-bytes [^DataOutput out ^bytes ba]
+  (let [len (alength ba)]
+    (if (zero? len)
+      (.writeByte out id-bytes-0)
+      (do
+        (cond
+          (byte-sized? len)
+          (do (.writeByte out id-bytes-sm)
+              (.writeByte out len))
 
-(defn write-ided-bytes
-  ([            out                 ba] (write-ided-bytes out id-sm-bytes id-bytes ba))
-  ([^DataOutput out id-sm id ^bytes ba]
-   (if (byte-sized? (alength ba))
-     (do (write-id       out id-sm)
-         (write-sm-bytes out ba))
-     (do (write-id       out id)
-         (write-bytes    out ba)))))
+          (short-sized? len)
+          (do (.writeByte  out id-bytes-md)
+              (.writeShort out len))
 
-(defn write-ided-string [out ^String s]
-  (write-ided-bytes out id-sm-string id-string (.getBytes s "UTF-8")))
+          :else
+          (do (.writeByte out id-bytes-lg)
+              (.writeInt  out (int len))))
 
-(defn write-ided-keyword [out kw]
-  (let [^String s (if-let [ns (namespace kw)] (str ns "/" (name kw)) (name kw))]
-    (write-ided-bytes out id-sm-keyword id-keyword (.getBytes s "UTF-8"))))
+        (.write out ba 0 len)))))
 
-(defn write-ided-long [^DataOutput out ^long n]
+;; (defn- str->bytes [s] (.getBytes s "UTF-8"))
+(defn- write-utf8-sm    [out ^String s]     (write-bytes-sm out (.getBytes s "UTF-8")))
+(defn- write-utf8-md    [out ^String s]     (write-bytes-md out (.getBytes s "UTF-8")))
+(defn- write-utf8-lg    [out ^String s]     (write-bytes-lg out (.getBytes s "UTF-8")))
+(defn- write-utf8       [out ^String s]     (write-bytes    out (.getBytes s "UTF-8")))
+(defn- write-biginteger [out ^BigInteger n] (write-bytes-lg out (.toByteArray n)))
+
+(defn- write-str [^DataOutput out ^String s]
+  (if (identical? s "")
+    (.writeByte out id-str-0)
+    (let [ba  (.getBytes s "UTF-8")
+          len (alength ba)]
+      (cond
+        (byte-sized? len)
+        (do (.writeByte out id-str-sm)
+            (.writeByte out len))
+
+        (short-sized? len)
+        (do (.writeByte  out id-str-md)
+            (.writeShort out len))
+
+        :else
+        (do (.writeByte out id-str-lg)
+            (.writeInt  out (int len))))
+
+      (.write out ba 0 len))))
+
+(defn- write-kw [^DataOutput out kw]
+  (let [s   (if-let [ns (namespace kw)] (str ns "/" (name kw)) (name kw))
+        ba  (.getBytes s "UTF-8")
+        len (alength ba)]
+    (cond
+      (byte-sized? len)
+      (do (.writeByte out id-kw-sm)
+          (.writeByte out len))
+
+      :else ; Rare!
+      (do (.writeByte out id-kw-lg)
+          (.writeInt  out (int len))))
+
+    (.write out ba 0 len)))
+
+(defn- write-sym [^DataOutput out s]
+  (let [s   (if-let [ns (namespace s)] (str ns "/" (name s)) (name s))
+        ba  (.getBytes s "UTF-8")
+        len (alength ba)]
+    (cond
+      (byte-sized? len)
+      (do (.writeByte out id-sym-sm)
+          (.writeByte out len))
+
+      :else ; Rare!
+      (do (.writeByte out id-sym-lg)
+          (.writeInt  out (int len))))
+
+    (.write out ba 0 len)))
+
+(defn- write-long [^DataOutput out ^long n]
   (cond
-    (and (<= n  127 #_Byte/MAX_VALUE)
-         (>= n -128 #_Byte/MIN_VALUE))
-    (do (write-id   out id-byte-as-long)
-        (.writeByte out n))
+    (zero? n)
+    (.writeByte out id-long-zero)
 
-    (and (<= n  32767 #_Short/MAX_VALUE)
-         (>= n -32768 #_Short/MIN_VALUE))
-    (do (write-id    out id-short-as-long)
-        (.writeShort out n))
+    (> n 0)
+    (cond
+      (<= n 127 #_Byte/MAX_VALUE)
+      (do (.writeByte out id-long-sm)
+          (.writeByte out n))
 
-    (and (<= n  2147483647 #_Integer/MAX_VALUE)
-         (>= n -2147483648 #_Integer/MIN_VALUE))
-    (do (write-id  out id-int-as-long)
-        (.writeInt out n))
+      (<= n 32767 #_Short/MAX_VALUE)
+      (do (.writeByte  out id-long-md)
+          (.writeShort out n))
+
+      (<= n 2147483647 #_Integer/MAX_VALUE)
+      (do (.writeByte out id-long-lg)
+          (.writeInt  out n))
+
+      :else
+      (do (.writeByte out id-long-xl)
+          (.writeLong out n)))
 
     :else
-    (do (write-id   out id-long)
-        (.writeLong out n))))
+    (cond
+      (>= n -128 #_Byte/MIN_VALUE)
+      (do (.writeByte out id-long-sm)
+          (.writeByte out n))
+
+      (>= n -32768 #_Short/MIN_VALUE)
+      (do (.writeByte  out id-long-md)
+          (.writeShort out n))
+
+      (>= n -2147483648 #_Integer/MIN_VALUE)
+      (do (.writeByte out id-long-lg)
+          (.writeInt  out n))
+
+      :else
+      (do (.writeByte out id-long-xl)
+          (.writeLong out n)))))
+
+(defmacro ^:private -run!    [proc coll] `(do (reduce    #(~proc %2)    nil ~coll) nil))
+(defmacro ^:private -run-kv! [proc    m] `(do (reduce-kv #(~proc %2 %3) nil    ~m) nil))
+
+(declare freeze-to-out!)
+
+(defn- write-vec [^DataOutput out v]
+  (let [cnt (count v)]
+    (if (zero? cnt)
+      (.writeByte out id-vec-0)
+      (do
+        (cond
+          (byte-sized? cnt)
+          (cond
+            (== cnt 2) (.writeByte out id-vec-2)
+            (== cnt 3) (.writeByte out id-vec-3)
+            :else
+            (do (.writeByte out id-vec-sm)
+                (.writeByte out cnt)))
+
+          (short-sized? cnt)
+          (do (.writeByte  out id-vec-md)
+              (.writeShort out cnt))
+
+          :else
+          (do (.writeByte out id-vec-lg)
+              (.writeInt  out (int cnt))))
+
+        (-run! (fn [in] (freeze-to-out! out in)) v)))))
+
+(defn- write-kvs
+  ([^DataOutput out id-lg coll]
+   (let [cnt (count coll)]
+     (.writeByte out id-lg)
+     (.writeInt  out (int cnt))
+     (-run-kv!
+       (fn [k v]
+         (freeze-to-out! out k)
+         (freeze-to-out! out v))
+       coll)))
+
+  ([^DataOutput out id-empty id-sm id-md id-lg coll]
+   (let [cnt (count coll)]
+     (if (zero? cnt)
+       (.writeByte out id-empty)
+       (do
+         (cond
+           (byte-sized? cnt)
+           (do (.writeByte out id-sm)
+               (.writeByte out cnt))
+
+           (short-sized? cnt)
+           (do (.writeByte  out id-md)
+               (.writeShort out cnt))
+
+           :else
+           (do (.writeByte out id-lg)
+               (.writeInt  out (int cnt))))
+
+         (-run-kv!
+           (fn [k v]
+             (freeze-to-out! out k)
+             (freeze-to-out! out v))
+           coll))))))
+
+(defn- write-counted-coll
+  ([^DataOutput out id-lg coll]
+   (let [cnt (count coll)]
+     ;; (assert (counted? coll))
+     (.writeByte out id-lg)
+     (.writeInt  out (int cnt))
+     (-run! (fn [in] (freeze-to-out! out in)) coll)))
+
+  ([^DataOutput out id-empty id-sm id-md id-lg coll]
+   (let [cnt (count coll)]
+     ;; (assert (counted? coll))
+     (if (zero? cnt)
+       (.writeByte out id-empty)
+       (do
+         (cond
+           (byte-sized? cnt)
+           (do (.writeByte out id-sm)
+               (.writeByte out cnt))
+
+           (short-sized? cnt)
+           (do (.writeByte  out id-md)
+               (.writeShort out cnt))
+
+           :else
+           (do (.writeByte out id-lg)
+               (.writeInt  out (int cnt))))
+
+         (-run! (fn [in] (freeze-to-out! out in)) coll))))))
+
+(defn- write-uncounted-coll
+  ([^DataOutput out id-lg coll]
+   ;; (assert (not (counted? coll)))
+   (let [bas  (ByteArrayOutputStream. 32)
+         sout (DataOutputStream. bas)
+         ^long cnt (reduce (fn [^long cnt in] (freeze-to-out! sout in) (unchecked-inc cnt)) 0 coll)
+         ba   (.toByteArray bas)]
+
+     (.writeByte out id-lg)
+     (.writeInt  out (int cnt))
+     (.write     out ba)))
+
+  ([^DataOutput out id-empty id-sm id-md id-lg coll]
+   (let [bas  (ByteArrayOutputStream. 32)
+         sout (DataOutputStream. bas)
+         ^long cnt (reduce (fn [^long cnt in] (freeze-to-out! sout in) (unchecked-inc cnt)) 0 coll)
+         ba   (.toByteArray bas)]
+
+     (if (zero? cnt)
+       (.writeByte out id-empty)
+       (do
+         (cond
+           (byte-sized? cnt)
+           (do (.writeByte out id-sm)
+               (.writeByte out cnt))
+
+           (short-sized? cnt)
+           (do (.writeByte  out id-md)
+               (.writeShort out cnt))
+
+           :else
+           (do (.writeByte out id-lg)
+               (.writeInt  out (int cnt))))
+
+         (.write out ba))))))
+
+(defn- write-coll
+  ([out id-lg coll]
+   (if (counted? coll)
+     (write-counted-coll   out id-lg coll)
+     (write-uncounted-coll out id-lg coll)))
+
+  ([out id-empty id-sm id-md id-lg coll]
+   (if (counted? coll)
+     (write-counted-coll   out id-empty id-sm id-md id-lg coll)
+     (write-uncounted-coll out id-empty id-sm id-md id-lg coll))))
+
+;; Micro-optimization:
+;; As (write-kvs out id-map-0 id-map-sm id-map-md id-map-lg x)
+(defn- write-map [^DataOutput out m]
+  (let [cnt (count m)]
+    (if (zero? cnt)
+      (.writeByte out id-map-0)
+      (do
+        (cond
+          (byte-sized? cnt)
+          (do (.writeByte out id-map-sm)
+              (.writeByte out cnt))
+
+          (short-sized? cnt)
+          (do (.writeByte  out id-map-md)
+              (.writeShort out cnt))
+
+          :else
+          (do (.writeByte out id-map-lg)
+              (.writeInt  out (int cnt))))
+
+        (-run-kv!
+          (fn [k v]
+            (freeze-to-out! out k)
+            (freeze-to-out! out v))
+          m)))))
+
+;; Micro-optimization:
+;; As (write-counted-coll out id-set-0 id-set-sm id-set-md id-set-lg x)
+(defn- write-set [^DataOutput out s]
+  (let [cnt (count s)]
+    (if (zero? cnt)
+      (.writeByte out id-set-0)
+      (do
+        (cond
+          (byte-sized? cnt)
+          (do (.writeByte out id-set-sm)
+              (.writeByte out cnt))
+
+          (short-sized? cnt)
+          (do (.writeByte  out id-set-md)
+              (.writeShort out cnt))
+
+          :else
+          (do (.writeByte out id-set-lg)
+              (.writeInt  out (int cnt))))
+
+        (-run! (fn [in] (freeze-to-out! out in)) s)))))
+
+(defn- write-serializable [^DataOutput out x]
+  (when-debug (println (str "write-serializable: " (type x))))
+  (let [cname    (.getName (class x)) ; Reflect
+        cname-ba (.getBytes cname "UTF-8")
+        len      (alength cname-ba)]
+    (cond
+      (byte-sized? len)
+      (do (.writeByte     out id-serializable-sm)
+          (write-bytes-sm out cname-ba))
+
+      :else
+      (do (.writeByte     out id-serializable-md)
+          (write-bytes-md out cname-ba)))
+
+    (.writeObject (ObjectOutputStream. out) x)))
+
+(defn- write-readable [^DataOutput out x]
+  (when-debug (println (str "write-readable: " (type x))))
+  (let [edn    (enc/pr-edn x)
+        edn-ba (.getBytes ^String edn "UTF-8")
+        len    (alength edn-ba)]
+    (cond
+      (byte-sized? len)
+      (do (.writeByte     out id-reader-sm)
+          (write-bytes-sm out edn-ba))
+
+      (short-sized? len)
+      (do (.writeByte     out id-reader-md)
+          (write-bytes-md out edn-ba))
+
+      :else
+      (do (.writeByte     out id-reader-lg)
+          (write-bytes-lg out edn-ba)))))
+
+(defn try-write-serializable [out x]
+  (when (utils/serializable? x)
+    (try (write-serializable out x) true
+         (catch Throwable _ nil))))
+
+(defn try-write-readable [out x]
+  (when (utils/readable? x)
+    (try (write-readable out x) true
+         (catch Throwable _ nil))))
+
+(defn- try-pr-edn [x]
+  (try
+    (enc/pr-edn x)
+    (catch Throwable _
+      (try
+        (str x)
+        (catch Throwable _ :nippy/unprintable)))))
+
+(defn write-unfreezable [out x]
+  (-freeze-to-out!
+    {:type (type x)
+     :nippy/unfreezable (try-pr-edn x)}
+    out))
+
+(defn throw-unfreezable [x]
+  (throw
+    (ex-info (str "Unfreezable type: " (type x))
+      {:type   (type x)
+       :as-str (try-pr-edn x)})))
 
 (defn freeze-to-out!
   "Serializes arg (any Clojure data type) to a DataOutput. Please note that
   this is a low-level util: in most cases you'll want `freeze` instead."
-  ;; Basically just wraps `-freeze-to-out` with different arg order + metadata support
+  ;; Basically just wraps `-freeze-to-out!` with different arg order + metadata support
   [^DataOutput data-output x]
-  (when-let [m (meta x)]
-    (write-id data-output id-meta)
-    (-freeze-to-out m data-output))
-  (-freeze-to-out x data-output))
+  (when (.isInstance clojure.lang.IMeta x) ; Rare
+    (when-let [m (meta x)]
+      (.writeByte data-output id-meta)
+      (-freeze-to-out! m data-output)))
+  (-freeze-to-out! x data-output))
 
-(defn write-ided-coll [^DataOutput out ?id-sm id coll]
-  (if (counted? coll)
-    (let [cnt (count coll)]
-      (if (and ?id-sm (byte-sized? cnt))
-        (do (write-id   out ?id-sm)
-            (.writeByte out cnt))
-        (do (write-id   out id)
-            (.writeInt  out cnt)))
-      (enc/run!* (fn [in] (freeze-to-out! out in)) coll))
-
-    (let [bas  (ByteArrayOutputStream. 64)
-          sout (DataOutputStream. bas)
-          cnt  (reduce (fn [^long cnt in]
-                         (freeze-to-out! sout in)
-                         (unchecked-inc cnt))
-                 0 coll)
-          ba   (.toByteArray bas)]
-
-      (if (and ?id-sm (byte-sized? cnt))
-        (do (write-id   out ?id-sm)
-            (.writeByte out cnt))
-        (do (write-id   out id)
-            (.writeInt  out cnt)))
-
-      (.write out ba 0 (alength ba)))))
-
-(defn write-ided-kvs [^DataOutput out ?id-sm id coll]
-  (let [cnt (count coll)]
-    (if (and ?id-sm (byte-sized? cnt))
-      (do (write-id   out ?id-sm)
-          (.writeByte out cnt))
-      (do (write-id   out id)
-          (.writeInt  out cnt)))
-    (enc/run-kv!
-      (fn [k v]
-        (freeze-to-out! out k)
-        (freeze-to-out! out v))
-      coll)))
-
-;; (defn write-ided-vec [out v] (write-ided-coll out id-sm-vec id-vec v))
-(defn write-ided-set [out s] (write-ided-coll out id-sm-set id-set s))
-(defn write-ided-map [out m] (write-ided-kvs  out id-sm-map id-map m))
-(defn write-ided-vec [^DataOutput out v]
-  (let [cnt (count v)]
-    (cond
-      (== cnt 2) (write-id out id-2-vec)
-      (== cnt 3) (write-id out id-3-vec)
-      (byte-sized? cnt)
-      (do (write-id   out id-sm-vec)
-          (.writeByte out cnt))
-      :else
-      (do (write-id   out id-vec)
-          (.writeInt  out cnt)))
-
-    (enc/run!* (fn [in] (freeze-to-out! out in)) v)))
-
-(defmacro ^:private freezer* [type & body]
-  `(extend-type ~type
-     Freezable
-     (~'-freeze-to-out [~'x ~(with-meta 'out {:tag 'DataOutput})]
+(defmacro ^:private freezer [type & body]
+  `(extend-type ~type Freezable
+     (~'-freeze-to-out! [~'x ~(with-meta 'out {:tag 'DataOutput})]
        ~@body)))
 
-(defmacro ^:private freezer [type id & body]
-  `(extend-type ~type
-     Freezable
-     (~'-freeze-to-out [~'x ~(with-meta 'out {:tag 'DataOutput})]
-       (write-id ~'out ~id)
-       ~@body)))
+(defmacro ^:private id-freezer [type id & body]
+  `(extend-type ~type Freezable
+     (~'-freeze-to-out! [~'x ~(with-meta 'out {:tag 'DataOutput})]
+       (.writeByte ~'out ~id)
+      ~@body)))
 
-(freezer  nil                  id-nil)
-(freezer  Boolean              id-boolean (.writeBoolean out        x))
-(freezer  Character            id-char    (.writeChar    out   (int x)))
-(freezer* (Class/forName "[B")            (write-ided-bytes   out x))
-(freezer* String                          (write-ided-string  out x))
-(freezer* Keyword                         (write-ided-keyword out x))
-
-(freezer* PersistentQueue   (write-ided-coll out nil        id-queue      x))
-(freezer* PersistentTreeSet (write-ided-coll out nil        id-sorted-set x))
-(freezer* PersistentTreeMap (write-ided-kvs  out nil        id-sorted-map x))
-(freezer* APersistentMap    (write-ided-kvs  out id-sm-map  id-map        x))
-(freezer* APersistentVector (write-ided-vec  out                          x))
-(freezer* APersistentSet    (write-ided-coll out id-sm-set  id-set        x))
-
-;; No APersistentList:
-(freezer* PersistentList    (write-ided-coll out nil        id-list       x))
-(freezer* (type '())        (write-ided-coll out nil        id-list       x))
-
-;; Nb low-level interface!! Acts as fallback for seqs that don't have a
-;; concrete implementation. Will conflict with any other coll interfaces!
-(freezer* ISeq              (write-ided-coll out nil        id-seq        x))
-
-(freezer  IRecord id-record
-  (write-utf8     out (.getName (class x))) ; Reflect
-  (-freeze-to-out (into {} x) out))
-
-(freezer  Byte       id-byte    (.writeByte  out x))
-(freezer  Short      id-short   (.writeShort out x))
-(freezer  Integer    id-integer (.writeInt   out x))
-(freezer* Long                  (write-ided-long out x))
-
-(freezer  BigInt     id-bigint     (write-biginteger out (.toBigInteger x)))
-(freezer  BigInteger id-biginteger (write-biginteger out x))
-
-(freezer  Float      id-float   (.writeFloat  out x))
-(freezer  Double     id-double  (.writeDouble out x))
-(freezer  BigDecimal id-bigdec
+(id-freezer nil        id-nil)
+(id-freezer (type '()) id-list-0)
+(id-freezer Character  id-char       (.writeChar       out (int x)))
+(id-freezer Byte       id-byte       (.writeByte       out x))
+(id-freezer Short      id-short      (.writeShort      out x))
+(id-freezer Integer    id-integer    (.writeInt        out x))
+(id-freezer BigInt     id-bigint     (write-biginteger out (.toBigInteger x)))
+(id-freezer BigInteger id-biginteger (write-biginteger out x))
+(id-freezer Pattern    id-regex      (write-str        out (str x)))
+(id-freezer Float      id-float      (.writeFloat      out x))
+(id-freezer BigDecimal id-bigdec
   (write-biginteger out (.unscaledValue x))
   (.writeInt out (.scale x)))
 
-(freezer Ratio id-ratio
+(id-freezer Ratio id-ratio
   (write-biginteger out (.numerator   x))
   (write-biginteger out (.denominator x)))
 
-(freezer Date id-date (.writeLong out (.getTime x)))
-(freezer UUID id-uuid
+(id-freezer Date id-date (.writeLong out (.getTime x)))
+(id-freezer UUID id-uuid
   (.writeLong out (.getMostSignificantBits  x))
   (.writeLong out (.getLeastSignificantBits x)))
 
-;; TODO Deprecate, move to `thaw` opt?
-(enc/defonce* ^:dynamic *final-freeze-fallback* nil)
-(defn freeze-fallback-as-str [out x]
-  (-freeze-to-out {:nippy/unfreezable (enc/pr-edn x) :type (type x)} out))
+(freezer Boolean              (if x (.writeByte out id-true) (.writeByte out id-false)))
+(freezer (Class/forName "[B") (write-bytes out x))
+(freezer String               (write-str   out x))
+(freezer Keyword              (write-kw    out x))
+(freezer Symbol               (write-sym   out x))
+(freezer Long                 (write-long  out x))
+(freezer Double
+  (if (zero? x)
+    (.writeByte       out id-double-zero)
+    (do (.writeByte   out id-double)
+        (.writeDouble out x))))
 
-(comment
-  (require '[clojure.core.async :as async])
-  (binding [*final-freeze-fallback* freeze-fallback-as-str]
-    (-> (async/chan) (freeze) (thaw))))
-
-;; Fallbacks. Note that we'll extend *only* to (lowly) Object to prevent
-;; interfering with higher-level implementations, Ref. http://goo.gl/6f7SKl
-(extend-type Object
-  Freezable
-  (-freeze-to-out [x ^DataOutput out]
+(freezer PersistentQueue      (write-counted-coll   out id-queue      x))
+(freezer PersistentTreeSet    (write-counted-coll   out id-sorted-set x))
+(freezer PersistentTreeMap    (write-kvs            out id-sorted-map x))
+(freezer APersistentVector    (write-vec            out               x))
+(freezer APersistentSet       (write-set            out               x))
+(freezer APersistentMap       (write-map            out               x))
+(freezer PersistentList       (write-counted-coll   out id-list-0 id-list-sm id-list-md id-list-lg x))
+(freezer LazySeq              (write-uncounted-coll out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
+(freezer ISeq                 (write-coll           out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
+(freezer IRecord
+  (let [cname    (.getName (class x)) ; Reflect
+        cname-ba (.getBytes cname "UTF-8")
+        len      (alength cname-ba)]
     (cond
-     (utils/serializable? x) ; Fallback #1: Java's Serializable interface
-     (do (when-debug (println (format "DEBUG - Serializable fallback: %s" (type x))))
-         (write-id   out id-serializable)
-         (write-utf8 out (.getName (class x))) ; Reflect
-         (.writeObject (ObjectOutputStream. out) x))
+      (byte-sized? len)
+      (do (.writeByte     out id-record-sm)
+          (write-bytes-sm out cname-ba))
 
-     (utils/readable? x) ; Fallback #2: Clojure's Reader
-     (do (when-debug (println (format "DEBUG - Reader fallback: %s" (type x))))
-         (write-id   out id-reader)
-         (write-utf8 out (enc/pr-edn x)))
+      :else
+      (do (.writeByte     out id-record-md)
+          (write-bytes-md out cname-ba)))
 
-     :else ; Fallback #3: *final-freeze-fallback*
-     (if-let [ffb *final-freeze-fallback*]
-       (ffb out x)
-       (throw (ex-info (format "Unfreezable type: %s %s" (type x) (str x))
-                {:type   (type x)
-                 :as-str (enc/pr-edn x)}))))))
+    (-freeze-to-out! (into {} x) out)))
+
+(freezer Object
+  (when-debug (println (str "freeze-fallback: " (type x))))
+  (if-let [ff *freeze-fallback*]
+    (if (identical? ff :write-unfreezable)
+      (or
+        (try-write-serializable out x)
+        (try-write-readable     out x)
+        (write-unfreezable      out x))
+      (ff out x))
+    (or
+      (try-write-serializable out x)
+      (try-write-readable     out x)
+      (throw-unfreezable          x))))
+
+;;;;
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 (def ^:private get-head-ba
-  (memoize
-   (fn [head-meta]
-     (when-let [meta-id (get head-meta-id (assoc head-meta :version head-version))]
-       (enc/ba-concat head-sig (byte-array [meta-id]))))))
+  (enc/memoize_
+    (fn [head-meta]
+      (when-let [meta-id (get head-meta-id (assoc head-meta :version head-version))]
+        (enc/ba-concat head-sig (byte-array [meta-id]))))))
 
 (defn- wrap-header [data-ba head-meta]
   (if-let [head-ba (get-head-ba head-meta)]
     (enc/ba-concat head-ba data-ba)
-    (throw (ex-info (format "Unrecognized header meta: %s" head-meta)
+    (throw (ex-info (str "Unrecognized header meta: " head-meta)
              {:head-meta head-meta}))))
 
 (comment (wrap-header (.getBytes "foo") {:compressor-id :lz4
                                          :encryptor-id  nil}))
-
-(defn default-freeze-compressor-selector
-  "Strategy:
-    * Prioritize speed, but allow lz4.
-    * Skip lz4 unless it's likely that lz4's space benefit will outweigh its
-      space overhead."
-  [^bytes ba]
-  (let [ba-len (alength ba)]
-    (cond
-      ;; (> ba-len 8192) lzma2-compressor
-      ;; (> ba-len 4098) lz4hc-compressor
-         (> ba-len 1024) lz4-compressor
-      :else              nil)))
-
-(enc/defonce* ^:dynamic *default-freeze-compressor-selector*
-  "(fn selector [^bytes ba])->compressor used by `(freeze <x> {:compressor :auto})."
-  default-freeze-compressor-selector)
-
-(defn set-default-freeze-compressor-selector!
-  "Sets root binding of `*default-freeze-compressor-selector*`"
-  [selector]
-  (alter-var-root #'*default-freeze-compressor-selector* (constantly selector)))
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
@@ -445,7 +775,11 @@
                 (if (identical? compressor :auto)
                   (if no-header?
                     lz4-compressor
-                    (*default-freeze-compressor-selector* ba))
+                    (if-let [fc *auto-freeze-compressor*]
+                      (fc ba)
+                      ;; Intelligently enable compression only if benefit
+                      ;; is likely to outweigh cost:
+                      (when (> (alength ba) 8192) lz4-compressor)))
                   (if (fn? compressor)
                     (compressor ba) ; Assume compressor selector fn
                     compressor      ; Assume compressor
@@ -471,67 +805,87 @@
 
 ;;;; Thawing
 
+(defn- read-bytes ^bytes [^DataInput in len]
+  (let [ba (byte-array len)]
+    (.readFully in ba 0 len)
+    ba))
+
+(defn- read-utf8 [in len] (String. (read-bytes in len)))
+
+(defn- read-biginteger ^BigInteger [^DataInput in]
+  (BigInteger. (read-bytes in (.readInt in))))
+
 (declare thaw-from-in!)
+(defmacro ^:private editable? [coll] `(instance? clojure.lang.IEditableCollection ~coll))
 
-(defn read-bytes ^bytes [^DataInput in]
-  (let [len (.readInt in)
-        ba  (byte-array len)]
-    (.readFully in ba 0 len)
-    ba))
-
-(defn read-sm-bytes ^bytes [^DataInput in]
-  (let [len (.readByte in)
-        ba  (byte-array len)]
-    (.readFully in ba 0 len)
-    ba))
-
-(defn read-biginteger ^BigInteger [^DataInput in] (BigInteger. (read-bytes    in)))
-(defn read-utf8           ^String [^DataInput in] (String.     (read-bytes    in) "UTF-8"))
-(defn read-sm-utf8        ^String [^DataInput in] (String.     (read-sm-bytes in) "UTF-8"))
-
-(defn- -read-coll [^DataInput in to-coll ^long n]
-  (if (and (> n 10) (enc/editable? to-coll))
+(defn- read-into [to ^DataInput in ^long n]
+  (if (and (editable? to) (> n 10))
     (persistent!
       (enc/reduce-n (fn [acc _] (conj! acc (thaw-from-in! in)))
-        (transient to-coll) n))
+        (transient to) n))
 
-    (enc/reduce-n (fn [acc _] (conj acc (thaw-from-in! in))) to-coll n)))
+    (enc/reduce-n (fn [acc _] (conj acc (thaw-from-in! in))) to n)))
 
-(defn- -read-kvs [^DataInput in to-coll ^long n]
-  (if (and (> n 10) (enc/editable? to-coll))
+(defn- read-kvs-into [to ^DataInput in ^long n]
+  (if (and (editable? to) (> n 10))
     (persistent!
       (enc/reduce-n (fn [acc _] (assoc! acc (thaw-from-in! in) (thaw-from-in! in)))
-        (transient to-coll) n))
+        (transient to) n))
 
     (enc/reduce-n (fn [acc _] (assoc acc (thaw-from-in! in) (thaw-from-in! in)))
-      to-coll n)))
+      to n)))
 
-(defn read-coll      [^DataInput in to-coll] (-read-coll in to-coll (.readInt  in)))
-(defn read-sm-coll   [^DataInput in to-coll] (-read-coll in to-coll (.readByte in)))
-(defn read-kvs       [^DataInput in to-coll] (-read-kvs  in to-coll (.readInt  in)))
-(defn read-sm-kvs    [^DataInput in to-coll] (-read-kvs  in to-coll (.readByte in)))
-(defn read-kvs-depr1 [^DataInput in to-coll] (-read-kvs  in to-coll (quot (.readInt in) 2)))
+(defn- read-kvs-depr1 [to ^DataInput in] (read-kvs-into to in (quot (.readInt in) 2)))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
-;; TODO Deprecate, move to `thaw` opt?
-(enc/defonce* ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
-(defn swap-custom-readers! [f] (alter-var-root #'*custom-readers* f))
-
-(defn- read-custom! [type-id in]
+(defn- read-custom! [in type-id]
   (if-let [custom-reader (get *custom-readers* type-id)]
     (try
       (custom-reader in)
       (catch Exception e
         (throw
           (ex-info
-            (format "Reader exception for custom type with internal id: %s"
+            (str "Reader exception for custom type with internal id: "
               type-id) {:internal-type-id type-id} e))))
     (throw
       (ex-info
-        (format "No reader provided for custom type with internal id: %s"
+        (str "No reader provided for custom type with internal id: "
           type-id)
         {:internal-type-id type-id}))))
+
+(defn- read-edn [edn]
+  (try
+    (enc/read-edn {:readers *data-readers*} edn)
+    (catch Exception e
+      {:type :reader
+       :throwable e
+       :nippy/unthawable edn})))
+
+(defn- read-serializable [^DataInput in class-name]
+  (try
+    (let [content (.readObject (ObjectInputStream. in))]
+      (try
+        (let [class (Class/forName class-name)] (cast class content))
+        (catch Exception e
+          {:type :serializable
+           :throwable e
+           :nippy/unthawable {:class-name class-name :content content}})))
+    (catch Exception e
+      {:type :serializable
+       :throwable e
+       :nippy/unthawable {:class-name class-name :content nil}})))
+
+(defn- read-record [in class-name]
+  (let [content (thaw-from-in! in)]
+    (try
+      (let [class  (Class/forName class-name)
+            method (.getMethod class "create" class-method-sig)]
+        (.invoke method class (into-array Object [content])))
+      (catch Exception e
+        {:type :record
+         :throwable e
+         :nippy/unthawable {:class-name class-name :content content}}))))
 
 (defn thaw-from-in!
   "Deserializes a frozen object from given DataInput to its original Clojure
@@ -540,131 +894,125 @@
   [^DataInput data-input]
   (let [in      data-input
         type-id (.readByte in)]
-    (when-debug (println (format "DEBUG - thawing type-id: %s" type-id)))
+    (when-debug (println (str "thaw-from-in!: " type-id)))
     (try
       (enc/case-eval type-id
 
-        id-reader
-        (let [edn (read-utf8 in)]
-          (try
-            (enc/read-edn {:readers *data-readers*} edn)
-            (catch Exception e
-              {:type :reader
-               :throwable e
-               :nippy/unthawable edn})))
+        id-reader-sm       (read-edn             (read-utf8 in (.readByte  in)))
+        id-reader-md       (read-edn             (read-utf8 in (.readShort in)))
+        id-reader-lg       (read-edn             (read-utf8 in (.readInt   in)))
+        id-serializable-sm (read-serializable in (read-utf8 in (.readByte  in)))
+        id-serializable-md (read-serializable in (read-utf8 in (.readShort in)))
+        id-record-sm       (read-record       in (read-utf8 in (.readByte  in)))
+        id-record-md       (read-record       in (read-utf8 in (.readShort in)))
 
-        id-serializable
-        (let [class-name (read-utf8 in)]
-          (try
-            (let [content (.readObject (ObjectInputStream. in))]
-              (try
-                (let [class (Class/forName class-name)]
-                  (cast class content))
-                (catch Exception e
-                  {:type :serializable
-                   :throwable e
-                   :nippy/unthawable {:class-name class-name :content content}})))
-            (catch Exception e
-              {:type :serializable
-               :throwable e
-               :nippy/unthawable {:class-name class-name :content nil}})))
+        id-nil         nil
+        id-true        true
+        id-false       false
+        id-char        (.readChar in)
+        id-meta        (let [m (thaw-from-in! in)]
+                         (with-meta (thaw-from-in! in) m))
 
-        id-record
-        (let [class-name (read-utf8     in)
-              content    (thaw-from-in! in)]
-          (try
-            (let [class  (Class/forName class-name)
-                  method (.getMethod class "create" class-method-sig)]
-              (.invoke method class (into-array Object [content])))
-            (catch Exception e
-              {:type :record
-               :throwable e
-               :nippy/unthawable {:class-name class-name :content content}})))
+        id-bytes-0     (byte-array 0)
+        id-bytes-sm    (read-bytes in (.readByte  in))
+        id-bytes-md    (read-bytes in (.readShort in))
+        id-bytes-lg    (read-bytes in (.readInt   in))
 
-        id-nil     nil
-        id-boolean (.readBoolean in)
-        id-char    (.readChar    in)
+        id-str-0       ""
+        id-str-sm               (read-utf8 in (.readByte  in))
+        id-str-md               (read-utf8 in (.readShort in))
+        id-str-lg               (read-utf8 in (.readInt   in))
+        id-kw-sm       (keyword (read-utf8 in (.readByte  in)))
+        id-kw-lg       (keyword (read-utf8 in (.readShort in)))
+        id-sym-sm      (symbol  (read-utf8 in (.readByte  in)))
+        id-sym-lg      (symbol  (read-utf8 in (.readInt   in)))
+        id-regex       (re-pattern (thaw-from-in! in))
 
-        id-bytes    (read-bytes    in)
-        id-sm-bytes (read-sm-bytes in)
+        id-vec-0       []
+        id-vec-2       [(thaw-from-in! in) (thaw-from-in! in)]
+        id-vec-3       [(thaw-from-in! in) (thaw-from-in! in) (thaw-from-in! in)]
+        id-vec-sm      (read-into [] in (.readByte  in))
+        id-vec-md      (read-into [] in (.readShort in))
+        id-vec-lg      (read-into [] in (.readInt   in))
 
-        id-string              (read-utf8    in)
-        id-sm-string           (read-sm-utf8 in)
-        id-keyword    (keyword (read-utf8    in))
-        id-sm-keyword (keyword (read-sm-utf8 in))
+        id-set-0       #{}
+        id-set-sm      (read-into    #{} in (.readByte  in))
+        id-set-md      (read-into    #{} in (.readShort in))
+        id-set-lg      (read-into    #{} in (.readInt   in))
 
-        id-queue      (read-coll in (PersistentQueue/EMPTY))
-        id-sorted-set (read-coll in (sorted-set))
-        id-sorted-map (read-kvs  in (sorted-map))
+        id-map-0       {}
+        id-map-sm      (read-kvs-into {} in (.readByte  in))
+        id-map-md      (read-kvs-into {} in (.readShort in))
+        id-map-lg      (read-kvs-into {} in (.readInt   in))
 
-        id-vec        (read-coll    in  [])
-        id-sm-vec     (read-sm-coll in  [])
-        id-2-vec      [(thaw-from-in! in) (thaw-from-in! in)]
-        id-3-vec      [(thaw-from-in! in) (thaw-from-in! in)
-                       (thaw-from-in! in)]
+        id-queue       (read-into (PersistentQueue/EMPTY) in (.readInt in))
+        id-sorted-set  (read-into     (sorted-set)        in (.readInt in))
+        id-sorted-map  (read-kvs-into (sorted-map)        in (.readInt in))
 
-        id-set        (read-coll    in #{})
-        id-sm-set     (read-sm-coll in #{})
-        id-map        (read-kvs     in  {})
-        id-sm-map     (read-sm-kvs  in  {})
+        id-list-0      '()
+        id-list-sm     (into '() (rseq (read-into [] in (.readByte  in))))
+        id-list-md     (into '() (rseq (read-into [] in (.readShort in))))
+        id-list-lg     (into '() (rseq (read-into [] in (.readInt   in))))
 
-        id-list (into '() (rseq (read-coll in [])))
-        id-seq  (or (seq (read-coll in []))
-                    (lazy-seq nil) ; Empty coll
-                    )
+        id-seq-0       (lazy-seq nil)
+        id-seq-sm      (or (seq (read-into [] in (.readByte  in))) (lazy-seq nil))
+        id-seq-md      (or (seq (read-into [] in (.readShort in))) (lazy-seq nil))
+        id-seq-lg      (or (seq (read-into [] in (.readInt   in))) (lazy-seq nil))
 
-        id-meta (let [m (thaw-from-in! in)] (with-meta (thaw-from-in! in) m))
+        id-byte              (.readByte  in)
+        id-short             (.readShort in)
+        id-integer           (.readInt   in)
+        id-long-zero   0
+        id-long-sm     (long (.readByte  in))
+        id-long-md     (long (.readShort in))
+        id-long-lg     (long (.readInt   in))
+        id-long-xl           (.readLong  in)
 
-        id-byte    (.readByte  in)
-        id-short   (.readShort in)
-        id-integer (.readInt   in)
-        id-long    (.readLong  in)
+        id-bigint      (bigint (read-biginteger in))
+        id-biginteger          (read-biginteger in)
 
-        ;;; Optimized, common-case types (v2.6+)
-        id-byte-as-long  (long (.readByte  in))
-        id-short-as-long (long (.readShort in))
-        id-int-as-long   (long (.readInt   in))
+        id-float       (.readFloat  in)
+        id-double-zero 0
+        id-double      (.readDouble in)
+        id-bigdec      (BigDecimal. (read-biginteger in) (.readInt in))
 
-        id-bigint     (bigint (read-biginteger in))
-        id-biginteger         (read-biginteger in)
+        id-ratio       (clojure.lang.Ratio.
+                         (read-biginteger in)
+                         (read-biginteger in))
 
-        id-float  (.readFloat  in)
-        id-double (.readDouble in)
-        id-bigdec (BigDecimal. (read-biginteger in) (.readInt in))
+        id-date        (Date. (.readLong in))
+        id-uuid        (UUID. (.readLong in) (.readLong in))
 
-        id-ratio (clojure.lang.Ratio.
-                   (read-biginteger in)
-                   (read-biginteger in))
+        ;; Deprecated ------------------------------------------------------
+        id-boolean-depr1    (.readBoolean in)
+        id-sorted-map-depr1 (read-kvs-depr1 (sorted-map) in)
+        id-map-depr2        (read-kvs-depr1 {} in)
+        id-reader-depr1     (read-edn (.readUTF in))
+        id-reader-depr2     (read-edn (read-utf8 in (.readInt in)))
+        id-str-depr1                 (.readUTF in)
+        id-kw-depr1         (keyword (.readUTF in))
+        id-map-depr1        (apply hash-map
+                              (enc/repeatedly-into [] (* 2 (.readInt in))
+                                (fn [] (thaw-from-in! in))))
+        ;; -----------------------------------------------------------------
 
-        id-date  (Date. (.readLong in))
-        id-uuid  (UUID. (.readLong in) (.readLong in))
-
-        ;;; DEPRECATED
-        id-sorted-map-depr1 (read-kvs-depr1 in (sorted-map))
-        id-map-depr2        (read-kvs-depr1 in {})
-        id-reader-depr1 (enc/read-edn (.readUTF in))
-        id-string-depr1           (.readUTF in)
-        id-keyword-depr1 (keyword (.readUTF in))
-        id-map-depr1    (apply hash-map
-                          (enc/repeatedly-into [] (* 2 (.readInt in))
-                            (fn [] (thaw-from-in! in))))
-
-        id-prefixed-custom ; Prefixed custom type
-        (let [hash-id (.readShort in)]
-          (read-custom! hash-id in))
-
-        (read-custom! type-id in) ; Unprefixed custom type (catchall)
+        id-prefixed-custom (read-custom! in (.readShort in))
+        (read-custom! in type-id) ; Unprefixed custom type (catchall)
         )
 
       (catch Exception e
-        (throw (ex-info (format "Thaw failed against type-id: %s" type-id)
+        (throw (ex-info (str "Thaw failed against type-id: " type-id)
                  {:type-id type-id} e))))))
 
-(defn- try-parse-header [ba]
-  (when-let [[head-ba data-ba] (enc/ba-split ba 4)]
-    (let [[head-sig* [meta-id]] (enc/ba-split head-ba 3)]
-      (when (enc/ba= head-sig* head-sig) ; Header appears to be well-formed
-        [data-ba (get head-meta meta-id {:unrecognized-meta? true})]))))
+(defn- try-parse-header [^bytes ba]
+  (let [len (alength ba)]
+    (when (> len 4)
+      (let [-head-sig (java.util.Arrays/copyOf ba 3)]
+        (when (java.util.Arrays/equals -head-sig ^bytes head-sig)
+          ;; Header appears to be well-formed
+          (let [meta-id (aget ba 3)
+                data-ba (java.util.Arrays/copyOfRange ba 4 len)]
+            [data-ba (get head-meta meta-id {:unrecognized-meta? true})]))))))
 
 (defn- get-auto-compressor [compressor-id]
   (case compressor-id
@@ -674,8 +1022,8 @@
     :lz4       lz4-compressor
     :no-header (throw (ex-info ":auto not supported on headerless data." {}))
     :else (throw (ex-info ":auto not supported for non-standard compressors." {}))
-    (throw (ex-info (format "Unrecognized :auto compressor id: %s" compressor-id)
-                    {:compressor-id compressor-id}))))
+    (throw (ex-info (str "Unrecognized :auto compressor id: " compressor-id)
+             {:compressor-id compressor-id}))))
 
 (defn- get-auto-encryptor [encryptor-id]
   (case encryptor-id
@@ -683,8 +1031,8 @@
     :aes128-sha512 aes128-encryptor
     :no-header     (throw (ex-info ":auto not supported on headerless data." {}))
     :else (throw (ex-info ":auto not supported for non-standard encryptors." {}))
-    (throw (ex-info (format "Unrecognized :auto encryptor id: %s" encryptor-id)
-                    {:encryptor-id encryptor-id}))))
+    (throw (ex-info (str "Unrecognized :auto encryptor id: " encryptor-id)
+             {:encryptor-id encryptor-id}))))
 
 (def ^:private err-msg-unknown-thaw-failure
   "Decryption/decompression failure, or data unfrozen/damaged.")
@@ -719,7 +1067,7 @@
          no-header? (:no-header? opts) ; Intentionally undocumented
          ex (fn ex
               ([  msg] (ex nil msg))
-              ([e msg] (throw (ex-info (format "Thaw failed: %s" msg)
+              ([e msg] (throw (ex-info (str "Thaw failed: " msg)
                                 {:opts (merge opts
                                          {:compressor compressor
                                           :encryptor  encryptor})}
@@ -827,12 +1175,12 @@
   [type custom-type-id [x out] & body]
   (assert-custom-type-id custom-type-id)
   `(extend-type ~type Freezable
-     (~'-freeze-to-out [~x ~(with-meta out {:tag 'java.io.DataOutput})]
+     (~'-freeze-to-out! [~x ~(with-meta out {:tag 'java.io.DataOutput})]
        (if-not ~(keyword? custom-type-id)
          ;; Unprefixed [cust byte id][payload]:
-         (write-id ~out ~(coerce-custom-type-id custom-type-id))
+         (.writeByte ~out ~(coerce-custom-type-id custom-type-id))
          ;; Prefixed [const byte id][cust hash id][payload]:
-         (do (write-id    ~out id-prefixed-custom)
+         (do (.writeByte  ~out ~id-prefixed-custom)
              (.writeShort ~out ~(coerce-custom-type-id custom-type-id))))
        ~@body)))
 
@@ -847,7 +1195,7 @@
   (assert-custom-type-id custom-type-id)
   `(do
      (when (contains? *custom-readers* ~(coerce-custom-type-id custom-type-id))
-       (println (format "Warning: resetting Nippy thaw for custom type with id: %s"
+       (println (str "Warning: resetting Nippy thaw for custom type with id: "
                   ~custom-type-id)))
      (swap-custom-readers!
        (fn [m#]
@@ -867,26 +1215,28 @@
 
 (defrecord StressRecord [data])
 (def stress-data "Reference data used for tests & benchmarks"
-  {:bytes        (byte-array [(byte 1) (byte 2) (byte 3)])
-   :nil          nil
-   :boolean      true
-
-   :char-utf8    \ಬ
-   :string-utf8  "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
-   :string-long  (apply str (range 1000))
-   :keyword      :keyword
-   :keyword-ns   ::keyword
+  {:bytes     (byte-array [(byte 1) (byte 2) (byte 3)])
+   :nil       nil
+   :true      true
+   :false     false
+   :char      \ಬ
+   :str-short "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
+   :str-long  (apply str (range 1000))
+   :kw        :keyword
+   :kw-ns     ::keyword
+   :sym       'foo
+   :sym-ns    'foo/bar
+   :regex     #"^(https?:)?//(www\?|\?)?"
 
    ;;; Try reflect real-world data:
    :lotsa-small-numbers  (vec (range 200))
    :lotsa-small-keywords (->> (java.util.Locale/getISOLanguages)
                               (mapv keyword))
    :lotsa-small-strings  (->> (java.util.Locale/getISOCountries)
-                              (mapv #(.getDisplayCountry
-                                       (java.util.Locale. "en" %))))
+                              (mapv #(.getDisplayCountry (java.util.Locale. "en" %))))
 
-   :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
-   :queue-empty  (PersistentQueue/EMPTY)
+   :queue        (enc/queue [:a :b :c :d :e :f :g])
+   :queue-empty  (enc/queue)
    :sorted-set   (sorted-set 1 2 3 4 5)
    :sorted-map   (sorted-map :b 2 :a 1 :d 4 :c 3)
 
@@ -900,8 +1250,11 @@
    :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
    :set-empty    #{}
    :meta         (with-meta {:a :A} {:metakey :metaval})
+   :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [] #{:a :b}}
+                  #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [] #{:a :b}}
+                  [1 [1 2 [1 2 3 [1 2 3 4 [1 2 3 4 5]]]]]]
 
-   :lazy-seq     (repeatedly 1000 rand)
+   :lazy-seq       (repeatedly 1000 rand)
    :lazy-seq-empty (map identity '())
 
    :byte         (byte 16)
@@ -927,7 +1280,7 @@
 
 (def stress-data-comparable
   "Reference data with stuff removed that breaks roundtrip equality"
-  (dissoc stress-data :bytes :throwable :exception :ex-info))
+  (dissoc stress-data :bytes :throwable :exception :ex-info :regex))
 
 (def stress-data-benchable
   "Reference data with stuff removed that breaks reader or other utils we'll
@@ -964,33 +1317,3 @@
 (comment
   (inspect-ba (freeze "hello"))
   (seq (:data-ba (inspect-ba (freeze "hello")))))
-
-;;;; Deprecated
-
-;; Deprecated by :auto compressor selection
-(defrecord     Compressable-LZMA2 [value]) ; Why was this `LZMA2` instead of `lzma2`?
-(extend-freeze Compressable-LZMA2 128 [x out]
-  (let [ba (freeze (:value x) {:no-header? true :compressor nil})
-        ba-len    (alength ba)
-        compress? (> ba-len 1024)]
-    (.writeBoolean out compress?)
-    (if compress?
-      (write-bytes out (compress lzma2-compressor ba))
-      (write-bytes out ba))))
-
-(extend-thaw 128 [in]
-  (let [compressed? (.readBoolean in)
-        ba          (read-bytes   in)]
-    (thaw ba {:no-header? true
-              :compressor (when compressed? lzma2-compressor)
-              :encryptor  nil})))
-
-(comment
-  (->> (apply str (repeatedly 1000 rand))
-       (->Compressable-LZMA2)
-       (freeze)
-       (thaw))
-  (count (->> (apply str (repeatedly 1000 rand)) (freeze)))
-  (count (->> (apply str (repeatedly 1000 rand))
-              (->Compressable-LZMA2)
-              (freeze))))
