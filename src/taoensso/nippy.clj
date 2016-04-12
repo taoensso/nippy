@@ -28,6 +28,11 @@
   (set! *unchecked-math* false)
   (thaw (freeze stress-data)))
 
+;; TODO NB For all sizes, we should be doing:
+;; (- n   128) on freeze, (+ n 128) on thaw   (for -sm)
+;; (- n 32768) on freeze, (+ n 32768) on thaw (for -md)
+;; etc.
+
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
 ;; { * 1-byte type id
@@ -170,6 +175,14 @@
 
    90  :date
    91  :uuid
+
+   59  :cached-1
+   63  :cached-2
+   64  :cached-3
+   65  :cached-4
+   66  :cached-5
+   67  :cached-sm
+   68  :cached-md
 
    ;;; DEPRECATED (old types are supported only for thawing)
    1   :reader-depr1       ; v0.9.2+ for +64k support
@@ -654,6 +667,66 @@
        (.writeByte ~'out ~id)
       ~@body)))
 
+;;;; Caching ; Experimental
+
+(def ^:dynamic ^:private *cache_* "{<x> <cache-idx>}" nil)
+(defmacro ^:private with-cache [& body] `(binding [*cache_* (atom nil)] ~@body))
+
+(defrecord CacheWrapped [value])
+(defn cache [x] (if (instance? CacheWrapped x) x (CacheWrapped. x)))
+
+(comment (cache "foo"))
+
+(freezer CacheWrapped
+  (let [x-val (:value x)]
+    (if-let [cache_ *cache_*]
+      (let [[first-occ? idx]
+            (enc/swap-in! cache_
+              (fn [m]
+                (if-let [idx (get m x-val)]
+                  (enc/swapped m [false idx])
+                  (let [idx (inc (count m))]
+                    (enc/swapped (assoc m x-val idx) [true idx])))))]
+
+        (cond
+          (byte-sized? idx)
+          (cond
+            (== idx 1) (do (.writeByte out id-cached-1)
+                           (when first-occ? (-freeze-to-out! x-val out)))
+            (== idx 2) (do (.writeByte out id-cached-2)
+                           (when first-occ? (-freeze-to-out! x-val out)))
+            (== idx 3) (do (.writeByte out id-cached-3)
+                           (when first-occ? (-freeze-to-out! x-val out)))
+            (== idx 4) (do (.writeByte out id-cached-4)
+                           (when first-occ? (-freeze-to-out! x-val out)))
+            (== idx 5) (do (.writeByte out id-cached-5)
+                           (when first-occ? (-freeze-to-out! x-val out)))
+            :else
+            (do (.writeByte out id-cached-sm)
+                (.writeByte out (+ idx Byte/MIN_VALUE))
+                (when first-occ? (-freeze-to-out! x-val out))))
+
+          (short-sized? idx)
+          (do (.writeByte  out id-cached-md)
+              (.writeShort out (+ idx Short/MIN_VALUE))
+              (when first-occ? (-freeze-to-out! x-val out)))
+
+          :else (throw (ex-info "Maximum cache size exceeded" {:idx idx}))))
+
+      (-freeze-to-out! x-val out))))
+
+(declare thaw-from-in!)
+(defn- thaw-cached [idx in]
+  (if-let [e (find @*cache_* idx)]
+    (val e)
+    (let [x (thaw-from-in! in)]
+      (swap! *cache_* assoc idx x)
+      x)))
+
+(comment (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")])))
+
+;;;;
+
 (id-freezer nil        id-nil)
 (id-freezer (type '()) id-list-0)
 (id-freezer Character  id-char       (.writeChar       out (int x)))
@@ -764,11 +837,11 @@
           (when-not no-header? ; Avoid `wrap-header`'s array copy:
             (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
               (.write dos head-ba 0 4)))
-          (freeze-to-out! dos x)
+          (with-cache (freeze-to-out! dos x))
           (.toByteArray baos))
 
         (do
-          (freeze-to-out! dos x)
+          (with-cache (freeze-to-out! dos x))
           (let [ba (.toByteArray baos)
 
                 compressor
@@ -815,7 +888,6 @@
 (defn- read-biginteger ^BigInteger [^DataInput in]
   (BigInteger. (read-bytes in (.readInt in))))
 
-(declare thaw-from-in!)
 (defmacro ^:private editable? [coll] `(instance? clojure.lang.IEditableCollection ~coll))
 
 (defn- read-into [to ^DataInput in ^long n]
@@ -913,6 +985,14 @@
         id-meta        (let [m (thaw-from-in! in)]
                          (with-meta (thaw-from-in! in) m))
 
+        id-cached-1    (thaw-cached 1 in)
+        id-cached-2    (thaw-cached 2 in)
+        id-cached-3    (thaw-cached 3 in)
+        id-cached-4    (thaw-cached 4 in)
+        id-cached-5    (thaw-cached 5 in)
+        id-cached-sm   (thaw-cached (- (.readByte  in)  Byte/MIN_VALUE) in)
+        id-cached-md   (thaw-cached (- (.readShort in) Short/MIN_VALUE) in)
+
         id-bytes-0     (byte-array 0)
         id-bytes-sm    (read-bytes in (.readByte  in))
         id-bytes-md    (read-bytes in (.readShort in))
@@ -972,7 +1052,7 @@
         id-biginteger          (read-biginteger in)
 
         id-float       (.readFloat  in)
-        id-double-zero 0
+        id-double-zero 0.0
         id-double      (.readDouble in)
         id-bigdec      (BigDecimal. (read-biginteger in) (.readInt in))
 
@@ -1090,7 +1170,8 @@
                      ba (if encryptor  (decrypt    encryptor password ba) ba)
                      ba (if compressor (decompress compressor         ba) ba)
                      dis (DataInputStream. (ByteArrayInputStream. ba))]
-                 (thaw-from-in! dis))
+
+                 (with-cache (thaw-from-in! dis)))
 
                (catch Exception e (ex-fn e)))))
 
