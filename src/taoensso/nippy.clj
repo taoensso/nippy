@@ -709,10 +709,10 @@
 ;;;; Caching ; Experimental
 
 (def ^:dynamic ^:private *cache_* "{<x> <cache-idx>}" nil)
-(defmacro ^:private with-cache [& body]
-  `(binding [*cache_* (atom nil)] ~@body))
+;; (defmacro ^:private with-cache [& body]
+;;   `(binding [*cache_* (atom nil)] ~@body))
 
-;; (defmacro ^:private with-cache [& body] `(do ~@body)) ; Disable
+(defmacro ^:private with-cache [& body] `(do ~@body)) ; Disable
 
 (defrecord CacheWrapped [value])
 (defn cache "Experimental!" [x]
