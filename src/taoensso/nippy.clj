@@ -28,11 +28,6 @@
   (set! *unchecked-math* false)
   (thaw (freeze stress-data)))
 
-;; TODO NB For all sizes, we should be doing:
-;; (- n   128) on freeze, (+ n 128) on thaw   (for -sm)
-;; (- n 32768) on freeze, (+ n 32768) on thaw (for -md)
-;; etc.
-
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
 ;; { * 1-byte type id
@@ -176,11 +171,11 @@
    90  :date
    91  :uuid
 
-   59  :cached-1
-   63  :cached-2
-   64  :cached-3
-   65  :cached-4
-   66  :cached-5
+   59  :cached-0
+   63  :cached-1
+   64  :cached-2
+   65  :cached-3
+   66  :cached-4
    67  :cached-sm
    68  :cached-md
 
@@ -192,7 +187,6 @@
    27  :map-depr2          ; v2.11+ for count/2
    29  :sorted-map-depr1   ; v2.11+ for count/2
    4   :boolean-depr1      ; v2.12+ for switch to true/false ids
-
    6   :serializable-depr1 ; v2.12+ = serializable-lg -> sm, md
    5   :reader-depr2       ; v2.12+ = reader-lg -> sm, md, lg
    80  :record-depr1       ; v2.12+ = record-lg -> sm, md
@@ -257,41 +251,86 @@
   Ref. http://goo.gl/6gGRlU."
   (-freeze-to-out! [this out]))
 
-(defmacro ^:private byte-sized?  [n] `(<= ~n 127    #_Byte/MAX_VALUE))
-(defmacro ^:private short-sized? [n] `(<= ~n 32767 #_Short/MAX_VALUE))
+#_(do
+  (defmacro write-id [out id] `(.writeByte ~out ~id))
+
+  (defmacro ^:private sm-count? [n] `(<= ~n 255))   #_(- Byte/MAX_VALUE  Byte/MIN_VALUE)
+  (defmacro ^:private md-count? [n] `(<= ~n 65535)) #_(- Short/MAX_VALUE Short/MIN_VALUE)
+
+  (defmacro ^:private write-sm-count [out n]
+    `(if (<= ~n 127)
+       (.writeByte ~out ~n)
+       (.writeByte ~out (unchecked-subtract 127 ~n))))
+
+  (defmacro ^:private write-md-count [out n]
+    `(if (<= ~n 32767)
+       (.writeShort ~out ~n)
+       (.writeShort ~out (unchecked-subtract 32767 ~n))))
+
+  (defmacro ^:private write-lg-count [out n] `(.writeInt ~out ~n))
+
+  (defmacro ^:private read-sm-count [in]
+    `(let [n# (.readByte ~in)]
+       (if (pos? n#)
+         n#
+         (unchecked-subtract 127 n#))))
+
+  (defmacro ^:private read-md-count [in]
+    `(let [n# (.readShort ~in)]
+       (if (pos? n#)
+         n#
+         (unchecked-subtract 32767 n#))))
+
+  (defmacro ^:private read-lg-count [in] `(.readInt ~in)))
+
+(do
+  (defmacro write-id [out id] `(.writeByte ~out ~id))
+
+  (defmacro ^:private sm-count? [n] `(<= ~n 127))
+  (defmacro ^:private md-count? [n] `(<= ~n 32767))
+
+  (defmacro ^:private write-sm-count [out n] `(.writeByte  ~out ~n))
+  (defmacro ^:private write-md-count [out n] `(.writeShort ~out ~n))
+  (defmacro ^:private write-lg-count [out n] `(.writeInt   ~out ~n))
+
+  (defmacro ^:private read-sm-count [in] `(.readByte  ~in))
+  (defmacro ^:private read-md-count [in] `(.readShort ~in))
+  (defmacro ^:private read-lg-count [in] `(.readInt   ~in)))
 
 (defn- write-bytes-sm [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
-    (.writeByte out (byte len))
-    (.write     out ba 0 len)))
+    ;; (byte len)
+    (write-sm-count out len)
+    (.write         out ba 0 len)))
 
 (defn- write-bytes-md [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
-    (.writeShort out (short len))
-    (.write      out ba 0 len)))
+    ;; (short len)
+    (write-md-count out len)
+    (.write         out ba 0 len)))
 
 (defn- write-bytes-lg [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
-    (.writeInt out (int len))
-    (.write    out ba 0 len)))
+    (write-lg-count out len)
+    (.write         out ba 0 len)))
 
 (defn- write-bytes [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
     (if (zero? len)
-      (.writeByte out id-bytes-0)
+      (write-id out id-bytes-0)
       (do
         (cond
-          (byte-sized? len)
-          (do (.writeByte out id-bytes-sm)
-              (.writeByte out len))
+          (sm-count? len)
+          (do (write-id       out id-bytes-sm)
+              (write-sm-count out len))
 
-          (short-sized? len)
-          (do (.writeByte  out id-bytes-md)
-              (.writeShort out len))
+          (md-count? len)
+          (do (write-id       out id-bytes-md)
+              (write-md-count out len))
 
           :else
-          (do (.writeByte out id-bytes-lg)
-              (.writeInt  out (int len))))
+          (do (write-id       out id-bytes-lg)
+              (write-lg-count out len)))
 
         (.write out ba 0 len)))))
 
@@ -304,21 +343,21 @@
 
 (defn- write-str [^DataOutput out ^String s]
   (if (identical? s "")
-    (.writeByte out id-str-0)
+    (write-id out id-str-0)
     (let [ba  (.getBytes s "UTF-8")
           len (alength ba)]
       (cond
-        (byte-sized? len)
-        (do (.writeByte out id-str-sm)
-            (.writeByte out len))
+        (sm-count? len)
+        (do (write-id       out id-str-sm)
+            (write-sm-count out len))
 
-        (short-sized? len)
-        (do (.writeByte  out id-str-md)
-            (.writeShort out len))
+        (md-count? len)
+        (do (write-id       out id-str-md)
+            (write-md-count out len))
 
         :else
-        (do (.writeByte out id-str-lg)
-            (.writeInt  out (int len))))
+        (do (write-id       out id-str-lg)
+            (write-lg-count out len)))
 
       (.write out ba 0 len))))
 
@@ -327,13 +366,13 @@
         ba  (.getBytes s "UTF-8")
         len (alength ba)]
     (cond
-      (byte-sized? len)
-      (do (.writeByte out id-kw-sm)
-          (.writeByte out len))
+      (sm-count? len)
+      (do (write-id       out id-kw-sm)
+          (write-sm-count out len))
 
       :else ; Rare!
-      (do (.writeByte out id-kw-lg)
-          (.writeInt  out (int len))))
+      (do (write-id       out id-kw-lg)
+          (write-lg-count out len)))
 
     (.write out ba 0 len)))
 
@@ -342,55 +381,55 @@
         ba  (.getBytes s "UTF-8")
         len (alength ba)]
     (cond
-      (byte-sized? len)
-      (do (.writeByte out id-sym-sm)
-          (.writeByte out len))
+      (sm-count? len)
+      (do (write-id       out id-sym-sm)
+          (write-sm-count out len))
 
       :else ; Rare!
-      (do (.writeByte out id-sym-lg)
-          (.writeInt  out (int len))))
+      (do (write-id       out id-sym-lg)
+          (write-lg-count out len)))
 
     (.write out ba 0 len)))
 
 (defn- write-long [^DataOutput out ^long n]
   (cond
     (zero? n)
-    (.writeByte out id-long-zero)
+    (write-id out id-long-zero)
 
     (> n 0)
     (cond
       (<= n 127 #_Byte/MAX_VALUE)
-      (do (.writeByte out id-long-sm)
+      (do (write-id   out id-long-sm)
           (.writeByte out n))
 
       (<= n 32767 #_Short/MAX_VALUE)
-      (do (.writeByte  out id-long-md)
+      (do (write-id    out id-long-md)
           (.writeShort out n))
 
       (<= n 2147483647 #_Integer/MAX_VALUE)
-      (do (.writeByte out id-long-lg)
-          (.writeInt  out n))
+      (do (write-id  out id-long-lg)
+          (.writeInt out n))
 
       :else
-      (do (.writeByte out id-long-xl)
+      (do (write-id   out id-long-xl)
           (.writeLong out n)))
 
     :else
     (cond
       (>= n -128 #_Byte/MIN_VALUE)
-      (do (.writeByte out id-long-sm)
+      (do (write-id   out id-long-sm)
           (.writeByte out n))
 
       (>= n -32768 #_Short/MIN_VALUE)
-      (do (.writeByte  out id-long-md)
+      (do (write-id    out id-long-md)
           (.writeShort out n))
 
       (>= n -2147483648 #_Integer/MIN_VALUE)
-      (do (.writeByte out id-long-lg)
+      (do (write-id   out id-long-lg)
           (.writeInt  out n))
 
       :else
-      (do (.writeByte out id-long-xl)
+      (do (write-id   out id-long-xl)
           (.writeLong out n)))))
 
 (defmacro ^:private -run!    [proc coll] `(do (reduce    #(~proc %2)    nil ~coll) nil))
@@ -401,32 +440,32 @@
 (defn- write-vec [^DataOutput out v]
   (let [cnt (count v)]
     (if (zero? cnt)
-      (.writeByte out id-vec-0)
+      (write-id out id-vec-0)
       (do
         (cond
-          (byte-sized? cnt)
+          (sm-count? cnt)
           (cond
-            (== cnt 2) (.writeByte out id-vec-2)
-            (== cnt 3) (.writeByte out id-vec-3)
+            (== cnt 2) (write-id out id-vec-2)
+            (== cnt 3) (write-id out id-vec-3)
             :else
-            (do (.writeByte out id-vec-sm)
-                (.writeByte out cnt)))
+            (do (write-id       out id-vec-sm)
+                (write-sm-count out cnt)))
 
-          (short-sized? cnt)
-          (do (.writeByte  out id-vec-md)
-              (.writeShort out cnt))
+          (md-count? cnt)
+          (do (write-id       out id-vec-md)
+              (write-md-count out cnt))
 
           :else
-          (do (.writeByte out id-vec-lg)
-              (.writeInt  out (int cnt))))
+          (do (write-id       out id-vec-lg)
+              (write-lg-count out cnt)))
 
         (-run! (fn [in] (freeze-to-out! out in)) v)))))
 
 (defn- write-kvs
   ([^DataOutput out id-lg coll]
    (let [cnt (count coll)]
-     (.writeByte out id-lg)
-     (.writeInt  out (int cnt))
+     (write-id       out id-lg)
+     (write-lg-count out cnt)
      (-run-kv!
        (fn [k v]
          (freeze-to-out! out k)
@@ -436,20 +475,20 @@
   ([^DataOutput out id-empty id-sm id-md id-lg coll]
    (let [cnt (count coll)]
      (if (zero? cnt)
-       (.writeByte out id-empty)
+       (write-id out id-empty)
        (do
          (cond
-           (byte-sized? cnt)
-           (do (.writeByte out id-sm)
-               (.writeByte out cnt))
+           (sm-count? cnt)
+           (do (write-id       out id-sm)
+               (write-sm-count out cnt))
 
-           (short-sized? cnt)
-           (do (.writeByte  out id-md)
-               (.writeShort out cnt))
+           (md-count? cnt)
+           (do (write-id       out id-md)
+               (write-md-count out cnt))
 
            :else
-           (do (.writeByte out id-lg)
-               (.writeInt  out (int cnt))))
+           (do (write-id       out id-lg)
+               (write-lg-count out cnt)))
 
          (-run-kv!
            (fn [k v]
@@ -461,28 +500,28 @@
   ([^DataOutput out id-lg coll]
    (let [cnt (count coll)]
      ;; (assert (counted? coll))
-     (.writeByte out id-lg)
-     (.writeInt  out (int cnt))
+     (write-id       out id-lg)
+     (write-lg-count out cnt)
      (-run! (fn [in] (freeze-to-out! out in)) coll)))
 
   ([^DataOutput out id-empty id-sm id-md id-lg coll]
    (let [cnt (count coll)]
      ;; (assert (counted? coll))
      (if (zero? cnt)
-       (.writeByte out id-empty)
+       (write-id out id-empty)
        (do
          (cond
-           (byte-sized? cnt)
-           (do (.writeByte out id-sm)
-               (.writeByte out cnt))
+           (sm-count? cnt)
+           (do (write-id       out id-sm)
+               (write-sm-count out cnt))
 
-           (short-sized? cnt)
-           (do (.writeByte  out id-md)
-               (.writeShort out cnt))
+           (md-count? cnt)
+           (do (write-id       out id-md)
+               (write-md-count out cnt))
 
            :else
-           (do (.writeByte out id-lg)
-               (.writeInt  out (int cnt))))
+           (do (write-id       out id-lg)
+               (write-lg-count out cnt)))
 
          (-run! (fn [in] (freeze-to-out! out in)) coll))))))
 
@@ -494,9 +533,9 @@
          ^long cnt (reduce (fn [^long cnt in] (freeze-to-out! sout in) (unchecked-inc cnt)) 0 coll)
          ba   (.toByteArray bas)]
 
-     (.writeByte out id-lg)
-     (.writeInt  out (int cnt))
-     (.write     out ba)))
+     (write-id       out id-lg)
+     (write-lg-count out cnt)
+     (.write         out ba)))
 
   ([^DataOutput out id-empty id-sm id-md id-lg coll]
    (let [bas  (ByteArrayOutputStream. 32)
@@ -505,20 +544,20 @@
          ba   (.toByteArray bas)]
 
      (if (zero? cnt)
-       (.writeByte out id-empty)
+       (write-id out id-empty)
        (do
          (cond
-           (byte-sized? cnt)
-           (do (.writeByte out id-sm)
-               (.writeByte out cnt))
+           (sm-count? cnt)
+           (do (write-id       out id-sm)
+               (write-sm-count out cnt))
 
-           (short-sized? cnt)
-           (do (.writeByte  out id-md)
-               (.writeShort out cnt))
+           (md-count? cnt)
+           (do (write-id       out id-md)
+               (write-md-count out cnt))
 
            :else
-           (do (.writeByte out id-lg)
-               (.writeInt  out (int cnt))))
+           (do (write-id       out id-lg)
+               (write-lg-count out cnt)))
 
          (.write out ba))))))
 
@@ -538,20 +577,20 @@
 (defn- write-map [^DataOutput out m]
   (let [cnt (count m)]
     (if (zero? cnt)
-      (.writeByte out id-map-0)
+      (write-id out id-map-0)
       (do
         (cond
-          (byte-sized? cnt)
-          (do (.writeByte out id-map-sm)
-              (.writeByte out cnt))
+          (sm-count? cnt)
+          (do (write-id       out id-map-sm)
+              (write-sm-count out cnt))
 
-          (short-sized? cnt)
-          (do (.writeByte  out id-map-md)
-              (.writeShort out cnt))
+          (md-count? cnt)
+          (do (write-id       out id-map-md)
+              (write-md-count out cnt))
 
           :else
-          (do (.writeByte out id-map-lg)
-              (.writeInt  out (int cnt))))
+          (do (write-id      out id-map-lg)
+              (write-lg-count out cnt)))
 
         (-run-kv!
           (fn [k v]
@@ -564,20 +603,20 @@
 (defn- write-set [^DataOutput out s]
   (let [cnt (count s)]
     (if (zero? cnt)
-      (.writeByte out id-set-0)
+      (write-id out id-set-0)
       (do
         (cond
-          (byte-sized? cnt)
-          (do (.writeByte out id-set-sm)
-              (.writeByte out cnt))
+          (sm-count? cnt)
+          (do (write-id       out id-set-sm)
+              (write-sm-count out cnt))
 
-          (short-sized? cnt)
-          (do (.writeByte  out id-set-md)
-              (.writeShort out cnt))
+          (md-count? cnt)
+          (do (write-id       out id-set-md)
+              (write-md-count out cnt))
 
           :else
-          (do (.writeByte out id-set-lg)
-              (.writeInt  out (int cnt))))
+          (do (write-id       out id-set-lg)
+              (write-lg-count out cnt)))
 
         (-run! (fn [in] (freeze-to-out! out in)) s)))))
 
@@ -587,12 +626,12 @@
         cname-ba (.getBytes cname "UTF-8")
         len      (alength cname-ba)]
     (cond
-      (byte-sized? len)
-      (do (.writeByte     out id-serializable-sm)
+      (sm-count? len)
+      (do (write-id       out id-serializable-sm)
           (write-bytes-sm out cname-ba))
 
       :else
-      (do (.writeByte     out id-serializable-md)
+      (do (write-id       out id-serializable-md)
           (write-bytes-md out cname-ba)))
 
     (.writeObject (ObjectOutputStream. out) x)))
@@ -603,16 +642,16 @@
         edn-ba (.getBytes ^String edn "UTF-8")
         len    (alength edn-ba)]
     (cond
-      (byte-sized? len)
-      (do (.writeByte     out id-reader-sm)
+      (sm-count? len)
+      (do (write-id       out id-reader-sm)
           (write-bytes-sm out edn-ba))
 
-      (short-sized? len)
-      (do (.writeByte     out id-reader-md)
+      (md-count? len)
+      (do (write-id       out id-reader-md)
           (write-bytes-md out edn-ba))
 
       :else
-      (do (.writeByte     out id-reader-lg)
+      (do (write-id       out id-reader-lg)
           (write-bytes-lg out edn-ba)))))
 
 (defn try-write-serializable [out x]
@@ -652,7 +691,7 @@
   [^DataOutput data-output x]
   (when (.isInstance clojure.lang.IMeta x) ; Rare
     (when-let [m (meta x)]
-      (.writeByte data-output id-meta)
+      (write-id data-output id-meta)
       (-freeze-to-out! m data-output)))
   (-freeze-to-out! x data-output))
 
@@ -664,54 +703,58 @@
 (defmacro ^:private id-freezer [type id & body]
   `(extend-type ~type Freezable
      (~'-freeze-to-out! [~'x ~(with-meta 'out {:tag 'DataOutput})]
-       (.writeByte ~'out ~id)
+      (write-id ~'out ~id)
       ~@body)))
 
 ;;;; Caching ; Experimental
 
 (def ^:dynamic ^:private *cache_* "{<x> <cache-idx>}" nil)
-(defmacro ^:private with-cache [& body] `(binding [*cache_* (atom nil)] ~@body))
+(defmacro ^:private with-cache [& body]
+  `(binding [*cache_* (atom nil)] ~@body))
+
+;; (defmacro ^:private with-cache [& body] `(do ~@body)) ; Disable
 
 (defrecord CacheWrapped [value])
-(defn cache [x] (if (instance? CacheWrapped x) x (CacheWrapped. x)))
+(defn cache "Experimental!" [x]
+  (if (instance? CacheWrapped x) x (CacheWrapped. x)))
 
 (comment (cache "foo"))
 
 (freezer CacheWrapped
   (let [x-val (:value x)]
     (if-let [cache_ *cache_*]
-      (let [[first-occ? idx]
+      (let [[first-occ? ^long idx]
             (enc/swap-in! cache_
               (fn [m]
                 (if-let [idx (get m x-val)]
                   (enc/swapped m [false idx])
-                  (let [idx (inc (count m))]
+                  (let [idx (count m)]
                     (enc/swapped (assoc m x-val idx) [true idx])))))]
 
         (cond
-          (byte-sized? idx)
+          (sm-count? idx)
           (cond
-            (== idx 1) (do (.writeByte out id-cached-1)
+            (== idx 0) (do (write-id out id-cached-0)
                            (when first-occ? (-freeze-to-out! x-val out)))
-            (== idx 2) (do (.writeByte out id-cached-2)
+            (== idx 1) (do (write-id out id-cached-1)
                            (when first-occ? (-freeze-to-out! x-val out)))
-            (== idx 3) (do (.writeByte out id-cached-3)
+            (== idx 2) (do (write-id out id-cached-2)
                            (when first-occ? (-freeze-to-out! x-val out)))
-            (== idx 4) (do (.writeByte out id-cached-4)
+            (== idx 3) (do (write-id out id-cached-3)
                            (when first-occ? (-freeze-to-out! x-val out)))
-            (== idx 5) (do (.writeByte out id-cached-5)
+            (== idx 4) (do (write-id out id-cached-4)
                            (when first-occ? (-freeze-to-out! x-val out)))
             :else
-            (do (.writeByte out id-cached-sm)
-                (.writeByte out (+ idx Byte/MIN_VALUE))
+            (do (write-id       out id-cached-sm)
+                (write-sm-count out idx)
                 (when first-occ? (-freeze-to-out! x-val out))))
 
-          (short-sized? idx)
-          (do (.writeByte  out id-cached-md)
-              (.writeShort out (+ idx Short/MIN_VALUE))
+          (md-count? idx)
+          (do (write-id       out id-cached-md)
+              (write-md-count out idx)
               (when first-occ? (-freeze-to-out! x-val out)))
 
-          :else (throw (ex-info "Maximum cache size exceeded" {:idx idx}))))
+          :else (throw (ex-info "Max cache size exceeded" {:idx idx}))))
 
       (-freeze-to-out! x-val out))))
 
@@ -750,16 +793,16 @@
   (.writeLong out (.getMostSignificantBits  x))
   (.writeLong out (.getLeastSignificantBits x)))
 
-(freezer Boolean              (if x (.writeByte out id-true) (.writeByte out id-false)))
+(freezer Boolean              (if x (write-id out id-true) (write-id out id-false)))
 (freezer (Class/forName "[B") (write-bytes out x))
 (freezer String               (write-str   out x))
 (freezer Keyword              (write-kw    out x))
 (freezer Symbol               (write-sym   out x))
 (freezer Long                 (write-long  out x))
 (freezer Double
-  (if (zero? x)
-    (.writeByte       out id-double-zero)
-    (do (.writeByte   out id-double)
+  (if (zero? ^double x)
+    (write-id         out id-double-zero)
+    (do (write-id     out id-double)
         (.writeDouble out x))))
 
 (freezer PersistentQueue      (write-counted-coll   out id-queue      x))
@@ -776,12 +819,12 @@
         cname-ba (.getBytes cname "UTF-8")
         len      (alength cname-ba)]
     (cond
-      (byte-sized? len)
-      (do (.writeByte     out id-record-sm)
+      (sm-count? len)
+      (do (write-id       out id-record-sm)
           (write-bytes-sm out cname-ba))
 
       :else
-      (do (.writeByte     out id-record-md)
+      (do (write-id       out id-record-md)
           (write-bytes-md out cname-ba)))
 
     (-freeze-to-out! (into {} x) out)))
@@ -853,6 +896,7 @@
                       ;; Intelligently enable compression only if benefit
                       ;; is likely to outweigh cost:
                       (when (> (alength ba) 8192) lz4-compressor)))
+
                   (if (fn? compressor)
                     (compressor ba) ; Assume compressor selector fn
                     compressor      ; Assume compressor
@@ -883,7 +927,14 @@
     (.readFully in ba 0 len)
     ba))
 
-(defn- read-utf8 [in len] (String. (read-bytes in len)))
+(defn- read-bytes-sm ^bytes [^DataInput in] (read-bytes (read-sm-count in)))
+(defn- read-bytes-md ^bytes [^DataInput in] (read-bytes (read-md-count in)))
+(defn- read-bytes-lg ^bytes [^DataInput in] (read-bytes (read-lg-count in)))
+
+(defn- read-utf8    [in len] (String. (read-bytes in len)))
+(defn- read-utf8-sm [^DataInput in] (String. (read-bytes in (read-sm-count in))))
+(defn- read-utf8-md [^DataInput in] (String. (read-bytes in (read-md-count in))))
+(defn- read-utf8-lg [^DataInput in] (String. (read-bytes in (read-lg-count in))))
 
 (defn- read-biginteger ^BigInteger [^DataInput in]
   (BigInteger. (read-bytes in (.readInt in))))
@@ -970,13 +1021,13 @@
     (try
       (enc/case-eval type-id
 
-        id-reader-sm       (read-edn             (read-utf8 in (.readByte  in)))
-        id-reader-md       (read-edn             (read-utf8 in (.readShort in)))
-        id-reader-lg       (read-edn             (read-utf8 in (.readInt   in)))
-        id-serializable-sm (read-serializable in (read-utf8 in (.readByte  in)))
-        id-serializable-md (read-serializable in (read-utf8 in (.readShort in)))
-        id-record-sm       (read-record       in (read-utf8 in (.readByte  in)))
-        id-record-md       (read-record       in (read-utf8 in (.readShort in)))
+        id-reader-sm       (read-edn             (read-utf8 in (read-sm-count in)))
+        id-reader-md       (read-edn             (read-utf8 in (read-md-count in)))
+        id-reader-lg       (read-edn             (read-utf8 in (read-lg-count in)))
+        id-serializable-sm (read-serializable in (read-utf8 in (read-sm-count in)))
+        id-serializable-md (read-serializable in (read-utf8 in (read-md-count in)))
+        id-record-sm       (read-record       in (read-utf8 in (read-sm-count in)))
+        id-record-md       (read-record       in (read-utf8 in (read-md-count in)))
 
         id-nil         nil
         id-true        true
@@ -985,59 +1036,59 @@
         id-meta        (let [m (thaw-from-in! in)]
                          (with-meta (thaw-from-in! in) m))
 
+        id-cached-0    (thaw-cached 0 in)
         id-cached-1    (thaw-cached 1 in)
         id-cached-2    (thaw-cached 2 in)
         id-cached-3    (thaw-cached 3 in)
         id-cached-4    (thaw-cached 4 in)
-        id-cached-5    (thaw-cached 5 in)
-        id-cached-sm   (thaw-cached (- (.readByte  in)  Byte/MIN_VALUE) in)
-        id-cached-md   (thaw-cached (- (.readShort in) Short/MIN_VALUE) in)
+        id-cached-sm   (thaw-cached (read-sm-count in) in)
+        id-cached-md   (thaw-cached (read-md-count in) in)
 
         id-bytes-0     (byte-array 0)
-        id-bytes-sm    (read-bytes in (.readByte  in))
-        id-bytes-md    (read-bytes in (.readShort in))
-        id-bytes-lg    (read-bytes in (.readInt   in))
+        id-bytes-sm    (read-bytes in (read-sm-count in))
+        id-bytes-md    (read-bytes in (read-md-count in))
+        id-bytes-lg    (read-bytes in (read-lg-count in))
 
         id-str-0       ""
-        id-str-sm               (read-utf8 in (.readByte  in))
-        id-str-md               (read-utf8 in (.readShort in))
-        id-str-lg               (read-utf8 in (.readInt   in))
-        id-kw-sm       (keyword (read-utf8 in (.readByte  in)))
-        id-kw-lg       (keyword (read-utf8 in (.readShort in)))
-        id-sym-sm      (symbol  (read-utf8 in (.readByte  in)))
-        id-sym-lg      (symbol  (read-utf8 in (.readInt   in)))
+        id-str-sm               (read-utf8 in (read-sm-count in))
+        id-str-md               (read-utf8 in (read-md-count in))
+        id-str-lg               (read-utf8 in (read-lg-count in))
+        id-kw-sm       (keyword (read-utf8 in (read-sm-count in)))
+        id-kw-lg       (keyword (read-utf8 in (read-lg-count in)))
+        id-sym-sm      (symbol  (read-utf8 in (read-sm-count in)))
+        id-sym-lg      (symbol  (read-utf8 in (read-lg-count in)))
         id-regex       (re-pattern (thaw-from-in! in))
 
         id-vec-0       []
         id-vec-2       [(thaw-from-in! in) (thaw-from-in! in)]
         id-vec-3       [(thaw-from-in! in) (thaw-from-in! in) (thaw-from-in! in)]
-        id-vec-sm      (read-into [] in (.readByte  in))
-        id-vec-md      (read-into [] in (.readShort in))
-        id-vec-lg      (read-into [] in (.readInt   in))
+        id-vec-sm      (read-into [] in (read-sm-count in))
+        id-vec-md      (read-into [] in (read-md-count in))
+        id-vec-lg      (read-into [] in (read-lg-count in))
 
         id-set-0       #{}
-        id-set-sm      (read-into    #{} in (.readByte  in))
-        id-set-md      (read-into    #{} in (.readShort in))
-        id-set-lg      (read-into    #{} in (.readInt   in))
+        id-set-sm      (read-into    #{} in (read-sm-count in))
+        id-set-md      (read-into    #{} in (read-md-count in))
+        id-set-lg      (read-into    #{} in (read-lg-count in))
 
         id-map-0       {}
-        id-map-sm      (read-kvs-into {} in (.readByte  in))
-        id-map-md      (read-kvs-into {} in (.readShort in))
-        id-map-lg      (read-kvs-into {} in (.readInt   in))
+        id-map-sm      (read-kvs-into {} in (read-sm-count in))
+        id-map-md      (read-kvs-into {} in (read-md-count in))
+        id-map-lg      (read-kvs-into {} in (read-lg-count in))
 
-        id-queue       (read-into (PersistentQueue/EMPTY) in (.readInt in))
-        id-sorted-set  (read-into     (sorted-set)        in (.readInt in))
-        id-sorted-map  (read-kvs-into (sorted-map)        in (.readInt in))
+        id-queue       (read-into (PersistentQueue/EMPTY) in (read-lg-count in))
+        id-sorted-set  (read-into     (sorted-set)        in (read-lg-count in))
+        id-sorted-map  (read-kvs-into (sorted-map)        in (read-lg-count in))
 
         id-list-0      '()
-        id-list-sm     (into '() (rseq (read-into [] in (.readByte  in))))
-        id-list-md     (into '() (rseq (read-into [] in (.readShort in))))
-        id-list-lg     (into '() (rseq (read-into [] in (.readInt   in))))
+        id-list-sm     (into '() (rseq (read-into [] in (read-sm-count in))))
+        id-list-md     (into '() (rseq (read-into [] in (read-md-count in))))
+        id-list-lg     (into '() (rseq (read-into [] in (read-lg-count in))))
 
         id-seq-0       (lazy-seq nil)
-        id-seq-sm      (or (seq (read-into [] in (.readByte  in))) (lazy-seq nil))
-        id-seq-md      (or (seq (read-into [] in (.readShort in))) (lazy-seq nil))
-        id-seq-lg      (or (seq (read-into [] in (.readInt   in))) (lazy-seq nil))
+        id-seq-sm      (or (seq (read-into [] in (read-sm-count in))) (lazy-seq nil))
+        id-seq-md      (or (seq (read-into [] in (read-md-count in))) (lazy-seq nil))
+        id-seq-lg      (or (seq (read-into [] in (read-lg-count in))) (lazy-seq nil))
 
         id-byte              (.readByte  in)
         id-short             (.readShort in)
@@ -1259,9 +1310,9 @@
      (~'-freeze-to-out! [~x ~(with-meta out {:tag 'java.io.DataOutput})]
        (if-not ~(keyword? custom-type-id)
          ;; Unprefixed [cust byte id][payload]:
-         (.writeByte ~out ~(coerce-custom-type-id custom-type-id))
+         (write-id ~out ~(coerce-custom-type-id custom-type-id))
          ;; Prefixed [const byte id][cust hash id][payload]:
-         (do (.writeByte  ~out ~id-prefixed-custom)
+         (do (write-id    ~out ~id-prefixed-custom)
              (.writeShort ~out ~(coerce-custom-type-id custom-type-id))))
        ~@body)))
 
@@ -1366,8 +1417,9 @@
 (def stress-data-benchable
   "Reference data with stuff removed that breaks reader or other utils we'll
   be benching against"
-  (dissoc stress-data :bytes :throwable :exception :ex-info :queue :queue-empty
-                      :byte :stress-record))
+  (dissoc stress-data
+    :bytes :throwable :exception :ex-info :queue :queue-empty
+    :byte :stress-record :regex))
 
 ;;;; Tools
 

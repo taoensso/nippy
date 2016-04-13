@@ -18,7 +18,7 @@
 
 (comment (fressian-thaw (fressian-freeze data)))
 
-(defmacro bench* [& body] `(enc/bench 10000 {:warmup-laps 20000} ~@body))
+(defmacro bench* [& body] `(enc/bench 10000 {:warmup-laps 25000} ~@body))
 (defn     bench1 [freezer thawer & [sizer]]
   (let [data-frozen (freezer data)
         time-freeze (bench* (freezer data))
@@ -68,15 +68,15 @@
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 2})
   ;; (bench {:laps 2})
 
-  ;;; 2016 Apr 12, v2.12.0-SNAPSHOT, refactor + larger data + new hardware
-  {:reader    {:round 52734, :freeze 18066, :thaw 34668, :size 27839}}
-  {:lzma2     {:round 42746, :freeze 27586, :thaw 15160, :size 11252}}
-  {:fressian  {:round 6700,  :freeze 4968,  :thaw 1732,  :size 17074}}
-  {:encrypted {:round 4819,  :freeze 3024,  :thaw 1795,  :size 16164}}
-  {:default   {:round 4362,  :freeze 2695,  :thaw 1667,  :size 16134}}
-  {:fast1     {:round 3754,  :freeze 2149,  :thaw 1605,  :size 17052}}
-  {:fast2     {:round 3730,  :freeze 2156,  :thaw 1574,  :size 17048}}
-  ;; :reader/:default ratio: ~12.09
+  ;;; 2016 Apr 13, v2.12.0-SNAPSHOT, refactor + larger data + new hardware
+  {:reader    {:round 52105, :freeze 17678, :thaw 34427, :size 27831}}
+  {:lzma2     {:round 43436, :freeze 28518, :thaw 14918, :size 11272}}
+  {:fressian  {:round 6875,  :freeze 5035,  :thaw 1840,  :size 17105}}
+  {:encrypted {:round 4718,  :freeze 2872,  :thaw 1846,  :size 16420}}
+  {:default   {:round 4250,  :freeze 2547,  :thaw 1703,  :size 16400}}
+  {:fast1     {:round 3777,  :freeze 2118,  :thaw 1659,  :size 17070}}
+  {:fast2     {:round 3753,  :freeze 2119,  :thaw 1634,  :size 17066}}
+  ;; 12.26
 
   ;;; 2015 Oct 6, v2.11.0-alpha4
   {:reader    {:round 73409, :freeze 21823, :thaw 51586, :size 27672}}
