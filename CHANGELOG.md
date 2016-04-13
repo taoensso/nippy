@@ -1,5 +1,26 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.12.0-SNAPSHOT / ...
+
+```clojure
+[com.taoensso/nippy "2.12.0-SNAPSHOT"]
+```
+
+> This is a **major release** that **may** involve some **breaking API changes** in rare cases for users of some low-level or obscure features that have been made private or removed. If your code compiles with this new version of Nippy, you should be fine.
+
+> As with all Nippy releases: this version can read data written by older versions but older versions may not be able to read data written by _this_ version.
+
+* **BREAKING**: dropped support for `*final-freeze-fallback*` (rarely used)
+* **BREAKING**: dropped support for `*default-freeze-compressor-selector*` (rarely used)
+* **BREAKING**: made several implementation details private, incl. most low-level `write-<x>` and `read-<x>` fns (rarely used)
+* **Performance**: several significant speed + space efficiency improvements, including more variable-sized types
+* **New built-in types** (these previously fell back to the reader): regex patterns, symbols
+* **New experimental caching feature** (please see `cache` docstring for details)
+* **New**: `fast-freeze`, `fast-thaw` utils (please see docstrings for details)
+* **Change**: `freeze` return val is no longer auto type hinted as `^bytes` (had a performance cost, rarely used)
+
+**PLEASE REPORT ANY PROBLEMS**, thank you!
+
 ## v2.11.1 / 2016 Feb 25
 
 > **Hotfix** for broken Clojure 1.5 support
