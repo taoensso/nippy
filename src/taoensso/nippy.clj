@@ -962,20 +962,21 @@
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
-(defn- read-custom! [in type-id]
+(defn- read-custom! [in prefixed? type-id]
   (if-let [custom-reader (get *custom-readers* type-id)]
     (try
       (custom-reader in)
       (catch Exception e
         (throw
           (ex-info
-            (str "Reader exception for custom type with internal id: "
-              type-id) {:internal-type-id type-id} e))))
+            (str "Reader exception for custom type id: " type-id)
+            {:type-id type-id
+             :prefixed? prefixed?} e))))
     (throw
       (ex-info
-        (str "No reader provided for custom type with internal id: "
-          type-id)
-        {:internal-type-id type-id}))))
+        (str "No reader provided for custom type id: " type-id)
+        {:type-id type-id
+         :prefixed? prefixed?}))))
 
 (defn- read-edn [edn]
   (try
@@ -1127,9 +1128,14 @@
                                 (fn [] (thaw-from-in! in))))
         ;; -----------------------------------------------------------------
 
-        id-prefixed-custom (read-custom! in (.readShort in))
-        (read-custom! in type-id) ; Unprefixed custom type (catchall)
-        )
+        id-prefixed-custom (read-custom! in :prefixed (.readShort in))
+
+        (if (neg? type-id)
+          (read-custom! in nil type-id) ; Unprefixed custom type
+          (throw
+            (ex-info
+              (str "Unrecognized type id (" type-id "). Data frozen with newer Nippy version?")
+              {:type-id type-id}))))
 
       (catch Exception e
         (throw (ex-info (str "Thaw failed against type-id: " type-id)
@@ -1314,7 +1320,7 @@
          ;; Prefixed [const byte id][cust hash id][payload]:
          (do (write-id    ~out ~id-prefixed-custom)
              (.writeShort ~out ~(coerce-custom-type-id custom-type-id))))
-       ~@body)))
+      ~@body)))
 
 (defmacro extend-thaw
   "Extends Nippy to support thawing of a custom type with given id:
