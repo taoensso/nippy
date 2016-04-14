@@ -890,7 +890,7 @@
 
   Equivalent to (but a little faster than):
     `(freeze x {:compressor nil :encryptor nil :no-header? true})"
-  ^bytes [x]
+  [x]
   (let [baos (ByteArrayOutputStream. 64)
         dos  (DataOutputStream. baos)]
     (with-cache (freeze-to-out! dos x))
@@ -899,11 +899,11 @@
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
   types, extend the Clojure reader or see `extend-freeze`."
-  (^bytes [x] (freeze x nil))
-  (^bytes [x {:keys [compressor encryptor password]
-              :or   {compressor :auto
-                     encryptor  aes128-encryptor}
-              :as   opts}]
+  ([x] (freeze x nil))
+  ([x {:keys [compressor encryptor password]
+       :or   {compressor :auto
+              encryptor  aes128-encryptor}
+       :as   opts}]
     (let [;; Intentionally undocumented:
           no-header? (or (:no-header? opts) (:skip-header? opts))
           encryptor  (when password encryptor)
@@ -957,22 +957,21 @@
 
 ;;;; Thawing
 
-(defn- read-bytes ^bytes [^DataInput in len]
+(defn- read-bytes [^DataInput in len]
   (let [ba (byte-array len)]
     (.readFully in ba 0 len)
     ba))
 
-(defn- read-bytes-sm ^bytes [^DataInput in] (read-bytes (read-sm-count in)))
-(defn- read-bytes-md ^bytes [^DataInput in] (read-bytes (read-md-count in)))
-(defn- read-bytes-lg ^bytes [^DataInput in] (read-bytes (read-lg-count in)))
+(defn- read-bytes-sm [^DataInput in] (read-bytes (read-sm-count in)))
+(defn- read-bytes-md [^DataInput in] (read-bytes (read-md-count in)))
+(defn- read-bytes-lg [^DataInput in] (read-bytes (read-lg-count in)))
 
-(defn- read-utf8    [in len] (String. (read-bytes in len)))
-(defn- read-utf8-sm [^DataInput in] (String. (read-bytes in (read-sm-count in))))
-(defn- read-utf8-md [^DataInput in] (String. (read-bytes in (read-md-count in))))
-(defn- read-utf8-lg [^DataInput in] (String. (read-bytes in (read-lg-count in))))
+(defn- read-utf8    [in len] (String. ^bytes (read-bytes in len)))
+(defn- read-utf8-sm [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count in))))
+(defn- read-utf8-md [^DataInput in] (String. ^bytes (read-bytes in (read-md-count in))))
+(defn- read-utf8-lg [^DataInput in] (String. ^bytes (read-bytes in (read-lg-count in))))
 
-(defn- read-biginteger ^BigInteger [^DataInput in]
-  (BigInteger. (read-bytes in (.readInt in))))
+(defn- read-biginteger [^DataInput in] (BigInteger. ^bytes (read-bytes in (.readInt in))))
 
 (defmacro ^:private editable? [coll] `(instance? clojure.lang.IEditableCollection ~coll))
 
@@ -1141,7 +1140,7 @@
         id-float       (.readFloat  in)
         id-double-zero 0.0
         id-double      (.readDouble in)
-        id-bigdec      (BigDecimal. (read-biginteger in) (.readInt in))
+        id-bigdec      (BigDecimal. ^BigInteger (read-biginteger in) (.readInt in))
 
         id-ratio       (clojure.lang.Ratio.
                          (read-biginteger in)
