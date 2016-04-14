@@ -707,15 +707,20 @@
       ~@body)))
 
 ;;;; Caching ; Experimental
+;; How much point is there in offering this feature if we already have LZ4?
 
 (def ^:dynamic ^:private *cache_* "{<x> <cache-idx>}" nil)
-;; (defmacro ^:private with-cache [& body]
-;;   `(binding [*cache_* (atom nil)] ~@body))
-
-(defmacro ^:private with-cache [& body] `(do ~@body)) ; Disable
+(defmacro ^:private with-cache [& body]
+  `(binding [*cache_* (enc/-vol! nil)] ~@body))
 
 (defrecord CacheWrapped [value])
-(defn cache "Experimental!" [x]
+(defn cache
+  "Experimental! Wraps value so that future writes of the same wrapped
+  value will be efficiently encoded as references to this one.
+
+  (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
+    will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
+  [x]
   (if (instance? CacheWrapped x) x (CacheWrapped. x)))
 
 (comment (cache "foo"))
@@ -723,48 +728,64 @@
 (freezer CacheWrapped
   (let [x-val (:value x)]
     (if-let [cache_ *cache_*]
-      (let [[first-occ? ^long idx]
-            (enc/swap-in! cache_
-              (fn [m]
-                (if-let [idx (get m x-val)]
-                  (enc/swapped m [false idx])
-                  (let [idx (count m)]
-                    (enc/swapped (assoc m x-val idx) [true idx])))))]
+      (let [cache @cache_
+            ?idx  (get cache x-val)
+            idx   (or ?idx
+                      (let [idx (count cache)]
+                        (enc/-vol-swap! cache_ assoc x-val idx)
+                        idx))
+
+            first-occurance? (nil? ?idx)]
 
         (cond
           (sm-count? idx)
           (cond
-            (== idx 0) (do (write-id out id-cached-0)
-                           (when first-occ? (-freeze-to-out! x-val out)))
-            (== idx 1) (do (write-id out id-cached-1)
-                           (when first-occ? (-freeze-to-out! x-val out)))
-            (== idx 2) (do (write-id out id-cached-2)
-                           (when first-occ? (-freeze-to-out! x-val out)))
-            (== idx 3) (do (write-id out id-cached-3)
-                           (when first-occ? (-freeze-to-out! x-val out)))
-            (== idx 4) (do (write-id out id-cached-4)
-                           (when first-occ? (-freeze-to-out! x-val out)))
+            (== idx 0)
+            (do (write-id out id-cached-0)
+                (when first-occurance? (-freeze-to-out! x-val out)))
+
+            (== idx 1)
+            (do (write-id out id-cached-1)
+                (when first-occurance? (-freeze-to-out! x-val out)))
+
+            (== idx 2)
+            (do (write-id out id-cached-2)
+                (when first-occurance? (-freeze-to-out! x-val out)))
+
+            (== idx 3)
+            (do (write-id out id-cached-3)
+                (when first-occurance? (-freeze-to-out! x-val out)))
+
+            (== idx 4)
+            (do (write-id out id-cached-4)
+                (when first-occurance? (-freeze-to-out! x-val out)))
+
             :else
             (do (write-id       out id-cached-sm)
                 (write-sm-count out idx)
-                (when first-occ? (-freeze-to-out! x-val out))))
+                (when first-occurance? (-freeze-to-out! x-val out))))
 
           (md-count? idx)
           (do (write-id       out id-cached-md)
               (write-md-count out idx)
-              (when first-occ? (-freeze-to-out! x-val out)))
+              (when first-occurance? (-freeze-to-out! x-val out)))
 
-          :else (throw (ex-info "Max cache size exceeded" {:idx idx}))))
+          :else
+          ;; (throw (ex-info "Max cache size exceeded" {:idx idx}))
+          (-freeze-to-out! x-val out) ; Just freeze uncached
+          ))
 
       (-freeze-to-out! x-val out))))
 
 (declare thaw-from-in!)
 (defn- thaw-cached [idx in]
-  (if-let [e (find @*cache_* idx)]
-    (val e)
-    (let [x (thaw-from-in! in)]
-      (swap! *cache_* assoc idx x)
-      x)))
+  (if-let [cache_ *cache_*]
+    (if-let [e (find @cache_ idx)]
+      (val e)
+      (let [x (thaw-from-in! in)]
+        (enc/-vol-swap! cache_ assoc idx x)
+        x))
+    (throw (ex-info "No *cache_* binding established, can't thaw" {}))))
 
 (comment (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")])))
 
@@ -872,7 +893,7 @@
   ^bytes [x]
   (let [baos (ByteArrayOutputStream. 64)
         dos  (DataOutputStream. baos)]
-    (freeze-to-out! dos x)
+    (with-cache (freeze-to-out! dos x))
     (.toByteArray baos)))
 
 (defn freeze
@@ -1200,7 +1221,7 @@
     `(thaw x {:compressor nil :encryptor nil :no-header? true})"
   [^bytes ba]
   (let [dis (DataInputStream. (ByteArrayInputStream. ba))]
-    (thaw-from-in! dis)))
+    (with-cache (thaw-from-in! dis))))
 
 (defn thaw
   "Deserializes a frozen Nippy byte array to its original Clojure data type.

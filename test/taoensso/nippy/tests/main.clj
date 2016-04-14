@@ -102,6 +102,24 @@
         (nippy/extend-thaw :nippy-tests/MyRec [s] (->MyRec (.readUTF s)))
         (let [mr (->MyRec "val")] (= mr (thaw (freeze mr)))))))
 
+;;;; Caching
+
+(deftest _caching
+  (let [stress [nippy/stress-data-comparable
+                nippy/stress-data-comparable
+                nippy/stress-data-comparable
+                nippy/stress-data-comparable]
+        cached (mapv nippy/cache stress)
+        cached (mapv nippy/cache stress) ; <=1 wrap auto-enforced
+        ]
+
+    (is (= stress (thaw (freeze stress {:compressor nil}))))
+    (is (= stress (thaw (freeze cached {:compressor nil}))))
+    (let [size-stress (count (freeze stress {:compressor nil}))
+          size-cached (count (freeze cached {:compressor nil}))]
+      (is (>= size-stress (* 3 size-cached)))
+      (is (<  size-stress (* 4 size-cached))))))
+
 ;;;; Stable binary representation of vals
 
 (deftest _stable-bin
