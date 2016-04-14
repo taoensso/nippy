@@ -49,13 +49,7 @@
                                  #(thaw   % {:password [:cached "p"]}))})
     (println {:default   (bench1 #(freeze % {})
                                  #(thaw   % {}))})
-    (println {:fast1     (bench1 #(freeze % {:compressor nil})
-                                 #(thaw   % {:compressor nil}))})
-    (println {:fast2     (bench1 #(freeze % {:no-header? true
-                                             :compressor nil})
-                                 #(thaw   % {:no-header? true
-                                             :compressor nil
-                                             :encryptor  nil}))}))
+    (println {:fast      (bench1 nippy/fast-freeze nippy/fast-thaw)}))
 
   (println "\nDone! (Time for cake?)")
   true)

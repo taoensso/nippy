@@ -861,6 +861,20 @@
 (comment (wrap-header (.getBytes "foo") {:compressor-id :lz4
                                          :encryptor-id  nil}))
 
+(defn fast-freeze
+  "Like `freeze` but:
+    - Writes data without a Nippy header
+    - Drops all support for compression and encryption
+    - Must be thawed with `fast-thaw`
+
+  Equivalent to (but a little faster than):
+    `(freeze x {:compressor nil :encryptor nil :no-header? true})"
+  ^bytes [x]
+  (let [baos (ByteArrayOutputStream. 64)
+        dos  (DataOutputStream. baos)]
+    (freeze-to-out! dos x)
+    (.toByteArray baos)))
+
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
   types, extend the Clojure reader or see `extend-freeze`."
@@ -1176,6 +1190,17 @@
 
 (def ^:private err-msg-unrecognized-header
   "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?")
+
+(defn fast-thaw
+  "Like `thaw` but:
+    - Drops all support for compression and encryption
+    - Supports only data frozen with `fast-freeze`
+
+  Equivalent to (but a little faster than):
+    `(thaw x {:compressor nil :encryptor nil :no-header? true})"
+  [^bytes ba]
+  (let [dis (DataInputStream. (ByteArrayInputStream. ba))]
+    (thaw-from-in! dis)))
 
 (defn thaw
   "Deserializes a frozen Nippy byte array to its original Clojure data type.
