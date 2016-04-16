@@ -245,6 +245,8 @@
 (defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
 (defn swap-custom-readers!        [f] (alter-var-root #'*custom-readers* f))
 
+(declare ^:dynamic *final-freeze-fallback*) ; DEPRECATED
+
 ;;;; Freezing
 
 (defprotocol Freezable
@@ -860,9 +862,14 @@
         (try-write-readable     out x)
         (write-unfreezable      out x))
       (ff out x))
+
     (or
       (try-write-serializable out x)
       (try-write-readable     out x)
+
+      ;; For back compatibility:
+      (when-let [fff *final-freeze-fallback*] (fff out x))
+
       (throw-unfreezable          x))))
 
 ;;;;
@@ -1502,3 +1509,8 @@
 (comment
   (inspect-ba (freeze "hello"))
   (seq (:data-ba (inspect-ba (freeze "hello")))))
+
+;;;; Deprecated
+
+(enc/defonce* ^:dynamic *final-freeze-fallback* "DEPRECATED" nil)
+(def freeze-fallback-as-str "DEPRECATED" write-unfreezable)
