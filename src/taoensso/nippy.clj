@@ -1,7 +1,7 @@
 (ns taoensso.nippy
   "High-performance serialization library for Clojure"
   {:author "Peter Taoussanis (@ptaoussanis)"}
-  (:require [taoensso.encore :as enc]
+  (:require [taoensso.encore :as enc :refer (cond*)]
             [taoensso.nippy
              (utils       :as utils)
              (compression :as compression)
@@ -10,7 +10,7 @@
              DataOutputStream Serializable ObjectOutputStream ObjectInputStream
              DataOutput DataInput]
             [java.lang.reflect Method]
-            [java.net URI]
+            ;; [java.net URI] ; TODO
             [java.util Date UUID]
             [java.util.regex Pattern]
             [clojure.lang Keyword Symbol BigInt Ratio
@@ -20,8 +20,8 @@
              LazySeq IRecord ISeq]))
 
 (if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [2 49 0])
-  (enc/assert-min-encore-version  2.49))
+  (enc/assert-min-encore-version [2 52 1])
+  (enc/assert-min-encore-version  2.52))
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
@@ -322,7 +322,7 @@
     (if (zero? len)
       (write-id out id-bytes-0)
       (do
-        (cond
+        (cond*
           (sm-count? len)
           (do (write-id       out id-bytes-sm)
               (write-sm-count out len))
@@ -349,7 +349,7 @@
     (write-id out id-str-0)
     (let [ba  (.getBytes s charset)
           len (alength ba)]
-      (cond
+      (cond*
         (sm-count? len)
         (do (write-id       out id-str-sm)
             (write-sm-count out len))
@@ -368,7 +368,7 @@
   (let [s   (if-let [ns (namespace kw)] (str ns "/" (name kw)) (name kw))
         ba  (.getBytes s charset)
         len (alength ba)]
-    (cond
+    (cond*
       (sm-count? len)
       (do (write-id       out id-kw-sm)
           (write-sm-count out len))
@@ -383,7 +383,7 @@
   (let [s   (if-let [ns (namespace s)] (str ns "/" (name s)) (name s))
         ba  (.getBytes s charset)
         len (alength ba)]
-    (cond
+    (cond*
       (sm-count? len)
       (do (write-id       out id-sym-sm)
           (write-sm-count out len))
@@ -395,12 +395,12 @@
     (.write out ba 0 len)))
 
 (defn- write-long [^DataOutput out ^long n]
-  (cond
+  (cond*
     (zero? n)
     (write-id out id-long-zero)
 
     (> n 0)
-    (cond
+    (cond*
       (<= n 127 #_Byte/MAX_VALUE)
       (do (write-id   out id-long-sm)
           (.writeByte out n))
@@ -418,7 +418,7 @@
           (.writeLong out n)))
 
     :else
-    (cond
+    (cond*
       (>= n -128 #_Byte/MIN_VALUE)
       (do (write-id   out id-long-sm)
           (.writeByte out n))
@@ -445,9 +445,9 @@
     (if (zero? cnt)
       (write-id out id-vec-0)
       (do
-        (cond
+        (cond*
           (sm-count? cnt)
-          (cond
+          (cond*
             (== cnt 2) (write-id out id-vec-2)
             (== cnt 3) (write-id out id-vec-3)
             :else
@@ -480,7 +480,7 @@
      (if (zero? cnt)
        (write-id out id-empty)
        (do
-         (cond
+         (cond*
            (sm-count? cnt)
            (do (write-id       out id-sm)
                (write-sm-count out cnt))
@@ -513,7 +513,7 @@
      (if (zero? cnt)
        (write-id out id-empty)
        (do
-         (cond
+         (cond*
            (sm-count? cnt)
            (do (write-id       out id-sm)
                (write-sm-count out cnt))
@@ -549,7 +549,7 @@
      (if (zero? cnt)
        (write-id out id-empty)
        (do
-         (cond
+         (cond*
            (sm-count? cnt)
            (do (write-id       out id-sm)
                (write-sm-count out cnt))
@@ -582,7 +582,7 @@
     (if (zero? cnt)
       (write-id out id-map-0)
       (do
-        (cond
+        (cond*
           (sm-count? cnt)
           (do (write-id       out id-map-sm)
               (write-sm-count out cnt))
@@ -608,7 +608,7 @@
     (if (zero? cnt)
       (write-id out id-set-0)
       (do
-        (cond
+        (cond*
           (sm-count? cnt)
           (do (write-id       out id-set-sm)
               (write-sm-count out cnt))
@@ -628,7 +628,7 @@
   (let [cname    (.getName (class x)) ; Reflect
         cname-ba (.getBytes cname charset)
         len      (alength cname-ba)]
-    (cond
+    (cond*
       (sm-count? len)
       (do (write-id       out id-serializable-sm)
           (write-bytes-sm out cname-ba))
@@ -644,7 +644,7 @@
   (let [edn    (enc/pr-edn x)
         edn-ba (.getBytes ^String edn charset)
         len    (alength edn-ba)]
-    (cond
+    (cond*
       (sm-count? len)
       (do (write-id       out id-reader-sm)
           (write-bytes-sm out edn-ba))
@@ -731,39 +731,29 @@
 (freezer CacheWrapped
   (let [x-val (:value x)]
     (if-let [cache_ *cache_*]
-      (let [cache @cache_
-            ?idx  (get cache x-val)
-            idx   (or ?idx
-                      (let [idx (count cache)]
-                        (enc/-vol-swap! cache_ assoc x-val idx)
-                        idx))
+      (let [cache    @cache_
+            ?idx     (get cache x-val)
+            ^int idx (or ?idx
+                       (let [idx (count cache)]
+                         (enc/-vol-swap! cache_ assoc x-val idx)
+                         idx))
 
             first-occurance? (nil? ?idx)]
 
-        (cond
+        (cond*
           (sm-count? idx)
-          (cond
-            (== idx 0)
-            (do (write-id out id-cached-0)
-                (when first-occurance? (-freeze-to-out! x-val out)))
+          (case (int idx)
+            0 (do (write-id out id-cached-0)
+                  (when first-occurance? (-freeze-to-out! x-val out)))
+            1 (do (write-id out id-cached-1)
+                  (when first-occurance? (-freeze-to-out! x-val out)))
+            2 (do (write-id out id-cached-2)
+                  (when first-occurance? (-freeze-to-out! x-val out)))
+            3 (do (write-id out id-cached-3)
+                  (when first-occurance? (-freeze-to-out! x-val out)))
+            4 (do (write-id out id-cached-4)
+                  (when first-occurance? (-freeze-to-out! x-val out)))
 
-            (== idx 1)
-            (do (write-id out id-cached-1)
-                (when first-occurance? (-freeze-to-out! x-val out)))
-
-            (== idx 2)
-            (do (write-id out id-cached-2)
-                (when first-occurance? (-freeze-to-out! x-val out)))
-
-            (== idx 3)
-            (do (write-id out id-cached-3)
-                (when first-occurance? (-freeze-to-out! x-val out)))
-
-            (== idx 4)
-            (do (write-id out id-cached-4)
-                (when first-occurance? (-freeze-to-out! x-val out)))
-
-            :else
             (do (write-id       out id-cached-sm)
                 (write-sm-count out idx)
                 (when first-occurance? (-freeze-to-out! x-val out))))
@@ -842,7 +832,7 @@
   (let [cname    (.getName (class x)) ; Reflect
         cname-ba (.getBytes cname charset)
         len      (alength cname-ba)]
-    (cond
+    (cond*
       (sm-count? len)
       (do (write-id       out id-record-sm)
           (write-bytes-sm out cname-ba))
@@ -1488,7 +1478,7 @@
    (when (enc/bytes? ba)
      (let [[first2bytes nextbytes] (enc/ba-split ba 2)
            ?known-wrapper
-           (cond
+           (cond*
              (enc/ba= first2bytes (.getBytes "\u0000<" charset)) :carmine/bin
              (enc/ba= first2bytes (.getBytes "\u0000>" charset)) :carmine/clj)
 

@@ -70,6 +70,8 @@
 
 (comment (is-coll? (clojure.lang.PersistentVector$ChunkedSeq. [1 2 3] 0 0)))
 
+(defmacro ^:private is? [x c] `(when (instance? ~c ~x) ~c))
+
 (defn freezable?
   "Alpha - subject to change.
   Returns truthy iff Nippy *appears* to support freezing the given argument.
@@ -82,38 +84,40 @@
 
   ([x] (freezable? x nil))
   ([x {:keys [allow-clojure-reader? allow-java-serializable?]}]
-   (let [is? #(when (instance? % x) %)]
-     (if (is-coll? x)
-       (when (enc/revery? freezable? x) (type x))
-       (or
-         (is? clojure.lang.Keyword)
-         (is? java.lang.String)
-         (is? java.lang.Long)
-         (is? java.lang.Double)
+   (if (is-coll? x)
+     (when (enc/revery? freezable? x) (type x))
+     (or
+       (is? x clojure.lang.Keyword)
+       (is? x java.lang.String)
+       (is? x java.lang.Long)
+       (is? x java.lang.Double)
 
-         (is? clojure.lang.BigInt)
-         (is? clojure.lang.Ratio)
+       (is? x clojure.lang.BigInt)
+       (is? x clojure.lang.Ratio)
 
-         (is? java.lang.Boolean)
-         (is? java.lang.Integer)
-         (is? java.lang.Short)
-         (is? java.lang.Byte)
-         (is? java.lang.Character)
-         (is? java.math.BigInteger)
-         (is? java.math.BigDecimal)
-         (is? #=(java.lang.Class/forName "[B"))
+       (is? x java.lang.Boolean)
+       (is? x java.lang.Integer)
+       (is? x java.lang.Short)
+       (is? x java.lang.Byte)
+       (is? x java.lang.Character)
+       (is? x java.math.BigInteger)
+       (is? x java.math.BigDecimal)
+       (is? x #=(java.lang.Class/forName "[B"))
 
-         (is? java.util.Date)
-         (is? java.util.UUID)
+       (is? x clojure.lang.Symbol)
 
-         (when (and allow-clojure-reader? (readable? x)) :clojure-reader)
-         (when (and allow-java-serializable?
-                 ;; Reports as true but is unreliable:
-                 (not (is? clojure.lang.Fn))
-                 (serializable? x)) :java-serializable))))))
+       (is? x java.util.Date)
+       (is? x java.util.UUID)
+       (is? x java.util.regex.Pattern)
+
+       (when (and allow-clojure-reader? (readable? x)) :clojure-reader)
+       (when (and allow-java-serializable?
+               ;; Reports as true but is unreliable:
+               (not (is? x clojure.lang.Fn))
+               (serializable? x)) :java-serializable)))))
 
 (comment
-  (enc/qb 10000 (freezable? "hello"))
+  (enc/qb 10000 (freezable? "hello")) ; 0.79
   (freezable? [:a :b])
   (freezable? [:a (fn [x] (* x x))])
   (freezable? (.getBytes "foo"))
