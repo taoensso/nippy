@@ -86,21 +86,21 @@
   (is (thrown? Exception ; No thaw extension yet
         (do (nippy/swap-custom-readers! (constantly {}))
             (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (.data x)))
-            (thaw (freeze (->MyType "val"))))))
-  (is (do (nippy/extend-thaw 1 [s] (->MyType (.readUTF s)))
-          (let [mt (->MyType "val")] (= (.data ^MyType mt)
-                                        (.data ^MyType (thaw (freeze mt)))))))
+            (thaw (freeze (MyType. "val"))))))
+  (is (do (nippy/extend-thaw 1 [s] (MyType. (.readUTF s)))
+          (let [mt (MyType. "val")] (= (.data ^MyType mt)
+                                       (.data ^MyType (thaw (freeze mt)))))))
 
   ;;; Extend to custom Record
   (is (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "foo-" (:data x))))
-          (nippy/extend-thaw 2 [s] (->MyRec (.readUTF s)))
-          (= (->MyRec "foo-val") (thaw (freeze (->MyRec "val"))))))
+          (nippy/extend-thaw 2 [s] (MyRec. (.readUTF s)))
+          (= (MyRec. "foo-val") (thaw (freeze (MyRec. "val"))))))
 
   ;;; Keyword (prefixed) extensions
   (is
     (do (nippy/extend-freeze MyRec :nippy-tests/MyRec [x s] (.writeUTF s (:data x)))
-        (nippy/extend-thaw :nippy-tests/MyRec [s] (->MyRec (.readUTF s)))
-        (let [mr (->MyRec "val")] (= mr (thaw (freeze mr)))))))
+        (nippy/extend-thaw :nippy-tests/MyRec [s] (MyRec. (.readUTF s)))
+        (let [mr (MyRec. "val")] (= mr (thaw (freeze mr)))))))
 
 ;;;; Caching
 

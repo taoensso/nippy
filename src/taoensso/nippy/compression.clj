@@ -27,7 +27,7 @@
    Read speed: very high.
 
   A good general-purpose compressor."
-  (->SnappyCompressor))
+  (SnappyCompressor.))
 
 (deftype LZMA2Compressor [compression-level]
   ;; Compression level ∈ℕ[0,9] (low->high) with 6 LZMA2 default (we use 0)
@@ -54,7 +54,8 @@
           ba         (byte-array len-decomp)
           xzs        (org.tukaani.xz.XZInputStream. bais)]
       (.read xzs ba 0 len-decomp)
-      (when (not= -1 (.read xzs)) ; Good practice as extra safety measure
+      (if (== -1 (.read xzs)) ; Good practice as extra safety measure
+        nil
         (throw (ex-info "LZMA2 Decompress failed: corrupt data?" {:ba ba})))
       ba)))
 
@@ -66,7 +67,7 @@
 
   A specialized compressor for large, low-write data in space-sensitive
   environments."
-  (->LZMA2Compressor 0))
+  (LZMA2Compressor. 0))
 
 (deftype LZ4Compressor [^net.jpountz.lz4.LZ4Compressor   compressor
                         ^net.jpountz.lz4.LZ4Decompressor decompressor]
@@ -110,16 +111,16 @@
 
   Thanks to Max Penet (@mpenet) for our first implementation,
   Ref. https://github.com/mpenet/nippy-lz4"
-  (->LZ4Compressor (.fastCompressor   lz4-factory)
-                   (.fastDecompressor lz4-factory)))
+  (LZ4Compressor. (.fastCompressor   lz4-factory)
+                  (.fastDecompressor lz4-factory)))
 
 (def lz4hc-compressor
   "Like `lz4-compressor` but trades some write speed for ratio."
-  (->LZ4Compressor (.highCompressor   lz4-factory)
-                   (.fastDecompressor lz4-factory)))
+  (LZ4Compressor. (.highCompressor   lz4-factory)
+                  (.fastDecompressor lz4-factory)))
 
 (comment
-  (def  ba-bench (.getBytes (apply str (repeatedly 1000 rand)) "UTF-8"))
+  (def ba-bench (.getBytes (apply str (repeatedly 1000 rand)) "UTF-8"))
   (defn bench1 [compressor]
     {:time  (enc/bench 10000 {:nlaps-warmup 10000}
               (->> ba-bench (compress compressor) (decompress compressor)))

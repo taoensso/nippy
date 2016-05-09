@@ -13,17 +13,9 @@
 
 ;;;; Default digests, ciphers, etc.
 
-(def ^:private aes128-cipher*
-  (enc/thread-local-proxy
-    (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
-
-(def ^:private sha512-md*
-  (enc/thread-local-proxy
-    (java.security.MessageDigest/getInstance "SHA-512")))
-
-(def ^:private prng*
-  (enc/thread-local-proxy
-    (java.security.SecureRandom/getInstance "SHA1PRNG")))
+(def ^:private aes128-cipher* (enc/thread-local-proxy (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
+(def ^:private sha512-md*     (enc/thread-local-proxy (java.security.MessageDigest/getInstance "SHA-512")))
+(def ^:private prng*          (enc/thread-local-proxy (java.security.SecureRandom/getInstance "SHA1PRNG")))
 
 (defn- aes128-cipher ^javax.crypto.Cipher         [] (.get ^ThreadLocal aes128-cipher*))
 (defn- sha512-md     ^java.security.MessageDigest [] (.get ^ThreadLocal sha512-md*))
@@ -39,75 +31,81 @@
 (defn- sha512-key
   "SHA512-based key generator. Good JVM availability without extra dependencies
   (PBKDF2, bcrypt, scrypt, etc.). Decent security when using many rounds."
-  ;; [salt-ba ^String pwd & [n]]
-  [salt-ba ^String pwd]
-  (let [md (sha512-md)]
-    (loop [^bytes ba (let [pwd-ba (.getBytes pwd "UTF-8")]
-                       (if salt-ba (enc/ba-concat salt-ba pwd-ba) pwd-ba))
-           ;; n (or n (* (int Short/MAX_VALUE) (if salt-ba 5 64)))
-           n (* (int Short/MAX_VALUE) (if salt-ba 5 64))]
-      (if-not (zero? n)
-        (recur (.digest md ba) (dec n))
-        (-> ba (java.util.Arrays/copyOf aes128-block-size)
-               (javax.crypto.spec.SecretKeySpec. "AES"))))))
+
+  ([salt-ba pwd        ] (sha512-key salt-ba pwd (* Short/MAX_VALUE (if salt-ba 5 64))))
+  ([salt-ba pwd ^long n]
+   (let [md      (sha512-md)
+         init-ba (let [pwd-ba (.getBytes ^String pwd "UTF-8")]
+                   (if salt-ba (enc/ba-concat salt-ba pwd-ba) pwd-ba))
+         ^bytes ba (enc/reduce-n (fn [acc in] (.digest md acc)) init-ba n)]
+
+     (-> ba
+       (java.util.Arrays/copyOf aes128-block-size)
+       (javax.crypto.spec.SecretKeySpec. "AES")))))
 
 (comment
-  (time (sha512-key nil "hi" 1))   ; ~40ms per hash (fast)
-  (time (sha512-key nil "hi" 5))   ; ~180ms  (default)
-  (time (sha512-key nil "hi" 32))  ; ~1200ms (conservative)
-  (time (sha512-key nil "hi" 128)) ; ~4500ms (paranoid)
-  )
+  (enc/qb 10
+    (sha512-key nil "hi" (* Short/MAX_VALUE 1))   ; ~40ms per hash (fast)
+    (sha512-key nil "hi" (* Short/MAX_VALUE 5))   ; ~180ms  (default)
+    (sha512-key nil "hi" (* Short/MAX_VALUE 32))  ; ~1200ms (conservative)
+    (sha512-key nil "hi" (* Short/MAX_VALUE 128)) ; ~4500ms (paranoid)
+    ))
 
 ;;;; Default implementations
 
+(defn- throw-destructure-ex [typed-password]
+  (throw (ex-info
+           (str "Expected password form: "
+             "[<#{:salted :cached}> <password-string>].\n "
+             "See `default-aes128-encryptor` docstring for details!")
+           {:typed-password typed-password})))
+
 (defn- destructure-typed-pwd [typed-password]
-  (let [throw-ex
-        (fn [] (throw (ex-info
-                      (str "Expected password form: "
-                        "[<#{:salted :cached}> <password-string>].\n "
-                        "See `default-aes128-encryptor` docstring for details!")
-                      {:typed-password typed-password})))]
-    (if-not (vector? typed-password) (throw-ex)
-      (let [[type password] typed-password]
-        (if-not (#{:salted :cached} type) (throw-ex)
-          [type password])))))
+  (if (vector? typed-password)
+    (let [[type password] typed-password]
+      (if (#{:salted :cached} type)
+        [type password]
+        (throw-destructure-ex typed-password)))
+    (throw-destructure-ex typed-password)))
 
 (comment (destructure-typed-pwd [:salted "foo"]))
 
-(defrecord AES128Encryptor [key-gen key-cache]
+(defrecord AES128Encryptor [header-id keyfn cached-keyfn]
   IEncryptor
-  (header-id [_] (if (identical? key-gen :sha512) :aes128-sha512 :aes128-other))
+  (header-id [_] header-id)
   (encrypt   [_ typed-pwd data-ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
           salt?      (identical? type :salted)
           iv-ba      (rand-bytes aes128-block-size)
           salt-ba    (when salt? (rand-bytes salt-size))
-          prefix-ba  (if-not salt? iv-ba (enc/ba-concat iv-ba salt-ba))
-          key-gen    (if (identical? key-gen :sha512) sha512-key key-gen)
-          key        (if salt?
-                       (key-gen salt-ba pwd)
-                       (enc/memoized key-cache key-gen salt-ba pwd))
+          prefix-ba  (if   salt? (enc/ba-concat iv-ba salt-ba) iv-ba)
+          key        (if   salt?
+                       (keyfn        salt-ba pwd)
+                       (cached-keyfn salt-ba pwd))
           iv         (javax.crypto.spec.IvParameterSpec. iv-ba)
           cipher     (aes128-cipher)]
+
       (.init cipher javax.crypto.Cipher/ENCRYPT_MODE
-             ^javax.crypto.spec.SecretKeySpec key iv)
+        ^javax.crypto.spec.SecretKeySpec key iv)
       (enc/ba-concat prefix-ba (.doFinal cipher data-ba))))
 
   (decrypt [_ typed-pwd ba]
-    (let [[type pwd] (destructure-typed-pwd typed-pwd)
-          salt?      (= type :salted)
-          prefix-size (+ aes128-block-size (if salt? salt-size 0))
+    (let [[type pwd]          (destructure-typed-pwd typed-pwd)
+          salt?               (identical? type :salted)
+          prefix-size         (+ aes128-block-size (if salt? salt-size 0))
           [prefix-ba data-ba] (enc/ba-split ba prefix-size)
-          [iv-ba salt-ba]     (if-not salt? [prefix-ba nil]
-                                      (enc/ba-split prefix-ba aes128-block-size))
-          key-gen (if (identical? key-gen :sha512) sha512-key key-gen)
+          [iv-ba salt-ba]     (if salt?
+                                (enc/ba-split prefix-ba aes128-block-size)
+                                [prefix-ba nil])
           key (if salt?
-                (key-gen salt-ba pwd)
-                (enc/memoized key-cache key-gen salt-ba pwd))
-          iv  (javax.crypto.spec.IvParameterSpec. iv-ba)
+                (keyfn        salt-ba pwd)
+                (cached-keyfn salt-ba pwd))
+
+          iv     (javax.crypto.spec.IvParameterSpec. iv-ba)
           cipher (aes128-cipher)]
+
       (.init cipher javax.crypto.Cipher/DECRYPT_MODE
-             ^javax.crypto.spec.SecretKeySpec key iv)
+        ^javax.crypto.spec.SecretKeySpec key iv)
       (.doFinal cipher data-ba))))
 
 (def aes128-encryptor
@@ -145,7 +143,8 @@
 
   Faster than `aes128-salted`, and harder to attack any particular key - but
   increased danger if a key is somehow compromised."
-  (->AES128Encryptor :sha512 (atom {})))
+
+  (AES128Encryptor. :aes128-sha512 sha512-key (enc/memoize_ sha512-key)))
 
 ;;;; Default implementation
 
@@ -153,11 +152,14 @@
   (def dae aes128-encryptor)
   (def secret-ba (.getBytes "Secret message" "UTF-8"))
   (encrypt dae "p" secret-ba) ; Malformed
-  (time (encrypt dae [:salted "p"] secret-ba))
-  (time (encrypt dae [:cached "p"] secret-ba))
-  (time (->> secret-ba
-             (encrypt dae [:salted "p"])
-             (encrypt dae [:cached "p"])
-             (decrypt dae [:cached "p"])
-             (decrypt dae [:salted "p"])
-             (String.))))
+  (enc/qb 10
+    (encrypt dae [:salted "p"] secret-ba)
+    (encrypt dae [:cached "p"] secret-ba))
+
+  (enc/qb 10
+    (->> secret-ba
+      (encrypt dae [:salted "p"])
+      (encrypt dae [:cached "p"])
+      (decrypt dae [:cached "p"])
+      (decrypt dae [:salted "p"])
+      (String.))))
