@@ -1,9 +1,9 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
-## v2.12.0-SNAPSHOT / ...
+## v2.12.0-beta2 / 2016 Jun 10
 
 ```clojure
-[com.taoensso/nippy "2.12.0-SNAPSHOT"]
+[com.taoensso/nippy "2.12.0-beta2"]
 ```
 
 > This is a **major release** that **may** involve some **breaking API changes** in rare cases for users of some low-level or obscure features that have been made private or removed. If your code compiles with this new version of Nippy, you should be fine.

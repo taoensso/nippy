@@ -4,7 +4,8 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "2.11.1"] ; Stable
+[com.taoensso/nippy "2.11.1"]       ; Stable
+[com.taoensso/nippy "2.12.0-beta2"] ; Dev (unstable), see CHANGELOG for details
 ```
 
 Want to help [support taoensso/open-source]?
@@ -157,6 +158,8 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 ```
 
 ## Performance
+
+Nippy is currently the **fastest serialization library for Clojure** that I'm aware of, and offers roundtrip times between **~10x and ~15x** faster than Clojure's `tools.reader.edn`, with a **~40% smaller output size**.
 
 ![benchmarks-png]
 
