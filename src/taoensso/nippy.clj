@@ -1368,10 +1368,10 @@
 (defmacro extend-thaw
   "Extends Nippy to support thawing of a custom type with given id:
   (extend-thaw :foo/my-type [data-input] ; Keyword id
-    (->MyType (.readUTF data-input)))
+    (MyType. (.readUTF data-input)))
   ;; or
   (extend-thaw 1 [data-input] ; Byte id
-    (->MyType (.readUTF data-input)))"
+    (MyType. (.readUTF data-input)))"
   [custom-type-id [in] & body]
   (assert-custom-type-id custom-type-id)
   `(do
@@ -1389,8 +1389,8 @@
   *custom-readers*
   (defrecord MyType [data])
   (extend-freeze MyType 1 [x out] (.writeUTF out (:data x)))
-  (extend-thaw 1 [in] (->MyType (.readUTF in)))
-  (thaw (freeze (->MyType "Joe"))))
+  (extend-thaw 1 [in] (MyType. (.readUTF in)))
+  (thaw (freeze (MyType. "Joe"))))
 
 ;;;; Stress data
 
@@ -1452,7 +1452,7 @@
    :uuid         (java.util.UUID/randomUUID)
    :date         (java.util.Date.)
 
-   :stress-record (->StressRecord "data")
+   :stress-record (StressRecord. "data")
 
    ;; Serializable
    :throwable    (Throwable. "Yolo")

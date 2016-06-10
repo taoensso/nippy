@@ -101,7 +101,7 @@ nippy/stress-data
  :uuid         (java.util.UUID/randomUUID)
  :date         (java.util.Date.)
 
- :stress-record (->StressRecord "data")
+ :stress-record (StressRecord. "data")
 
  ;; Serializable
  :throwable    (Throwable. "Yolo")
@@ -152,9 +152,9 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 
 (nippy/extend-thaw :my-type/foo ; Same type id
   [data-input]
-  (->MyType (.readUTF data-input)))
+  (MyType. (.readUTF data-input)))
 
-(nippy/thaw (nippy/freeze (->MyType "Joe"))) => #taoensso.nippy.MyType{:data "Joe"}
+(nippy/thaw (nippy/freeze (MyType. "Joe"))) => #taoensso.nippy.MyType{:data "Joe"}
 ```
 
 ## Performance
