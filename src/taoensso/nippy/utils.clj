@@ -5,40 +5,50 @@
              ObjectOutputStream ObjectInputStream]))
 
 ;;;; Fallback type tests
-;; Unfortunately the only reliable way we can tell if something's
+;; Unfortunately the only ~reliable way we can tell if something's
 ;; really serializable/readable is to actually try a full roundtrip.
 
-(defn- memoize-type-test [f-test]
+(defn- memoize-type-test [test-fn]
   (let [cache (atom {})] ; {<type> <type-okay?>}
     (fn [x]
       (let [t (type x)
             ;; This is a bit hackish, but no other obvious solutions (?):
             cacheable? (not (re-find #"__\d+" (str t))) ; gensym form
-            test (fn [] (try (f-test x) (catch Exception _ false)))]
-        (if-not cacheable? (test)
-          @(enc/swap-val! cache t #(if % % (delay (test)))))))))
+            test (fn [] (try (test-fn x) (catch Exception _ false)))]
+        (if cacheable?
+          @(enc/swap-val! cache t #(if % % (delay (test))))
+          (test))))))
 
+(def     readable? (memoize-type-test (fn [x] (-> x enc/pr-edn enc/read-edn) true)))
 (def serializable?
-  (memoize-type-test
-   (fn [x]
-     (when (instance? Serializable x)
-       (let [class-name (.getName (class x))
-             class ^Class (Class/forName class-name) ; Try 1st (fail fast)
-             bas (ByteArrayOutputStream.)
-             _   (.writeObject (ObjectOutputStream. bas) x)
-             ba  (.toByteArray bas)
-             object (.readObject (ObjectInputStream.
-                                   (ByteArrayInputStream. ba)))]
-         (cast class object)
-         true)))))
+  (let [test-fn
+        (fn [x]
+          (let [class-name (.getName (class x))
+                class ^Class (Class/forName class-name) ; Try 1st (fail fast)
+                bas (ByteArrayOutputStream.)
+                _   (.writeObject (ObjectOutputStream. bas) x)
+                ba  (.toByteArray bas)
+                object (.readObject (ObjectInputStream.
+                                     (ByteArrayInputStream. ba)))]
+            (cast class object)
+            true))
 
-(def readable? (memoize-type-test (fn [x] (-> x enc/pr-edn enc/read-edn) true)))
+        mtt (memoize-type-test test-fn)]
+
+    (fn [x]
+      (if (instance? Serializable x)
+        (if (fn? x)
+          false ; Reports as true but is unreliable
+          (mtt x))
+       false))))
 
 (comment
-  (enc/qb 1000 (serializable? "Hello world")) ; Cacheable
-  (enc/qb 1000 (serializable? (fn [])))        ; Uncacheable
-  (enc/qb 1000 (readable? "Hello world"))     ; Cacheable
-  (enc/qb 1000 (readable? (fn []))))           ; Uncacheable
+  (enc/qb 10000
+    (readable?     "Hello world") ; Cacheable
+    (serializable? "Hello world") ; Cacheable
+    (readable?     (fn []))        ; Uncacheable
+    (serializable? (fn []))        ; Uncacheable
+    ))
 
 ;;;;
 
@@ -110,11 +120,8 @@
        (is? x java.util.UUID)
        (is? x java.util.regex.Pattern)
 
-       (when (and allow-clojure-reader? (readable? x)) :clojure-reader)
-       (when (and allow-java-serializable?
-               ;; Reports as true but is unreliable:
-               (not (is? x clojure.lang.Fn))
-               (serializable? x)) :java-serializable)))))
+       (when (and allow-clojure-reader?    (readable?     x)) :clojure-reader)
+       (when (and allow-java-serializable? (serializable? x)) :java-serializable)))))
 
 (comment
   (enc/qb 10000 (freezable? "hello")) ; 0.79

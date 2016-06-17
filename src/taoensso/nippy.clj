@@ -659,13 +659,17 @@
 
 (defn try-write-serializable [out x]
   (when (utils/serializable? x)
-    (try (write-serializable out x) true
-         (catch Throwable _ nil))))
+    (try
+      (write-serializable out x)
+      true
+      (catch Throwable _ nil))))
 
 (defn try-write-readable [out x]
   (when (utils/readable? x)
-    (try (write-readable out x) true
-         (catch Throwable _ nil))))
+    (try
+      (write-readable out x)
+      true
+      (catch Throwable _ nil))))
 
 (defn- try-pr-edn [x]
   (try
