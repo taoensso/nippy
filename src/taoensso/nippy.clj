@@ -861,10 +861,12 @@
       (try-write-serializable out x)
       (try-write-readable     out x)
 
-      ;; For back compatibility:
-      (when-let [fff *final-freeze-fallback*] (fff out x))
+      ;; For back compatibility (nb Timbre's Carmine appender)
+      (when-let [fff *final-freeze-fallback*]
+        (fff out x)
+        true)
 
-      (throw-unfreezable          x))))
+      (throw-unfreezable x))))
 
 ;;;;
 
