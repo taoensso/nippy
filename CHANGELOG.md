@@ -1,5 +1,17 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.12.0-beta3 / 2016 Jun 17
+
+```clojure
+[com.taoensso/nippy "2.12.0-beta3"]
+```
+
+> Changes since **2.12.0-beta2**:
+
+* **Hotfix**: `fn?`s were incorrectly reporting true for `serializable?`
+* **Hotfix**: *final-freeze-fallback* back compatibility was broken
+
+
 ## v2.12.0-beta2 / 2016 Jun 10
 
 ```clojure
