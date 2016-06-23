@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.12.0-beta3"
+(defproject com.taoensso/nippy "2.12.0-RC1"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "High-performance serialization library for Clojure"
   :url "https://github.com/ptaoussanis/nippy"
@@ -9,13 +9,13 @@
   :min-lein-version "2.3.3"
   :global-vars {*warn-on-reflection* true
                 *assert*             true
-                ;; *unchecked-math*     :warn-on-boxed
+                ;; *unchecked-math*  :warn-on-boxed
                 }
 
   :dependencies
   [[org.clojure/clojure      "1.5.1"]
    [org.clojure/tools.reader "0.10.0"]
-   [com.taoensso/encore      "2.56.1"]
+   [com.taoensso/encore      "2.58.0"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.5"]
    [net.jpountz.lz4/lz4      "1.3"]]

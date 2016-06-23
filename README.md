@@ -4,8 +4,8 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "2.11.1"]       ; Stable
-[com.taoensso/nippy "2.12.0-beta3"] ; Dev (unstable), see CHANGELOG for details
+[com.taoensso/nippy "2.12.0-RC1"] ; Dev (unstable), see CHANGELOG for details
+[com.taoensso/nippy "2.11.1"]     ; Stable
 ```
 
 Want to help [support taoensso/open-source]?
