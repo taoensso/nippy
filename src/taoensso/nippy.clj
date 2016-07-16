@@ -28,6 +28,8 @@
   (set! *unchecked-math* false)
   (thaw (freeze stress-data)))
 
+;; Performance would benefit from ^:static support / direct linking / etc.
+
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
 ;; { * 1-byte type id
@@ -40,7 +42,7 @@
 ;;   * Supports :auto freeze compressor (since this depends on :auto thaw
 ;;     compressor)
 ;;
-;; [2] See `Freezable` protocol for type-specific payload formats,
+;; [2] See `IFreezable1` protocol for type-specific payload formats,
 ;;     `thaw-from-in!` for reference type-specific thaw implementations
 ;;
 (def ^:private ^:const charset "UTF-8")
@@ -234,6 +236,8 @@
 ;;;; Dynamic config
 ;; See also `nippy.tools` ns for further dynamic config support
 
+;; TODO Switch to thread-local proxies?
+
 (enc/defonce* ^:dynamic *freeze-fallback* "(fn [data-output x]), nil => default" nil)
 (enc/defonce* ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
 (enc/defonce* ^:dynamic *auto-freeze-compressor*
@@ -248,11 +252,6 @@
 (declare ^:dynamic *final-freeze-fallback*) ; DEPRECATED
 
 ;;;; Freezing
-
-(defprotocol Freezable
-  "Implementation detail. Be careful about extending to interfaces,
-  Ref. http://goo.gl/6gGRlU."
-  (-freeze-to-out! [this out]))
 
 #_(do
   (defmacro write-id [out id] `(.writeByte ~out ~id))
@@ -299,6 +298,26 @@
   (defmacro ^:private read-sm-count [in] `(.readByte  ~in))
   (defmacro ^:private read-md-count [in] `(.readShort ~in))
   (defmacro ^:private read-lg-count [in] `(.readInt   ~in)))
+
+ ; We extend `IFreezable1` to supported types:
+(defprotocol     IFreezable1 (-freeze-without-meta! [x data-output]))
+(defprotocol     IFreezable2 (-freeze-with-meta!    [x data-output]))
+(extend-protocol IFreezable2 ; Must be a separate protocol
+  clojure.lang.IMeta
+  (-freeze-with-meta! [x ^DataOutput data-output]
+    (let [m (.meta x)]
+      (when m
+        (write-id data-output id-meta)
+        (-freeze-without-meta! m data-output)))
+    (-freeze-without-meta!     x data-output))
+
+  nil
+  (-freeze-with-meta! [x data-output]
+    (-freeze-without-meta! x data-output))
+
+  Object
+  (-freeze-with-meta! [x data-output]
+    (-freeze-without-meta! x data-output)))
 
 (defn- write-bytes-sm [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
@@ -438,8 +457,6 @@
 (defmacro ^:private -run!    [proc coll] `(do (reduce    #(~proc %2)    nil ~coll) nil))
 (defmacro ^:private -run-kv! [proc    m] `(do (reduce-kv #(~proc %2 %3) nil    ~m) nil))
 
-(declare freeze-to-out!)
-
 (defn- write-vec [^DataOutput out v]
   (let [cnt (count v)]
     (if (zero? cnt)
@@ -462,7 +479,7 @@
           (do (write-id       out id-vec-lg)
               (write-lg-count out cnt)))
 
-        (-run! (fn [in] (freeze-to-out! out in)) v)))))
+        (-run! (fn [in] (-freeze-with-meta! in out)) v)))))
 
 (defn- write-kvs
   ([^DataOutput out id-lg coll]
@@ -471,8 +488,8 @@
      (write-lg-count out cnt)
      (-run-kv!
        (fn [k v]
-         (freeze-to-out! out k)
-         (freeze-to-out! out v))
+         (-freeze-with-meta! k out)
+         (-freeze-with-meta! v out))
        coll)))
 
   ([^DataOutput out id-empty id-sm id-md id-lg coll]
@@ -495,8 +512,8 @@
 
          (-run-kv!
            (fn [k v]
-             (freeze-to-out! out k)
-             (freeze-to-out! out v))
+             (-freeze-with-meta! k out)
+             (-freeze-with-meta! v out))
            coll))))))
 
 (defn- write-counted-coll
@@ -505,7 +522,7 @@
      ;; (assert (counted? coll))
      (write-id       out id-lg)
      (write-lg-count out cnt)
-     (-run! (fn [in] (freeze-to-out! out in)) coll)))
+     (-run! (fn [in] (-freeze-with-meta! in out)) coll)))
 
   ([^DataOutput out id-empty id-sm id-md id-lg coll]
    (let [cnt (count coll)]
@@ -526,14 +543,14 @@
            (do (write-id       out id-lg)
                (write-lg-count out cnt)))
 
-         (-run! (fn [in] (freeze-to-out! out in)) coll))))))
+         (-run! (fn [in] (-freeze-with-meta! in out)) coll))))))
 
 (defn- write-uncounted-coll
   ([^DataOutput out id-lg coll]
    ;; (assert (not (counted? coll)))
    (let [bas  (ByteArrayOutputStream. 32)
          sout (DataOutputStream. bas)
-         ^long cnt (reduce (fn [^long cnt in] (freeze-to-out! sout in) (unchecked-inc cnt)) 0 coll)
+         ^long cnt (reduce (fn [^long cnt in] (-freeze-with-meta! in sout) (unchecked-inc cnt)) 0 coll)
          ba   (.toByteArray bas)]
 
      (write-id       out id-lg)
@@ -543,7 +560,7 @@
   ([^DataOutput out id-empty id-sm id-md id-lg coll]
    (let [bas  (ByteArrayOutputStream. 32)
          sout (DataOutputStream. bas)
-         ^long cnt (reduce (fn [^long cnt in] (freeze-to-out! sout in) (unchecked-inc cnt)) 0 coll)
+         ^long cnt (reduce (fn [^long cnt in] (-freeze-with-meta! in sout) (unchecked-inc cnt)) 0 coll)
          ba   (.toByteArray bas)]
 
      (if (zero? cnt)
@@ -597,8 +614,8 @@
 
         (-run-kv!
           (fn [k v]
-            (freeze-to-out! out k)
-            (freeze-to-out! out v))
+            (-freeze-with-meta! k out)
+            (-freeze-with-meta! v out))
           m)))))
 
 ;; Micro-optimization:
@@ -621,7 +638,7 @@
           (do (write-id       out id-set-lg)
               (write-lg-count out cnt)))
 
-        (-run! (fn [in] (freeze-to-out! out in)) s)))))
+        (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
 
 (defn- write-serializable [^DataOutput out x]
   (when-debug (println (str "write-serializable: " (type x))))
@@ -680,7 +697,7 @@
         (catch Throwable _ :nippy/unprintable)))))
 
 (defn write-unfreezable [out x]
-  (-freeze-to-out!
+  (-freeze-without-meta!
     {:type (type x)
      :nippy/unfreezable (try-pr-edn x)}
     out))
@@ -691,39 +708,46 @@
       {:type   (type x)
        :as-str (try-pr-edn x)})))
 
+;; Public `-freeze-with-meta!` with different arg order
 (defn freeze-to-out!
   "Serializes arg (any Clojure data type) to a DataOutput. Please note that
   this is a low-level util: in most cases you'll want `freeze` instead."
-  ;; Basically just wraps `-freeze-to-out!` with different arg order + metadata support
-  [^DataOutput data-output x]
-  (when (.isInstance clojure.lang.IMeta x) ; Rare
-    (when-let [m (meta x)]
-      (write-id data-output id-meta)
-      (-freeze-to-out! m data-output)))
-  (-freeze-to-out! x data-output))
+  [^DataOutput data-output x] (-freeze-with-meta! x data-output))
 
 (defmacro ^:private freezer [type & body]
-  `(extend-type ~type Freezable
-     (~'-freeze-to-out! [~'x ~(with-meta 'out {:tag 'DataOutput})]
+  `(extend-type ~type IFreezable1
+     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})]
        ~@body)))
 
 (defmacro ^:private id-freezer [type id & body]
-  `(extend-type ~type Freezable
-     (~'-freeze-to-out! [~'x ~(with-meta 'out {:tag 'DataOutput})]
+  `(extend-type ~type IFreezable1
+     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})]
       (write-id ~'out ~id)
       ~@body)))
 
 ;;;; Caching ; Experimental
 ;; How much point is there in offering this feature if we already have LZ4?
 
-(def ^:dynamic ^:private *cache_* "{<x> <cache-idx>}" nil)
-(defmacro ^:private with-cache [& body]
-  `(binding [*cache_* (enc/-vol! nil)] ~@body))
+;; Nb: don't use an auto initialValue; can cause thread-local state to
+;; accidentally hang around with the use of `freeze-to-out!`, etc.
+;; Safer to require explicit activation through `with-cache`.
+(def ^ThreadLocal -cache-proxy (proxy [ThreadLocal] []))
 
-(defrecord CacheWrapped [value])
+(defmacro ^:private with-cache
+  "Experimental! Executes body with support for freezing and thawing
+  cached values. See also `cache`."
+  [& body]
+  `(try
+     (.set -cache-proxy (enc/-vol! nil))
+     (do ~@body)
+     (finally (.remove -cache-proxy))))
+
+(deftype CacheWrapped [val])
 (defn cache
   "Experimental! Wraps value so that future writes of the same wrapped
   value will be efficiently encoded as references to this one.
+
+  **NB**: Ignores metadata!
 
   (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
     will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
@@ -733,8 +757,8 @@
 (comment (cache "foo"))
 
 (freezer CacheWrapped
-  (let [x-val (:value x)]
-    (if-let [cache_ *cache_*]
+  (let [x-val (.-val x)]
+    (if-let [cache_ (.get -cache-proxy)]
       (let [cache    @cache_
             ?idx     (get cache x-val)
             ^int idx (or ?idx
@@ -748,41 +772,45 @@
           (sm-count? idx)
           (case (int idx)
             0 (do (write-id out id-cached-0)
-                  (when first-occurance? (-freeze-to-out! x-val out)))
+                  (when first-occurance? (-freeze-without-meta! x-val out)))
             1 (do (write-id out id-cached-1)
-                  (when first-occurance? (-freeze-to-out! x-val out)))
+                  (when first-occurance? (-freeze-without-meta! x-val out)))
             2 (do (write-id out id-cached-2)
-                  (when first-occurance? (-freeze-to-out! x-val out)))
+                  (when first-occurance? (-freeze-without-meta! x-val out)))
             3 (do (write-id out id-cached-3)
-                  (when first-occurance? (-freeze-to-out! x-val out)))
+                  (when first-occurance? (-freeze-without-meta! x-val out)))
             4 (do (write-id out id-cached-4)
-                  (when first-occurance? (-freeze-to-out! x-val out)))
+                  (when first-occurance? (-freeze-without-meta! x-val out)))
 
             (do (write-id       out id-cached-sm)
                 (write-sm-count out idx)
-                (when first-occurance? (-freeze-to-out! x-val out))))
+                (when first-occurance? (-freeze-without-meta! x-val out))))
 
           (md-count? idx)
           (do (write-id       out id-cached-md)
               (write-md-count out idx)
-              (when first-occurance? (-freeze-to-out! x-val out)))
+              (when first-occurance? (-freeze-without-meta! x-val out)))
 
           :else
           ;; (throw (ex-info "Max cache size exceeded" {:idx idx}))
-          (-freeze-to-out! x-val out) ; Just freeze uncached
+          (-freeze-without-meta! x-val out) ; Just freeze uncached
           ))
 
-      (-freeze-to-out! x-val out))))
+      (-freeze-without-meta! x-val out))))
 
 (declare thaw-from-in!)
-(defn- thaw-cached [idx in]
-  (if-let [cache_ *cache_*]
-    (if-let [e (find @cache_ idx)]
-      (val e)
-      (let [x (thaw-from-in! in)]
-        (enc/-vol-swap! cache_ assoc idx x)
-        x))
-    (throw (ex-info "No *cache_* binding established, can't thaw" {}))))
+(def ^:private thaw-cached
+  (let [not-found (Object.)]
+    (fn [idx in]
+      (if-let [cache_ (.get -cache-proxy)]
+        (let [v (get @cache_ idx not-found)]
+          (if (identical? v not-found)
+            (let [x (thaw-from-in! in)]
+              (enc/-vol-swap! cache_ assoc idx x)
+              x)
+            v))
+        (throw (ex-info "No cache_ established, can't thaw. See `with-cache`."
+                 {}))))))
 
 (comment (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")])))
 
@@ -845,7 +873,7 @@
       (do (write-id       out id-record-md)
           (write-bytes-md out cname-ba)))
 
-    (-freeze-to-out! (into {} x) out)))
+    (-freeze-without-meta! (into {} x) out)))
 
 (freezer Object
   (when-debug (println (str "freeze-fallback: " (type x))))
@@ -897,7 +925,7 @@
   [x]
   (let [baos (ByteArrayOutputStream. 64)
         dos  (DataOutputStream. baos)]
-    (with-cache (freeze-to-out! dos x))
+    (with-cache (-freeze-with-meta! x dos))
     (.toByteArray baos)))
 
 (defn freeze
@@ -909,7 +937,8 @@
               encryptor  aes128-encryptor}
        :as   opts}]
     (let [;; Intentionally undocumented:
-          no-header? (or (:no-header? opts) (:skip-header? opts))
+          no-header? (or (get opts :no-header?)
+                         (get opts :skip-header?))
           encryptor  (when password encryptor)
           baos (ByteArrayOutputStream. 64)
           dos  (DataOutputStream. baos)]
@@ -919,11 +948,11 @@
           (when-not no-header? ; Avoid `wrap-header`'s array copy:
             (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
               (.write dos head-ba 0 4)))
-          (with-cache (freeze-to-out! dos x))
+          (with-cache (-freeze-with-meta! x dos))
           (.toByteArray baos))
 
         (do
-          (with-cache (freeze-to-out! dos x))
+          (with-cache (-freeze-with-meta! x dos))
           (let [ba (.toByteArray baos)
 
                 compressor
@@ -1179,15 +1208,16 @@
         (throw (ex-info (str "Thaw failed against type-id: " type-id)
                  {:type-id type-id} e))))))
 
-(defn- try-parse-header [^bytes ba]
-  (let [len (alength ba)]
-    (when (> len 4)
-      (let [-head-sig (java.util.Arrays/copyOf ba 3)]
-        (when (java.util.Arrays/equals -head-sig ^bytes head-sig)
-          ;; Header appears to be well-formed
-          (let [meta-id (aget ba 3)
-                data-ba (java.util.Arrays/copyOfRange ba 4 len)]
-            [data-ba (get head-meta meta-id {:unrecognized-meta? true})]))))))
+(let [head-sig head-sig] ; Not ^:const
+  (defn- try-parse-header [^bytes ba]
+    (let [len (alength ba)]
+      (when (> len 4)
+        (let [-head-sig (java.util.Arrays/copyOf ba 3)]
+          (when (java.util.Arrays/equals -head-sig ^bytes head-sig)
+            ;; Header appears to be well-formed
+            (let [meta-id (aget ba 3)
+                  data-ba (java.util.Arrays/copyOfRange ba 4 len)]
+              [data-ba (get head-meta meta-id {:unrecognized-meta? true})])))))))
 
 (defn- get-auto-compressor [compressor-id]
   (case compressor-id
@@ -1246,17 +1276,17 @@
             encryptor  :auto}
      :as   opts}]
 
-   (assert (not (:headerless-meta opts))
+   (assert (not (get opts :headerless-meta))
      ":headerless-meta `thaw` opt removed in Nippy v2.7+")
 
    (let [v2+?       (not v1-compatibility?)
-         no-header? (:no-header? opts) ; Intentionally undocumented
+         no-header? (get opts :no-header?) ; Intentionally undocumented
          ex (fn ex
               ([  msg] (ex nil msg))
               ([e msg] (throw (ex-info (str "Thaw failed: " msg)
-                                {:opts (merge opts
-                                         {:compressor compressor
-                                          :encryptor  encryptor})}
+                                {:opts (assoc opts
+                                         :compressor compressor
+                                         :encryptor  encryptor)}
                                 e))))
 
          thaw-data
@@ -1353,16 +1383,18 @@
     * Keyword           - 2 byte overhead, resistent to id collisions
     * Integer ∈[1, 128] - no overhead, subject to id collisions
 
-  (defrecord MyType [data])
-  (extend-freeze MyType :foo/my-type [x data-output] ; Keyword id
+  NB: be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU.
+
+  (defrecord MyRec [data])
+  (extend-freeze MyRec :foo/my-type [x data-output] ; Keyword id
     (.writeUTF [data-output] (:data x)))
   ;; or
-  (extend-freeze MyType 1 [x data-output] ; Byte id
+  (extend-freeze MyRec 1 [x data-output] ; Byte id
     (.writeUTF [data-output] (:data x)))"
   [type custom-type-id [x out] & body]
   (assert-custom-type-id custom-type-id)
-  `(extend-type ~type Freezable
-     (~'-freeze-to-out! [~x ~(with-meta out {:tag 'java.io.DataOutput})]
+  `(extend-type ~type IFreezable1
+     (~'-freeze-without-meta! [~x ~(with-meta out {:tag 'java.io.DataOutput})]
        (if-not ~(keyword? custom-type-id)
          ;; Unprefixed [cust byte id][payload]:
          (write-id ~out ~(coerce-custom-type-id custom-type-id))
@@ -1374,10 +1406,10 @@
 (defmacro extend-thaw
   "Extends Nippy to support thawing of a custom type with given id:
   (extend-thaw :foo/my-type [data-input] ; Keyword id
-    (MyType. (.readUTF data-input)))
+    (MyRec. (.readUTF data-input)))
   ;; or
   (extend-thaw 1 [data-input] ; Byte id
-    (MyType. (.readUTF data-input)))"
+    (MyRec. (.readUTF data-input)))"
   [custom-type-id [in] & body]
   (assert-custom-type-id custom-type-id)
   `(do
@@ -1393,10 +1425,10 @@
 
 (comment
   *custom-readers*
-  (defrecord MyType [data])
-  (extend-freeze MyType 1 [x out] (.writeUTF out (:data x)))
-  (extend-thaw 1 [in] (MyType. (.readUTF in)))
-  (thaw (freeze (MyType. "Joe"))))
+  (defrecord MyRec [data])
+  (extend-freeze MyRec 1 [x out] (.writeUTF out (:data x)))
+  (extend-thaw 1 [in] (MyRec. (.readUTF in)))
+  (thaw (freeze (MyRec. "Joe"))))
 
 ;;;; Stress data
 

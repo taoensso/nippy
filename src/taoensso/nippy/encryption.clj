@@ -70,7 +70,7 @@
 
 (comment (destructure-typed-pwd [:salted "foo"]))
 
-(defrecord AES128Encryptor [header-id keyfn cached-keyfn]
+(deftype AES128Encryptor [header-id keyfn cached-keyfn]
   IEncryptor
   (header-id [_] header-id)
   (encrypt   [_ typed-pwd data-ba]

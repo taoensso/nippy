@@ -62,6 +62,11 @@
   ;; (bench {:reader? true :lzma2? true :fressian? true :laps 2})
   ;; (bench {:laps 2})
 
+  ;;; 2016 Jul 17, v2.12.0-RC2, minor final optimizations
+  {:encrypted {:round 4527, :freeze 2651, :thaw 1876, :size 16324}}
+  {:default   {:round 3998, :freeze 2226, :thaw 1772, :size 16297}}
+  {:fast      {:round 3408, :freeze 1745, :thaw 1663, :size 17069}}
+
   ;;; 2016 Apr 14, v2.12.0-SNAPSHOT, refactor + larger data + new hardware
   {:reader    {:round 52380, :freeze 17817, :thaw 34563, :size 27861}}
   {:lzma2     {:round 43321, :freeze 28312, :thaw 15009, :size 11260}}
