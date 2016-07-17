@@ -1,5 +1,16 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.12.0-RC2 / 2016 Jul 17
+
+```clojure
+[com.taoensso/nippy "2.12.0-RC2"]
+```
+
+Changes since `2.12.0-RC1`:
+
+* **New**: Experimental `cache` feature now supports metadata
+* **Impl**: Some additional minor performance improvements
+
 ## v2.12.0-RC1 / 2016 Jun 23
 
 ```clojure
