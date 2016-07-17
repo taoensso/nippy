@@ -745,9 +745,8 @@
 (deftype CacheWrapped [val])
 (defn cache
   "Experimental! Wraps value so that future writes of the same wrapped
-  value will be efficiently encoded as references to this one.
-
-  **NB**: Ignores metadata!
+  value with same metadata will be efficiently encoded as references to
+  this one.
 
   (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
     will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
@@ -760,10 +759,11 @@
   (let [x-val (.-val x)]
     (if-let [cache_ (.get -cache-proxy)]
       (let [cache    @cache_
-            ?idx     (get cache x-val)
+            k        #_x-val [x-val (meta x-val)]
+            ?idx     (get cache k)
             ^int idx (or ?idx
                        (let [idx (count cache)]
-                         (enc/-vol-swap! cache_ assoc x-val idx)
+                         (enc/-vol-swap! cache_ assoc k idx)
                          idx))
 
             first-occurance? (nil? ?idx)]
@@ -772,31 +772,31 @@
           (sm-count? idx)
           (case (int idx)
             0 (do (write-id out id-cached-0)
-                  (when first-occurance? (-freeze-without-meta! x-val out)))
+                  (when first-occurance? (-freeze-with-meta! x-val out)))
             1 (do (write-id out id-cached-1)
-                  (when first-occurance? (-freeze-without-meta! x-val out)))
+                  (when first-occurance? (-freeze-with-meta! x-val out)))
             2 (do (write-id out id-cached-2)
-                  (when first-occurance? (-freeze-without-meta! x-val out)))
+                  (when first-occurance? (-freeze-with-meta! x-val out)))
             3 (do (write-id out id-cached-3)
-                  (when first-occurance? (-freeze-without-meta! x-val out)))
+                  (when first-occurance? (-freeze-with-meta! x-val out)))
             4 (do (write-id out id-cached-4)
-                  (when first-occurance? (-freeze-without-meta! x-val out)))
+                  (when first-occurance? (-freeze-with-meta! x-val out)))
 
             (do (write-id       out id-cached-sm)
                 (write-sm-count out idx)
-                (when first-occurance? (-freeze-without-meta! x-val out))))
+                (when first-occurance? (-freeze-with-meta! x-val out))))
 
           (md-count? idx)
           (do (write-id       out id-cached-md)
               (write-md-count out idx)
-              (when first-occurance? (-freeze-without-meta! x-val out)))
+              (when first-occurance? (-freeze-with-meta! x-val out)))
 
           :else
           ;; (throw (ex-info "Max cache size exceeded" {:idx idx}))
-          (-freeze-without-meta! x-val out) ; Just freeze uncached
+          (-freeze-with-meta! x-val out) ; Just freeze uncached
           ))
 
-      (-freeze-without-meta! x-val out))))
+      (-freeze-with-meta! x-val out))))
 
 (declare thaw-from-in!)
 (def ^:private thaw-cached
@@ -812,7 +812,12 @@
         (throw (ex-info "No cache_ established, can't thaw. See `with-cache`."
                  {}))))))
 
-(comment (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")])))
+(comment
+  (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")]))
+  (let [v1 (with-meta [] {:id :v1})
+        v2 (with-meta [] {:id :v2})]
+    (mapv meta
+      (thaw (freeze [(cache v1) (cache v2) (cache v1) (cache v2)])))))
 
 ;;;;
 
