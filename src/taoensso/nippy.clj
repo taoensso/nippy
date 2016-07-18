@@ -710,8 +710,8 @@
 
 ;; Public `-freeze-with-meta!` with different arg order
 (defn freeze-to-out!
-  "Serializes arg (any Clojure data type) to a DataOutput. Please note that
-  this is a low-level util: in most cases you'll want `freeze` instead."
+  "Serializes arg (any Clojure data type) to a DataOutput.
+  This is a low-level util: in most cases you'll want `freeze` instead."
   [^DataOutput data-output x] (-freeze-with-meta! x data-output))
 
 (defmacro ^:private freezer [type & body]
@@ -726,16 +726,22 @@
       ~@body)))
 
 ;;;; Caching ; Experimental
-;; How much point is there in offering this feature if we already have LZ4?
 
 ;; Nb: don't use an auto initialValue; can cause thread-local state to
 ;; accidentally hang around with the use of `freeze-to-out!`, etc.
 ;; Safer to require explicit activation through `with-cache`.
-(def ^ThreadLocal -cache-proxy (proxy [ThreadLocal] []))
+(def ^ThreadLocal -cache-proxy
+  "{[<x> <meta>] <idx>} for freezing, {<idx> <x-with-meta>} for thawing."
+  (proxy [ThreadLocal] []))
 
 (defmacro ^:private with-cache
-  "Experimental! Executes body with support for freezing and thawing
-  cached values. See also `cache`."
+  "Experimental, subject to change.
+  Executes body with support for freezing/thawing cached values.
+
+  This is a low-level util: you won't need to use this yourself unless
+  you're using `freeze-to-out!` or `thaw-from-in!` (also low-level utils).
+
+  See also `cache`."
   [& body]
   `(try
      (.set -cache-proxy (enc/-vol! nil))
@@ -744,9 +750,10 @@
 
 (deftype CacheWrapped [val])
 (defn cache
-  "Experimental! Wraps value so that future writes of the same wrapped
-  value with same metadata will be efficiently encoded as references to
-  this one.
+  "Experimental, subject to change.
+
+  Wraps value so that future writes of the same wrapped value with same
+  metadata will be efficiently encoded as references to this one.
 
   (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
     will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
@@ -1085,8 +1092,9 @@
 
 (defn thaw-from-in!
   "Deserializes a frozen object from given DataInput to its original Clojure
-  data type. Please note that this is a low-level util: in most cases you'll
-  want `thaw` instead."
+  data type.
+
+  This is a low-level util: in most cases you'll want `thaw` instead."
   [^DataInput data-input]
   (let [in      data-input
         type-id (.readByte in)]
