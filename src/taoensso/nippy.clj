@@ -20,8 +20,8 @@
              LazySeq IRecord ISeq]))
 
 (if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [2 52 1])
-  (enc/assert-min-encore-version  2.52))
+  (enc/assert-min-encore-version [2 67 1])
+  (enc/assert-min-encore-version  2.67))
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
@@ -238,9 +238,9 @@
 
 ;; TODO Switch to thread-local proxies?
 
-(enc/defonce* ^:dynamic *freeze-fallback* "(fn [data-output x]), nil => default" nil)
-(enc/defonce* ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
-(enc/defonce* ^:dynamic *auto-freeze-compressor*
+(enc/defonce ^:dynamic *freeze-fallback* "(fn [data-output x]), nil => default" nil)
+(enc/defonce ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
+(enc/defonce ^:dynamic *auto-freeze-compressor*
   "(fn [byte-array])->compressor used by `(freeze <x> {:compressor :auto}),
   nil => default"
   nil)
@@ -1553,5 +1553,6 @@
 
 ;;;; Deprecated
 
-(enc/defonce* ^:dynamic *final-freeze-fallback* "DEPRECATED" nil)
-(def freeze-fallback-as-str "DEPRECATED" write-unfreezable)
+(enc/deprecated
+  (enc/defonce ^:dynamic *final-freeze-fallback* "DEPRECATED" nil)
+  (def freeze-fallback-as-str "DEPRECATED" write-unfreezable))

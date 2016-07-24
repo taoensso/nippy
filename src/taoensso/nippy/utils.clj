@@ -8,16 +8,17 @@
 ;; Unfortunately the only ~reliable way we can tell if something's
 ;; really serializable/readable is to actually try a full roundtrip.
 
-(defn- memoize-type-test [test-fn]
-  (let [cache (atom {})] ; {<type> <type-okay?>}
-    (fn [x]
-      (let [t (type x)
-            ;; This is a bit hackish, but no other obvious solutions (?):
-            cacheable? (not (re-find #"__\d+" (str t))) ; gensym form
-            test (fn [] (try (test-fn x) (catch Exception _ false)))]
-        (if cacheable?
-          @(enc/swap-val! cache t #(if % % (delay (test))))
-          (test))))))
+(let [swap-cache! @#'enc/-swap-cache!] ; TODO Public with newer Encore
+  (defn- memoize-type-test [test-fn]
+    (let [cache (atom {})] ; {<type> <type-okay?>}
+      (fn [x]
+        (let [t (type x)
+              ;; This is a bit hackish, but no other obvious solutions (?):
+              cacheable? (not (re-find #"__\d+" (str t))) ; gensym form
+              test (fn [] (try (test-fn x) (catch Exception _ false)))]
+          (if cacheable?
+            @(swap-cache! cache t #(if % % (delay (test))))
+            (test)))))))
 
 (def     readable? (memoize-type-test (fn [x] (-> x enc/pr-edn enc/read-edn) true)))
 (def serializable?
