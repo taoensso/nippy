@@ -1196,16 +1196,18 @@
         id-uuid        (UUID. (.readLong in) (.readLong in))
 
         ;; Deprecated ------------------------------------------------------
-        id-boolean-depr1    (.readBoolean in)
-        id-sorted-map-depr1 (read-kvs-depr1 (sorted-map) in)
-        id-map-depr2        (read-kvs-depr1 {} in)
-        id-reader-depr1     (read-edn (.readUTF in))
-        id-reader-depr2     (read-edn (read-utf8 in (.readInt in)))
-        id-str-depr1                 (.readUTF in)
-        id-kw-depr1         (keyword (.readUTF in))
-        id-map-depr1        (apply hash-map
-                              (enc/repeatedly-into [] (* 2 (.readInt in))
-                                (fn [] (thaw-from-in! in))))
+        id-boolean-depr1      (.readBoolean in)
+        id-sorted-map-depr1   (read-kvs-depr1 (sorted-map) in)
+        id-map-depr2          (read-kvs-depr1 {} in)
+        id-reader-depr1       (read-edn (.readUTF in))
+        id-reader-depr2       (read-edn (read-utf8 in (.readInt in)))
+        id-str-depr1                   (.readUTF in)
+        id-kw-depr1           (keyword (.readUTF in))
+        id-map-depr1          (apply hash-map
+                                (enc/repeatedly-into [] (* 2 (.readInt in))
+                                  (fn [] (thaw-from-in! in))))
+        id-serializable-depr1 (read-serializable in (read-utf8 in (read-lg-count in)))
+        id-record-depr1       (read-record       in (read-utf8 in (read-lg-count in)))
         ;; -----------------------------------------------------------------
 
         id-prefixed-custom (read-custom! in :prefixed (.readShort in))
