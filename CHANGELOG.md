@@ -1,5 +1,13 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.12.1 / 2016 Jul 26
+
+```clojure
+[com.taoensso/nippy "2.12.1"]
+```
+
+* **Hotfix**: thaw was missing support for deprecated serializable, record types [@rwilson]
+
 ## v2.12.0 / 2016 Jul 24
 
 ```clojure
