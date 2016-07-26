@@ -85,15 +85,19 @@
 
   {82  :prefixed-custom
 
-   46  :serializable-sm
-   50  :serializable-md
-
    47  :reader-sm
    51  :reader-md
    52  :reader-lg
+   5   :reader-lg2 ; == :reader-lg, used only for back-compatible thawing
+
+   46  :serializable-sm
+   50  :serializable-md
+   6   :serializable-lg ; Used only for back-compatible thawing
 
    48  :record-sm
    49  :record-md
+   80  :record-lg ; Used only for back-compatible thawing
+
    81  :type ; TODO Implement?
 
    3   :nil
@@ -190,9 +194,6 @@
    27  :map-depr2          ; v2.11+ for count/2
    29  :sorted-map-depr1   ; v2.11+ for count/2
    4   :boolean-depr1      ; v2.12+ for switch to true/false ids
-   6   :serializable-depr1 ; v2.12+ = serializable-lg -> sm, md
-   5   :reader-depr2       ; v2.12+ = reader-lg -> sm, md, lg
-   80  :record-depr1       ; v2.12+ = record-lg -> sm, md
    })
 
 (comment
@@ -650,6 +651,8 @@
       (do (write-id       out id-serializable-sm)
           (write-bytes-sm out cname-ba))
 
+      ;; Note no :serializable-lg freeze support (unrealistic)
+
       :else
       (do (write-id       out id-serializable-md)
           (write-bytes-md out cname-ba)))
@@ -881,6 +884,8 @@
       (do (write-id       out id-record-sm)
           (write-bytes-sm out cname-ba))
 
+      ;; Note no :record-lg freeze support (unrealistic)
+
       :else
       (do (write-id       out id-record-md)
           (write-bytes-md out cname-ba)))
@@ -1105,10 +1110,13 @@
         id-reader-sm       (read-edn             (read-utf8 in (read-sm-count in)))
         id-reader-md       (read-edn             (read-utf8 in (read-md-count in)))
         id-reader-lg       (read-edn             (read-utf8 in (read-lg-count in)))
+        id-reader-lg2      (read-edn             (read-utf8 in (read-lg-count in)))
         id-serializable-sm (read-serializable in (read-utf8 in (read-sm-count in)))
         id-serializable-md (read-serializable in (read-utf8 in (read-md-count in)))
+        id-serializable-lg (read-serializable in (read-utf8 in (read-lg-count in)))
         id-record-sm       (read-record       in (read-utf8 in (read-sm-count in)))
         id-record-md       (read-record       in (read-utf8 in (read-md-count in)))
+        id-record-lg       (read-record       in (read-utf8 in (read-lg-count in)))
 
         id-nil         nil
         id-true        true
@@ -1196,18 +1204,15 @@
         id-uuid        (UUID. (.readLong in) (.readLong in))
 
         ;; Deprecated ------------------------------------------------------
-        id-boolean-depr1      (.readBoolean in)
-        id-sorted-map-depr1   (read-kvs-depr1 (sorted-map) in)
-        id-map-depr2          (read-kvs-depr1 {} in)
-        id-reader-depr1       (read-edn (.readUTF in))
-        id-reader-depr2       (read-edn (read-utf8 in (.readInt in)))
-        id-str-depr1                   (.readUTF in)
-        id-kw-depr1           (keyword (.readUTF in))
-        id-map-depr1          (apply hash-map
-                                (enc/repeatedly-into [] (* 2 (.readInt in))
-                                  (fn [] (thaw-from-in! in))))
-        id-serializable-depr1 (read-serializable in (read-utf8 in (read-lg-count in)))
-        id-record-depr1       (read-record       in (read-utf8 in (read-lg-count in)))
+        id-boolean-depr1    (.readBoolean in)
+        id-sorted-map-depr1 (read-kvs-depr1 (sorted-map) in)
+        id-map-depr2        (read-kvs-depr1 {} in)
+        id-reader-depr1     (read-edn (.readUTF in))
+        id-str-depr1                  (.readUTF in)
+        id-kw-depr1         (keyword  (.readUTF in))
+        id-map-depr1        (apply hash-map
+                              (enc/repeatedly-into [] (* 2 (.readInt in))
+                                (fn [] (thaw-from-in! in))))
         ;; -----------------------------------------------------------------
 
         id-prefixed-custom (read-custom! in :prefixed (.readShort in))
