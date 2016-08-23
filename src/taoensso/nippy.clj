@@ -1012,9 +1012,9 @@
     (.readFully in ba 0 len)
     ba))
 
-(defn- read-bytes-sm [^DataInput in] (read-bytes (read-sm-count in)))
-(defn- read-bytes-md [^DataInput in] (read-bytes (read-md-count in)))
-(defn- read-bytes-lg [^DataInput in] (read-bytes (read-lg-count in)))
+(defn- read-bytes-sm [^DataInput in] (read-bytes in (read-sm-count in)))
+(defn- read-bytes-md [^DataInput in] (read-bytes in (read-md-count in)))
+(defn- read-bytes-lg [^DataInput in] (read-bytes in (read-lg-count in)))
 
 (defn- read-utf8    [in len]        (String. ^bytes (read-bytes in len)                charset))
 (defn- read-utf8-sm [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count in)) charset))
