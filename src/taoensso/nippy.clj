@@ -975,12 +975,12 @@
                 compressor
                 (if (identical? compressor :auto)
                   (if no-header?
-                    lz4-compressor
+                    @lz4-compressor
                     (if-let [fc *auto-freeze-compressor*]
                       (fc ba)
                       ;; Intelligently enable compression only if benefit
                       ;; is likely to outweigh cost:
-                      (when (> (alength ba) 8192) lz4-compressor)))
+                      (when (> (alength ba) 8192) @lz4-compressor)))
 
                   (if (fn? compressor)
                     (compressor ba) ; Assume compressor selector fn
@@ -1244,7 +1244,7 @@
     nil        nil
     :snappy    snappy-compressor
     :lzma2     lzma2-compressor
-    :lz4       lz4-compressor
+    :lz4       @lz4-compressor
     :no-header (throw (ex-info ":auto not supported on headerless data." {}))
     :else (throw (ex-info ":auto not supported for non-standard compressors." {}))
     (throw (ex-info (str "Unrecognized :auto compressor id: " compressor-id)
