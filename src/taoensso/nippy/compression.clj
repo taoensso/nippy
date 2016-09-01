@@ -99,7 +99,7 @@
       ba-decomp)))
 
 (def ^:private ^net.jpountz.lz4.LZ4Factory lz4-factory
-  (net.jpountz.lz4.LZ4Factory/fastestInstance))
+  (delay (net.jpountz.lz4.LZ4Factory/fastestInstance)))
 
 (def lz4-compressor
   "Default net.jpountz.lz4 compressor:
@@ -111,13 +111,13 @@
 
   Thanks to Max Penet (@mpenet) for our first implementation,
   Ref. https://github.com/mpenet/nippy-lz4"
-  (LZ4Compressor. (.fastCompressor   lz4-factory)
-                  (.fastDecompressor lz4-factory)))
+  (delay (LZ4Compressor. (.fastCompressor   @lz4-factory)
+                         (.fastDecompressor @lz4-factory))))
 
 (def lz4hc-compressor
   "Like `lz4-compressor` but trades some write speed for ratio."
-  (LZ4Compressor. (.highCompressor   lz4-factory)
-                  (.fastDecompressor lz4-factory)))
+  (delay (LZ4Compressor. (.highCompressor   @lz4-factory)
+                         (.fastDecompressor @lz4-factory))))
 
 (comment
   (def ba-bench (.getBytes (apply str (repeatedly 1000 rand)) "UTF-8"))
@@ -130,8 +130,8 @@
   (println
    {:snappy (bench1 snappy-compressor)
     ;:lzma2  (bench1 lzma2-compressor) ; Slow!
-    :lz4    (bench1 lz4-compressor)
-    :lz4hc  (bench1 lz4hc-compressor)})
+    :lz4    (bench1 @lz4-compressor)
+    :lz4hc  (bench1 @lz4hc-compressor)})
 
   ;;; 2014 April 7
   {:snappy {:time 2251, :ratio 0.852},
