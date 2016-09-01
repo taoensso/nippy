@@ -69,12 +69,12 @@
   environments."
   (LZMA2Compressor. 0))
 
-(deftype LZ4Compressor [^net.jpountz.lz4.LZ4Compressor   compressor
-                        ^net.jpountz.lz4.LZ4Decompressor decompressor]
+(deftype LZ4Compressor [compressor_ decompressor_]
   ICompressor
   (header-id [_] :lz4)
   (compress  [_ ba]
-    (let [len-decomp   (alength ^bytes ba)
+    (let [^net.jpountz.lz4.LZ4Compressor compressor @compressor_
+          len-decomp   (alength ^bytes ba)
           max-len-comp (.maxCompressedLength compressor len-decomp)
           ba-comp*     (byte-array max-len-comp) ; Over-sized
           len-comp     (.compress compressor ^bytes ba 0 len-decomp
@@ -87,7 +87,8 @@
       (.toByteArray baos)))
 
   (decompress [_ ba]
-    (let [bais (ByteArrayInputStream. ba)
+    (let [^net.jpountz.lz4.LZ4Decompressor decompressor @decompressor_
+          bais (ByteArrayInputStream. ba)
           dis  (DataInputStream. bais)
           ;;
           len-decomp (.readInt dis)
@@ -98,9 +99,7 @@
           _          (.decompress decompressor ba 4 ba-decomp 0 len-decomp)]
       ba-decomp)))
 
-(def ^:private ^net.jpountz.lz4.LZ4Factory lz4-factory
-  (net.jpountz.lz4.LZ4Factory/fastestInstance))
-
+(def ^:private lz4-factory_ (delay (net.jpountz.lz4.LZ4Factory/fastestInstance)))
 (def lz4-compressor
   "Default net.jpountz.lz4 compressor:
         Ratio: low.
@@ -111,13 +110,15 @@
 
   Thanks to Max Penet (@mpenet) for our first implementation,
   Ref. https://github.com/mpenet/nippy-lz4"
-  (LZ4Compressor. (.fastCompressor   lz4-factory)
-                  (.fastDecompressor lz4-factory)))
+  (LZ4Compressor.
+    (delay (.fastCompressor   ^net.jpountz.lz4.LZ4Factory @lz4-factory_))
+    (delay (.fastDecompressor ^net.jpountz.lz4.LZ4Factory @lz4-factory_))))
 
 (def lz4hc-compressor
   "Like `lz4-compressor` but trades some write speed for ratio."
-  (LZ4Compressor. (.highCompressor   lz4-factory)
-                  (.fastDecompressor lz4-factory)))
+  (LZ4Compressor.
+    (delay (.highCompressor   ^net.jpountz.lz4.LZ4Factory @lz4-factory_))
+    (delay (.fastDecompressor ^net.jpountz.lz4.LZ4Factory @lz4-factory_))))
 
 (comment
   (def ba-bench (.getBytes (apply str (repeatedly 1000 rand)) "UTF-8"))
