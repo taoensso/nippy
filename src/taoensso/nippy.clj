@@ -31,7 +31,9 @@
   (set! *unchecked-math* false)
   (thaw (freeze stress-data)))
 
-;; Performance would benefit from ^:static support / direct linking / etc.
+;;;; TODO
+;; - Performance would benefit from ^:static support / direct linking / etc.
+;; - Ability to compile-time disable metadata support?
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
@@ -754,7 +756,7 @@
      (do ~@body)
      (finally (.remove -cache-proxy))))
 
-(deftype CacheWrapped [val])
+(deftype Cached [val])
 (defn cache
   "Experimental, subject to change.
 
@@ -764,11 +766,11 @@
   (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
     will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
   [x]
-  (if (instance? CacheWrapped x) x (CacheWrapped. x)))
+  (if (instance? Cached x) x (Cached. x)))
 
 (comment (cache "foo"))
 
-(freezer CacheWrapped
+(freezer Cached
   (let [x-val (.-val x)]
     (if-let [cache_ (.get -cache-proxy)]
       (let [cache    @cache_
@@ -831,6 +833,87 @@
         v2 (with-meta [] {:id :v2})]
     (mapv meta
       (thaw (freeze [(cache v1) (cache v2) (cache v1) (cache v2)])))))
+
+;;;; Semi-automatic caching ; Experimental
+
+(deftype CachedKeys [val recursive?])
+(defn cache-keys
+  "Experimental! Wraps map so that keyword, symbol and string keys will
+  automatically use `cache` during serialization."
+  ([x           ] (cache-keys x false))
+  ([x recursive?]
+   (if (instance? CachedKeys x)
+     (let [^CachedKeys x x
+           r? (.-recursive? x)]
+       (if (= recursive? r?)
+         x
+         (CachedKeys. (.-val x) recursive?)))
+
+     (when (enc/some? x)
+       (CachedKeys. (enc/have map? x) recursive?)))))
+
+(defmacro ^:private auto-cache-val [v] `(if (map? ~v) (cache-keys ~v) ~v))
+(defmacro ^:private auto-cache-key [k]
+  `(cond*
+     (keyword? ~k) (if (instance? Cached ~k) ~k (Cached. ~k))
+     (string?  ~k) (if (instance? Cached ~k) ~k (Cached. ~k))
+     (symbol?  ~k) (if (instance? Cached ~k) ~k (Cached. ~k))
+     :else     ~k))
+
+(defn- write-cached-kvs
+  ([^DataOutput out id-lg ^CachedKeys x]
+   (let [coll       (.-val        x)
+         recursive? (.-recursive? x)
+         cnt (count coll)]
+
+     (write-id       out id-lg)
+     (write-lg-count out cnt)
+     (if recursive?
+       (-run-kv!
+         (fn [k v]
+           (-freeze-with-meta! (auto-cache-key k) out)
+           (-freeze-with-meta! (auto-cache-val v) out))
+         coll)
+
+       (-run-kv!
+         (fn [k v]
+           (-freeze-with-meta! (auto-cache-key k) out)
+           (-freeze-with-meta!                 v  out))
+         coll))))
+
+  ([^DataOutput out id-empty id-sm id-md id-lg ^CachedKeys x]
+   (let [coll       (.-val        x)
+         recursive? (.-recursive? x)
+         cnt (count coll)]
+
+     (if (zero? cnt)
+       (write-id out id-empty)
+       (do
+         (cond*
+           (sm-count? cnt)
+           (do (write-id       out id-sm)
+               (write-sm-count out cnt))
+
+           (md-count? cnt)
+           (do (write-id       out id-md)
+               (write-md-count out cnt))
+
+           :else
+           (do (write-id       out id-lg)
+               (write-lg-count out cnt)))
+
+         (if recursive?
+           (-run-kv!
+             (fn [k v]
+               (-freeze-with-meta! (auto-cache-key k) out)
+               (-freeze-with-meta! (auto-cache-val v) out))
+             coll)
+
+           (-run-kv!
+             (fn [k v]
+               (-freeze-with-meta! (auto-cache-key k) out)
+               (-freeze-with-meta!                 v  out))
+             coll)))))))
 
 ;;;;
 
