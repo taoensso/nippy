@@ -33,7 +33,9 @@
 
 ;;;; TODO
 ;; - Performance would benefit from ^:static support / direct linking / etc.
-;; - Ability to compile-time disable metadata support?
+;; - Ability to compile out metadata support?
+;; - Auto cache keywords? When map keys? Configurable? Per-map
+;;   (`cache-keys`)? Just rely on compression?
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
@@ -188,6 +190,9 @@
    64  :cached-2
    65  :cached-3
    66  :cached-4
+   72  :cached-5
+   73  :cached-6
+   74  :cached-7
    67  :cached-sm
    68  :cached-md
 
@@ -206,8 +211,7 @@
     (reduce (fn [acc in] (if-not (ids-map in) (conj acc in) acc))
       [] (range 0 Byte/MAX_VALUE)))
 
-  (- Byte/MAX_VALUE (count type-ids))
-  (get-free-byte-ids type-ids))
+  (count (get-free-byte-ids type-ids)))
 
 (defmacro ^:private defids []
   `(do
@@ -786,25 +790,25 @@
         (cond*
           (sm-count? idx)
           (case (int idx)
-            0 (do (write-id out id-cached-0)
-                  (when first-occurance? (-freeze-with-meta! x-val out)))
-            1 (do (write-id out id-cached-1)
-                  (when first-occurance? (-freeze-with-meta! x-val out)))
-            2 (do (write-id out id-cached-2)
-                  (when first-occurance? (-freeze-with-meta! x-val out)))
-            3 (do (write-id out id-cached-3)
-                  (when first-occurance? (-freeze-with-meta! x-val out)))
-            4 (do (write-id out id-cached-4)
-                  (when first-occurance? (-freeze-with-meta! x-val out)))
+            0 (do (write-id out id-cached-0) (when first-occurance? (-freeze-with-meta! x-val out)))
+            1 (do (write-id out id-cached-1) (when first-occurance? (-freeze-with-meta! x-val out)))
+            2 (do (write-id out id-cached-2) (when first-occurance? (-freeze-with-meta! x-val out)))
+            3 (do (write-id out id-cached-3) (when first-occurance? (-freeze-with-meta! x-val out)))
+            4 (do (write-id out id-cached-4) (when first-occurance? (-freeze-with-meta! x-val out)))
+            5 (do (write-id out id-cached-5) (when first-occurance? (-freeze-with-meta! x-val out)))
+            6 (do (write-id out id-cached-6) (when first-occurance? (-freeze-with-meta! x-val out)))
+            7 (do (write-id out id-cached-7) (when first-occurance? (-freeze-with-meta! x-val out)))
 
-            (do (write-id       out id-cached-sm)
-                (write-sm-count out idx)
-                (when first-occurance? (-freeze-with-meta! x-val out))))
+            (do
+              (write-id       out id-cached-sm)
+              (write-sm-count out idx)
+              (when first-occurance? (-freeze-with-meta! x-val out))))
 
           (md-count? idx)
-          (do (write-id       out id-cached-md)
-              (write-md-count out idx)
-              (when first-occurance? (-freeze-with-meta! x-val out)))
+          (do
+            (write-id       out id-cached-md)
+            (write-md-count out idx)
+            (when first-occurance? (-freeze-with-meta! x-val out)))
 
           :else
           ;; (throw (ex-info "Max cache size exceeded" {:idx idx}))
@@ -1135,6 +1139,9 @@
         id-cached-2    (thaw-cached 2 in)
         id-cached-3    (thaw-cached 3 in)
         id-cached-4    (thaw-cached 4 in)
+        id-cached-5    (thaw-cached 5 in)
+        id-cached-6    (thaw-cached 6 in)
+        id-cached-7    (thaw-cached 7 in)
         id-cached-sm   (thaw-cached (read-sm-count in) in)
         id-cached-md   (thaw-cached (read-md-count in) in)
 
