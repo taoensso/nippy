@@ -1,7 +1,7 @@
 (ns taoensso.nippy.benchmarks
   (:require [clojure.data.fressian :as fressian]
             [taoensso.encore       :as enc]
-            [taoensso.nippy :as nippy :refer (freeze thaw)]))
+            [taoensso.nippy :as nippy :refer [freeze thaw]]))
 
 (def data #_22 nippy/stress-data-benchable)
 

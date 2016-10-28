@@ -1,23 +1,26 @@
 (ns taoensso.nippy
   "High-performance serialization library for Clojure"
   {:author "Peter Taoussanis (@ptaoussanis)"}
-  (:require [taoensso.encore :as enc :refer (cond*)]
-            [taoensso.nippy
-             (utils       :as utils)
-             (compression :as compression)
-             (encryption  :as encryption)])
-  (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
-             DataOutputStream Serializable ObjectOutputStream ObjectInputStream
-             DataOutput DataInput]
-            [java.lang.reflect Method]
-            ;; [java.net URI] ; TODO
-            [java.util Date UUID]
-            [java.util.regex Pattern]
-            [clojure.lang Keyword Symbol BigInt Ratio
-             APersistentMap APersistentVector APersistentSet
-             IPersistentMap ; IPersistentVector IPersistentSet IPersistentList
-             PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
-             LazySeq IRecord ISeq]))
+  (:require
+   [taoensso.encore :as enc :refer [cond*]]
+   [taoensso.nippy
+    [utils       :as utils]
+    [compression :as compression]
+    [encryption  :as encryption]])
+
+  (:import
+   [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
+    DataOutputStream Serializable ObjectOutputStream ObjectInputStream
+    DataOutput DataInput]
+   [java.lang.reflect Method]
+   ;; [java.net URI] ; TODO
+   [java.util Date UUID]
+   [java.util.regex Pattern]
+   [clojure.lang Keyword Symbol BigInt Ratio
+    APersistentMap APersistentVector APersistentSet
+    IPersistentMap ; IPersistentVector IPersistentSet IPersistentList
+    PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
+    LazySeq IRecord ISeq]))
 
 (if (vector? enc/encore-version)
   (enc/assert-min-encore-version [2 67 1])
