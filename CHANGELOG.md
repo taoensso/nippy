@@ -1,5 +1,16 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.13.0-RC1 / 2016 Dec 17
+
+```clojure
+[com.taoensso/nippy "2.13.0-RC1"]
+```
+
+> This should be a minor, non-breaking release.
+
+* [#85] *Impl*: Lazily create LZ4 instance, fixes issue with Google App Engine
+* *Impl*: Bump 1-byte cacheable types from 5->8
+
 ## v2.12.2 / 2016 Aug 23
 
 ```clojure
