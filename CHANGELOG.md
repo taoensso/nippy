@@ -9,7 +9,7 @@
 > This is a minor, non-breaking maintenance release.
 
 * [#91] **New**: Add `freeze-to-file` and `thaw-from-file` utils (@Engelberg)
-* [#85] *Impl*: Lazily create LZ4 instance, fixes issue with Google App Engine
+* [#85] **Impl**: Lazily create LZ4 instance, fixes issue with Google App Engine
 * **Impl**: Bump 1-byte cacheable types from 5->8
 
 ## v2.13.0-RC1 / 2016 Dec 17
