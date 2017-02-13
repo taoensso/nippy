@@ -2,6 +2,7 @@
   "High-performance serialization library for Clojure"
   {:author "Peter Taoussanis (@ptaoussanis)"}
   (:require
+   [clojure.java.io :as jio]
    [taoensso.encore :as enc :refer [cond*]]
    [taoensso.nippy
     [utils       :as utils]
@@ -1569,6 +1570,42 @@
 (comment
   (inspect-ba (freeze "hello"))
   (seq (:data-ba (inspect-ba (freeze "hello")))))
+
+(defn freeze-to-file
+  "Convenience util: writes `(freeze x freeze-opts)` byte array to
+  `(clojure.java.io/file file)` and returns the byte array.
+
+  (freeze-to-file \"my-filename.npy\" my-val) => Serialized byte array"
+
+  ([file x            ] (freeze-to-file file x nil))
+  ([file x freeze-opts]
+   (let [^bytes ba (freeze x freeze-opts)]
+     (with-open [out (jio/output-stream (jio/file file))]
+       (.write out ba))
+     ba)))
+
+(defn thaw-from-file
+  "Convenience util: returns `(thaw ba thaw-opts)` Clojure value for the
+  byte array read from `(clojure.java.io/file file)`.
+
+  (thaw-from-file \"my-filename.npy\") => Deserialized Clojure value
+
+  To thaw from a resource on classpath (e.g in Leiningen `resources` dir):
+    (thaw-from-file (clojure.java.io/resource \"my-resource-name.npy\"))"
+
+  ([file          ] (thaw-from-file file nil))
+  ([file thaw-opts]
+   (let [file (jio/file file),
+         ba (byte-array (.length file))]
+     (with-open [in (DataInputStream. (jio/input-stream file))]
+       (.readFully in ba))
+
+     (thaw ba thaw-opts))))
+
+(comment
+  (freeze-to-file "foo.npy" "hello, world!")
+  (thaw-from-file "foo.npy")
+  (thaw-from-file (jio/resource "foo.npy")))
 
 ;;;; Deprecated
 
