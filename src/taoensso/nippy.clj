@@ -1097,7 +1097,7 @@
 (defn- read-record [in class-name]
   (let [content (thaw-from-in! in)]
     (try
-      (let [class  (Class/forName class-name)
+      (let [class  (clojure.lang.RT/classForName class-name)
             method (.getMethod class "create" class-method-sig)]
         (.invoke method class (into-array Object [content])))
       (catch Exception e
