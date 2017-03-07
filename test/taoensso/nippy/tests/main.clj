@@ -232,6 +232,15 @@
             (range 50))]
       (every? deref futures))))
 
+;;;; Redefs
+
+(defrecord MyFoo [] Object (toString [_] "v1"))
+(str (thaw (freeze (MyFoo.))))
+(defrecord MyFoo [] Object (toString [_] "v2"))
+
+(deftest _redefs
+  (is (= (str (thaw (freeze (MyFoo.)))) "v2")))
+
 ;;;; Benchmarks
 
 (deftest _benchmarks
