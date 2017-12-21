@@ -1426,14 +1426,14 @@
     (.writeUTF [data-output] (:data x)))"
   [type custom-type-id [x out] & body]
   (assert-custom-type-id custom-type-id)
-  `(extend-type ~type IFreezable1
-     (~'-freeze-without-meta! [~x ~(with-meta out {:tag 'java.io.DataOutput})]
-       (if-not ~(keyword? custom-type-id)
+  `(extend-type ~type nippy/IFreezable1
+     (-freeze-without-meta! [~x ~(with-meta out {:tag 'java.io.DataOutput})]
+       ~(if-not (keyword? custom-type-id)
          ;; Unprefixed [cust byte id][payload]:
-         (write-id ~out ~(coerce-custom-type-id custom-type-id))
+         `(write-id ~out ~(coerce-custom-type-id custom-type-id))
          ;; Prefixed [const byte id][cust hash id][payload]:
-         (do (write-id    ~out ~id-prefixed-custom)
-             (.writeShort ~out ~(coerce-custom-type-id custom-type-id))))
+         `(do (nippy/write-id    ~out ~id-prefixed-custom)
+              (.writeShort ~out ~(coerce-custom-type-id custom-type-id))))
       ~@body)))
 
 (defmacro extend-thaw
