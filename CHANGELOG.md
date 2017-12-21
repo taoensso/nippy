@@ -1,5 +1,17 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.14.0 / 2017 Dec 21
+
+```clojure
+[com.taoensso/nippy "2.14.0"]
+```
+
+> This is a minor, non-breaking maintenance release.
+
+* **Impl**: Update a number of dependencies
+* [#104] **Impl**: Micro-optimization: remove unnecessary runtime 'if' in extend-freeze macro (@scramjet)
+* [#93] **Impl**: Pickup record redefinitions at REPL, etc. (@smee)
+
 ## v2.13.0 / 2017 Feb 13
 
 ```clojure

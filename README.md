@@ -4,7 +4,8 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "2.13.0"] ; Please see CHANGELOG for details
+[com.taoensso/nippy "2.13.0"] ; Mature (most stable)
+[com.taoensso/nippy "2.14.0"] ; Latest (please see CHANGELOG for details)
 ```
 
 > Please consider helping to [support my continued open-source Clojure/Script work]? 
