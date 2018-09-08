@@ -1,5 +1,16 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.15.0-alpha1 / 2018 Sep 8
+
+```clojure
+[com.taoensso/nippy "2.15.0-alpha1"]
+```
+
+> This is is a maintenance release, and should be non-breaking but **please report any problems** - thanks!
+
+* **Impl**: Update a number of dependencies
+* **Impl**: Refactor encryption utils for extra flexibility in future
+
 ## v2.14.0 / 2017 Dec 21
 
 ```clojure
