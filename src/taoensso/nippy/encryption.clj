@@ -2,6 +2,10 @@
   "Simple no-nonsense crypto with reasonable defaults"
   (:require [taoensso.encore :as enc]))
 
+;; Note that AES128 may be preferable to AES256 due to known attack
+;; vectors specific to AES256, Ref. https://www.schneier.com/blog/archives/2009/07/another_new_aes.html
+;; Or, for a counter argument, Ref. https://blog.agilebits.com/2013/03/09/guess-why-were-moving-to-256-bit-aes-keys/
+
 ;;;; Interface
 
 (def standard-header-ids "These'll support :auto thaw" #{:aes128-sha512})
@@ -13,20 +17,22 @@
 
 ;;;; Default digests, ciphers, etc.
 
-(def ^:private aes128-cipher* (enc/thread-local-proxy (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
-(def ^:private sha512-md*     (enc/thread-local-proxy (java.security.MessageDigest/getInstance "SHA-512")))
-(def ^:private prng*          (enc/thread-local-proxy (java.security.SecureRandom/getInstance "SHA1PRNG")))
+;; TODO Prefer GCM > CBC ("AES/GCM/NoPadding", Ref. https://goo.gl/jpZoj8
+(def ^:private aes-cipher* (enc/thread-local-proxy (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
+(def ^:private sha512-md*  (enc/thread-local-proxy (java.security.MessageDigest/getInstance "SHA-512")))
+(def ^:private prng*       (enc/thread-local-proxy (java.security.SecureRandom/getInstance "SHA1PRNG")))
 
-(defn- aes128-cipher ^javax.crypto.Cipher         [] (.get ^ThreadLocal aes128-cipher*))
-(defn- sha512-md     ^java.security.MessageDigest [] (.get ^ThreadLocal sha512-md*))
-(defn- prng          ^java.security.SecureRandom  [] (.get ^ThreadLocal prng*))
+(defn- aes-cipher ^javax.crypto.Cipher         [] (.get ^ThreadLocal aes-cipher*))
+(defn- sha512-md  ^java.security.MessageDigest [] (.get ^ThreadLocal sha512-md*))
+(defn- prng       ^java.security.SecureRandom  [] (.get ^ThreadLocal prng*))
 
-(def ^:private ^:const aes128-block-size (.getBlockSize (aes128-cipher)))
-(def ^:private ^:const salt-size         aes128-block-size)
+(def ^:private ^:const aes-block-size (.getBlockSize (aes-cipher)))
+(def ^:private ^:const aes-iv-size    aes-block-size #_12) ; 12 for GCM, Ref. https://goo.gl/c8mhqp
+(def ^:private ^:const salt-size      16)
 
 (defn- rand-bytes [size] (let [ba (byte-array size)] (.nextBytes (prng) ba) ba))
 
-;;;; Default key-gen
+;;;; Default key derivation (salt+password -> key)
 
 (defn- sha512-key
   "SHA512-based key generator. Good JVM availability without extra dependencies
@@ -40,7 +46,7 @@
          ^bytes ba (enc/reduce-n (fn [acc in] (.digest md acc)) init-ba n)]
 
      (-> ba
-       (java.util.Arrays/copyOf aes128-block-size)
+       (java.util.Arrays/copyOf aes-block-size)
        (javax.crypto.spec.SecretKeySpec. "AES")))))
 
 (comment
@@ -73,39 +79,41 @@
 (deftype AES128Encryptor [header-id keyfn cached-keyfn]
   IEncryptor
   (header-id [_] header-id)
-  (encrypt   [_ typed-pwd data-ba]
+  (encrypt   [_ typed-pwd ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
           salt?      (identical? type :salted)
-          iv-ba      (rand-bytes aes128-block-size)
+          iv-ba      (rand-bytes aes-iv-size)
           salt-ba    (when salt? (rand-bytes salt-size))
           prefix-ba  (if   salt? (enc/ba-concat iv-ba salt-ba) iv-ba)
-          key        (if   salt?
+          key-spec   (if   salt?
                        (keyfn        salt-ba pwd)
                        (cached-keyfn salt-ba pwd))
-          iv         (javax.crypto.spec.IvParameterSpec. iv-ba)
-          cipher     (aes128-cipher)]
+          ;; param-spec (javax.crypto.spec.GCMParameterSpec. 128 iv-ba)
+          param-spec (javax.crypto.spec.IvParameterSpec. iv-ba)
+          cipher     (aes-cipher)]
 
       (.init cipher javax.crypto.Cipher/ENCRYPT_MODE
-        ^javax.crypto.spec.SecretKeySpec key iv)
-      (enc/ba-concat prefix-ba (.doFinal cipher data-ba))))
+        ^javax.crypto.spec.SecretKeySpec key-spec param-spec)
+      (enc/ba-concat prefix-ba (.doFinal cipher ba))))
 
   (decrypt [_ typed-pwd ba]
     (let [[type pwd]          (destructure-typed-pwd typed-pwd)
           salt?               (identical? type :salted)
-          prefix-size         (+ aes128-block-size (if salt? salt-size 0))
+          prefix-size         (+ aes-iv-size (if salt? salt-size 0))
           [prefix-ba data-ba] (enc/ba-split ba prefix-size)
           [iv-ba salt-ba]     (if salt?
-                                (enc/ba-split prefix-ba aes128-block-size)
+                                (enc/ba-split prefix-ba aes-iv-size)
                                 [prefix-ba nil])
-          key (if salt?
-                (keyfn        salt-ba pwd)
-                (cached-keyfn salt-ba pwd))
+          key-spec (if salt?
+                     (keyfn        salt-ba pwd)
+                     (cached-keyfn salt-ba pwd))
 
-          iv     (javax.crypto.spec.IvParameterSpec. iv-ba)
-          cipher (aes128-cipher)]
+          ;; param-spec (javax.crypto.spec.GCMParameterSpec. 128 iv-ba)
+          param-spec (javax.crypto.spec.IvParameterSpec. iv-ba)
+          cipher     (aes-cipher)]
 
       (.init cipher javax.crypto.Cipher/DECRYPT_MODE
-        ^javax.crypto.spec.SecretKeySpec key iv)
+        ^javax.crypto.spec.SecretKeySpec key-spec param-spec)
       (.doFinal cipher data-ba))))
 
 (def aes128-encryptor
