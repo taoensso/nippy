@@ -14,10 +14,10 @@
 
   :dependencies
   [[org.clojure/clojure      "1.5.1"]
-   [org.clojure/tools.reader "1.1.1"]
-   [com.taoensso/encore      "2.93.0"]
+   [org.clojure/tools.reader "1.3.0"]
+   [com.taoensso/encore      "2.98.0"]
    [org.iq80.snappy/snappy   "0.4"]
-   [org.tukaani/xz           "1.6"]
+   [org.tukaani/xz           "1.8"]
    [net.jpountz.lz4/lz4      "1.3"]]
 
   :profiles
@@ -31,12 +31,12 @@
    :test {:jvm-opts     ["-Xms1024m" "-Xmx2048m"]
           :dependencies [[org.clojure/test.check        "0.9.0"]
                          [org.clojure/data.fressian     "0.2.1"]
-                         [org.xerial.snappy/snappy-java "1.1.7.1"]]}
+                         [org.xerial.snappy/snappy-java "1.1.7.2"]]}
    :dev [:1.9 :test :server-jvm
          {:plugins
           [[lein-pprint  "1.2.0"]
            [lein-ancient "0.6.15"]
-           [lein-codox   "0.10.3"]]}]}
+           [lein-codox   "0.10.4"]]}]}
 
   :test-paths ["test" "src"]
 
