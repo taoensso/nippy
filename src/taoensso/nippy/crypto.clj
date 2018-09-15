@@ -18,8 +18,10 @@
     "Favours security over performance. May block while waiting on system entropy!"
     ^java.security.SecureRandom []
     (let [rng ^java.security.SecureRandom (.get ^ThreadLocal prng*)]
-      ;; For additional security, occasionally supplement current seed, Ref. https://goo.gl/MPM91w:
-      (when (< (.nextDouble rng) 1.0E-4) (.setSeed rng (.generateSeed rng 8)))
+      ;; Occasionally supplement current seed for extra security.
+      ;; Otherwise an attacker could *theoretically* observe large amounts of
+      ;; prng output to determine initial seed, Ref. https://goo.gl/MPM91w
+      (when (< (.nextDouble rng) 2.44140625E-4) (.setSeed rng (.generateSeed rng 8)))
       rng))
 
   (defn rand-bytes  "Uses `prng`" ^bytes  [size] (let [ba (byte-array size)] (.nextBytes    (prng) ba) ba))
