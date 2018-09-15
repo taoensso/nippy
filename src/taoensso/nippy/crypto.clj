@@ -30,31 +30,39 @@
 
 (comment (seq (rand-bytes 16)))
 
+;;;; Hashing
+
+(def ^:private sha256-md* (enc/thread-local-proxy (java.security.MessageDigest/getInstance "SHA-256")))
+(def ^:private sha512-md* (enc/thread-local-proxy (java.security.MessageDigest/getInstance "SHA-512")))
+(defn  sha256-md ^java.security.MessageDigest [] (.get ^ThreadLocal sha256-md*))
+(defn  sha512-md ^java.security.MessageDigest [] (.get ^ThreadLocal sha512-md*))
+(defn  sha256-ba ^bytes [ba] (.digest (sha256-md) ba))
+(defn  sha512-ba ^bytes [ba] (.digest (sha512-md) ba))
+
+(enc/compile-if clojure.lang.Murmur3
+  (defn murmur3 [^String s] (clojure.lang.Murmur3/hashUnencodedChars s))
+  nil)
+
 ;;;; Key derivation (salt+password -> key / hash)
 ;; (fn [salt-ba utf8]) -> bytes
 
 ;; (defn  ba->hex [^bytes ba] (org.apache.commons.codec.binary.Hex/encodeHexString ba))
-(defn  take-ba [n ^bytes ba] (java.util.Arrays/copyOf ba ^int n)) ; Pads if ba too small
-(defn utf8->ba [^String s] (.getBytes s "UTF-8"))
+(defn  take-ba ^bytes [n ^bytes ba] (java.util.Arrays/copyOf ba ^int n)) ; Pads if ba too small
+(defn utf8->ba ^bytes [^String s] (.getBytes s "UTF-8"))
+(defn add-salt ^bytes [?salt-ba ba] (if ?salt-ba (enc/ba-concat ?salt-ba ba) ba))
 
-(def ^:private sha512-md* (enc/thread-local-proxy (java.security.MessageDigest/getInstance "SHA-512")))
-(defn  sha512-md ^java.security.MessageDigest [] (.get ^ThreadLocal sha512-md*))
-(defn  sha512-ba
+(defn sha512-key-ba
   "SHA512-based key generator. Good JVM availability without extra dependencies
   (PBKDF2, bcrypt, scrypt, etc.). Decent security when using many rounds."
-  ([salt-ba         utf8               ] (sha512-ba salt-ba utf8 (* Short/MAX_VALUE 5)))
-  ([salt-ba ^String utf8 ^long n-rounds]
-   (let [md (sha512-md)
-         ba (let [pwd-ba (.getBytes utf8 "UTF-8")]
-              (if salt-ba
-                (enc/ba-concat salt-ba pwd-ba)
-                pwd-ba))]
-
+  (^bytes [?salt-ba         utf8               ] (sha512-key-ba ?salt-ba utf8 (* Short/MAX_VALUE 5)))
+  (^bytes [?salt-ba ^String utf8 ^long n-rounds]
+   (let [ba (add-salt ?salt-ba (utf8->ba utf8))
+         md (sha512-md)]
      (enc/reduce-n (fn [acc in] (.digest md acc)) ba n-rounds))))
 
 (comment
-  (count (seq (sha512-ba (utf8->ba "salt") "password" 1)))
-  (count (seq (sha512-ba nil               "password" 1))))
+  (count (seq (sha512-key-ba (utf8->ba "salt") "password" 1)))
+  (count (seq (sha512-key-ba nil               "password" 1))))
 
 ;;;; Crypto
 
@@ -104,7 +112,7 @@
     (.init cipher javax.crypto.Cipher/ENCRYPT_MODE key-spec param-spec)
     (enc/ba-concat prefix-ba (.doFinal cipher ba))))
 
-(comment (encrypt {:?salt-ba nil :key-ba (take-ba 16 (sha512-ba nil "pwd")) :ba (utf8->ba "data")}))
+(comment (encrypt {:?salt-ba nil :key-ba (take-ba 16 (sha512-key-ba nil "pwd")) :ba (utf8->ba "data")}))
 
 (defn decrypt
   [{:keys [cipher-kit salt-size salt->key-fn ba]
@@ -127,20 +135,20 @@
 
 (comment
   (do
-    (defn sha512-16 [?salt-ba pwd] (take-ba 16 (sha512-ba ?salt-ba pwd)))
+    (defn sha512-k16 [?salt-ba pwd] (take-ba 16 (sha512-key-ba ?salt-ba pwd)))
     (defn roundtrip [kit ?salt-ba key-ba key-fn]
       (let [salt-size (count ?salt-ba)
             encr (encrypt {:cipher-kit kit :?salt-ba ?salt-ba :key-ba key-ba :ba (utf8->ba "data")})
             decr (decrypt {:cipher-kit kit :salt-size salt-size :salt->key-fn key-fn :ba encr})]
         (String. ^bytes decr "UTF-8")))
 
-    [(let [s (rand-bytes 16)] (roundtrip cipher-kit-aes-gcm s (sha512-16 s "pwd") #(sha512-16 % "pwd")))
-     (let [s             nil] (roundtrip cipher-kit-aes-gcm s (sha512-16 s "pwd") #(sha512-16 % "pwd")))
-     (let [s (rand-bytes 16)] (roundtrip cipher-kit-aes-cbc s (sha512-16 s "pwd") #(sha512-16 % "pwd")))
-     (let [s             nil] (roundtrip cipher-kit-aes-cbc s (sha512-16 s "pwd") #(sha512-16 % "pwd")))])
+    [(let [s (rand-bytes 16)] (roundtrip cipher-kit-aes-gcm s (sha512-k16 s "pwd") #(sha512-16 % "pwd")))
+     (let [s             nil] (roundtrip cipher-kit-aes-gcm s (sha512-k16 s "pwd") #(sha512-16 % "pwd")))
+     (let [s (rand-bytes 16)] (roundtrip cipher-kit-aes-cbc s (sha512-k16 s "pwd") #(sha512-16 % "pwd")))
+     (let [s             nil] (roundtrip cipher-kit-aes-cbc s (sha512-k16 s "pwd") #(sha512-16 % "pwd")))])
 
   (enc/qb 10
     (let [s (rand-bytes 16)]
-      (roundtrip cipher-kit-aes-gcm s (sha512-16 s "pwd") #(sha512-16 % "pwd"))))
+      (roundtrip cipher-kit-aes-gcm s (sha512-k16 s "pwd") #(sha512-k16 % "pwd"))))
   ;; 2394.89
   )
