@@ -10,9 +10,23 @@
 ;;;; Randomness
 
 (do
-  (def ^:private prng* (enc/thread-local-proxy (java.security.SecureRandom/getInstance "SHA1PRNG")))
-  (defn prng ^java.security.SecureRandom  [] (.get ^ThreadLocal prng*))
-  (defn rand-bytes [size] (let [ba (byte-array size)] (.nextBytes (prng) ba) ba)))
+  (enc/compile-if (fn [] (java.security.SecureRandom/getInstanceStrong)) ; Java 8+, blocking
+    (def ^:private prng* (enc/thread-local-proxy (java.security.SecureRandom/getInstanceStrong)))
+    (def ^:private prng* (enc/thread-local-proxy (java.security.SecureRandom/getInstance "SHA1PRNG"))))
+
+  (defn prng
+    "Favours security over performance. May block while waiting on system entropy!"
+    ^java.security.SecureRandom []
+    (let [rng ^java.security.SecureRandom (.get ^ThreadLocal prng*)]
+      ;; For additional security, occasionally supplement current seed, Ref. https://goo.gl/MPM91w:
+      (when (< (.nextDouble rng) 1.0E-4) (.setSeed rng (.generateSeed rng 8)))
+      rng))
+
+  (defn rand-bytes  "Uses `prng`" ^bytes  [size] (let [ba (byte-array size)] (.nextBytes    (prng) ba) ba))
+  (defn rand-double "Uses `prng`" ^double []                                 (.nextDouble   (prng)))
+  (defn rand-long   "Uses `prng`" ^long   []                                 (.nextLong     (prng)))
+  (defn rand-gauss  "Uses `prng`" ^double []                                 (.nextGaussian (prng)))
+  (defn rand-bool   "Uses `prng`"         []                                 (.nextBoolean  (prng))))
 
 (comment (seq (rand-bytes 16)))
 
@@ -76,9 +90,12 @@
 
 ;;  Output bytes: [         <iv>            <?salt> <encrypted>]
 ;; Could also do: [<iv-len> <iv> <salt-len> <?salt> <encrypted>]
-(defn encrypt [cipher-kit ?salt-ba key-ba ba]
+(defn encrypt
+  [{:keys [cipher-kit ?salt-ba key-ba ba rand-bytes-fn]
+    :or   {cipher-kit    cipher-kit-aes-gcm
+           rand-bytes-fn rand-bytes}}]
   (let [iv-size     (long (get-iv-size cipher-kit))
-        iv-ba       (rand-bytes iv-size)
+        iv-ba       (rand-bytes-fn iv-size)
         prefix-ba   (if ?salt-ba (enc/ba-concat iv-ba ?salt-ba) iv-ba)
         key-spec    (get-key-spec   cipher-kit key-ba)
         param-spec  (get-param-spec cipher-kit iv-ba)
@@ -87,9 +104,11 @@
     (.init cipher javax.crypto.Cipher/ENCRYPT_MODE key-spec param-spec)
     (enc/ba-concat prefix-ba (.doFinal cipher ba))))
 
-(comment (encrypt cipher-kit-aes-gcm nil (take-ba 16 (sha512-ba nil "pwd")) (utf8->ba "data")))
+(comment (encrypt {:?salt-ba nil :key-ba (take-ba 16 (sha512-ba nil "pwd")) :ba (utf8->ba "data")}))
 
-(defn decrypt [cipher-kit salt-size salt->key-fn ba]
+(defn decrypt
+  [{:keys [cipher-kit salt-size salt->key-fn ba]
+    :or   {cipher-kit cipher-kit-aes-gcm}}]
   (let [salt-size           (long salt-size)
         iv-size             (long (get-iv-size cipher-kit))
         prefix-size         (+ iv-size salt-size)
@@ -111,8 +130,8 @@
     (defn sha512-16 [?salt-ba pwd] (take-ba 16 (sha512-ba ?salt-ba pwd)))
     (defn roundtrip [kit ?salt-ba key-ba key-fn]
       (let [salt-size (count ?salt-ba)
-            encr (encrypt kit ?salt-ba  key-ba (utf8->ba "data"))
-            decr (decrypt kit salt-size key-fn encr)]
+            encr (encrypt {:cipher-kit kit :?salt-ba ?salt-ba :key-ba key-ba :ba (utf8->ba "data")})
+            decr (decrypt {:cipher-kit kit :salt-size salt-size :salt->key-fn key-fn :ba encr})]
         (String. ^bytes decr "UTF-8")))
 
     [(let [s (rand-bytes 16)] (roundtrip cipher-kit-aes-gcm s (sha512-16 s "pwd") #(sha512-16 % "pwd")))
@@ -121,7 +140,7 @@
      (let [s             nil] (roundtrip cipher-kit-aes-cbc s (sha512-16 s "pwd") #(sha512-16 % "pwd")))])
 
   (enc/qb 10
-    (roundtrip "foo" {})
-    (roundtrip "foo" {:cipher-kit cipher-kit-aes-cbc}))
-  ;; [2348.05 2332.25]
+    (let [s (rand-bytes 16)]
+      (roundtrip cipher-kit-aes-gcm s (sha512-16 s "pwd") #(sha512-16 % "pwd"))))
+  ;; 2394.89
   )

@@ -41,8 +41,11 @@
               (salted-key-fn salt-ba pwd)
               (cached-key-fn nil     pwd)))]
 
-      (crypto/encrypt crypto/cipher-kit-aes-cbc
-        ?salt-ba key-ba ba)))
+      (crypto/encrypt
+        {:cipher-kit crypto/cipher-kit-aes-cbc
+         :?salt-ba   ?salt-ba
+         :key-ba     key-ba
+         :ba         ba})))
 
   (decrypt [_ typed-pwd ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
@@ -52,8 +55,11 @@
             #(salted-key-fn % pwd)
             #(cached-key-fn % pwd))]
 
-      (crypto/decrypt crypto/cipher-kit-aes-cbc
-        (if salt? 16 0) salt->key-fn ba))))
+      (crypto/decrypt
+        {:cipher-kit   crypto/cipher-kit-aes-cbc
+         :salt-size    (if salt? 16 0)
+         :salt->key-fn salt->key-fn
+         :ba           ba}))))
 
 (def aes128-encryptor
   "Default 128bit AES encryptor with many-round SHA-512 key-gen.
