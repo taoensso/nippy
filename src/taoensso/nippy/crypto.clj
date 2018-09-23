@@ -1,6 +1,7 @@
 (ns taoensso.nippy.crypto
   "Low-level crypto utils.
   Private & alpha, very likely to change!"
+  (:refer-clojure :exclude [rand-nth])
   (:require [taoensso.encore :as enc]))
 
 ;; Note that AES128 may be preferable to AES256 due to known attack
@@ -28,7 +29,9 @@
   (defn rand-double "Uses `prng`" ^double []                                 (.nextDouble   (prng)))
   (defn rand-long   "Uses `prng`" ^long   []                                 (.nextLong     (prng)))
   (defn rand-gauss  "Uses `prng`" ^double []                                 (.nextGaussian (prng)))
-  (defn rand-bool   "Uses `prng`"         []                                 (.nextBoolean  (prng))))
+  (defn rand-bool   "Uses `prng`"         []                                 (.nextBoolean  (prng)))
+  (defn rand-nth    "Uses `prng`"
+    [coll] (nth coll (int (* (rand-double) (count coll))))))
 
 (comment (seq (rand-bytes 16)))
 
