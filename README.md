@@ -5,7 +5,7 @@
 
 ```clojure
 [com.taoensso/nippy "2.14.0"]        ; Stable
-[com.taoensso/nippy "2.15.0-alpha2"] ; Dev, see CHANGELOG for details
+[com.taoensso/nippy "2.15.0-alpha3"] ; Dev, see CHANGELOG for details
 ```
 
 > Please consider helping to [support my continued open-source Clojure/Script work]? 
