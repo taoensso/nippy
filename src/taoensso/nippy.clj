@@ -14,7 +14,7 @@
     DataOutputStream Serializable ObjectOutputStream ObjectInputStream
     DataOutput DataInput]
    [java.lang.reflect Method]
-   ;; [java.net URI] ; TODO
+   [java.net URI]
    [java.util Date UUID]
    [java.util.regex Pattern]
    [clojure.lang Keyword Symbol BigInt Ratio
@@ -125,7 +125,7 @@
    57  :sym-lg
 
    58  :regex
-   71  :uri ; TODO Implement?
+   71  :uri
 
    53  :bytes-0
    7   :bytes-sm
@@ -860,6 +860,10 @@
   (write-biginteger out (.denominator x)))
 
 (id-freezer Date id-date (.writeLong out (.getTime x)))
+
+(id-freezer URI id-uri
+  (write-str out (.toString x)))
+
 (id-freezer UUID id-uuid
   (.writeLong out (.getMostSignificantBits  x))
   (.writeLong out (.getLeastSignificantBits x)))
@@ -1214,6 +1218,7 @@
                          (read-biginteger in))
 
         id-date        (Date. (.readLong in))
+        id-uri         (URI. (thaw-from-in! in))
         id-uuid        (UUID. (.readLong in) (.readLong in))
 
         ;; Deprecated ------------------------------------------------------
@@ -1523,6 +1528,7 @@
    :bigdec       (bigdec 3.1415926535897932384626433832795)
 
    :ratio        22/7
+   :uri          (URI. "https://clojure.org/reference/data_structures")
    :uuid         (java.util.UUID/randomUUID)
    :date         (java.util.Date.)
 
