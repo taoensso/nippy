@@ -13,7 +13,7 @@
    [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
     DataOutputStream Serializable ObjectOutputStream ObjectInputStream
     DataOutput DataInput]
-   [java.lang.reflect Method]
+   [java.lang.reflect Method Field Constructor]
    ;; [java.net URI] ; TODO
    [java.util Date UUID]
    [java.util.regex Pattern]
@@ -21,7 +21,7 @@
     APersistentMap APersistentVector APersistentSet
     IPersistentMap ; IPersistentVector IPersistentSet IPersistentList
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
-    LazySeq IRecord ISeq]))
+    LazySeq IRecord ISeq IType]))
 
 (if (vector? enc/encore-version)
   (enc/assert-min-encore-version [2 67 1])
@@ -106,7 +106,7 @@
    49  :record-md
    80  :record-lg ; Used only for back-compatible thawing
 
-   81  :type ; TODO Implement?
+   81  :type
 
    3   :nil
    8   :true
@@ -901,6 +901,17 @@
           (write-bytes-md out cname-ba)))
 
     (-freeze-without-meta! (into {} x) out)))
+(freezer IType
+   (let [aclass (class x)
+         cname  (.getName aclass)]
+     (write-id out id-type)
+     (-freeze-without-meta! cname out)
+     (let [basis-method (.getMethod aclass "getBasis" nil)
+           basis        (.invoke basis-method nil nil)]
+       (doseq [b basis]
+         (let [^Field cfield (.getField aclass (name b))]
+           (let [fvalue (.get cfield x)]
+             (-freeze-without-meta! fvalue out)))))))
 
 (freezer Object
   (when-debug (println (str "freeze-fallback: " (type x))))
@@ -1105,6 +1116,23 @@
          :throwable e
          :nippy/unthawable {:class-name class-name :content content}}))))
 
+(defn- read-type [in class-name]
+  (try
+    (let [aclass            (clojure.lang.RT/classForName class-name)
+          basis-method      (.getMethod aclass "getBasis" nil)
+          basis             (.invoke basis-method nil nil)
+          cvalues           (object-array (count basis))
+          ctors             (.getConstructors aclass)
+          ^Constructor ctor (aget ctors 0)                  ;; Is this safe?
+          ]
+      (dotimes [i (count basis)]
+        (aset cvalues i (thaw-from-in! in)))
+      (.newInstance ctor (into-array Object cvalues)))
+    (catch Exception e
+      {:type             :type
+       :throwable        e
+       :nippy/unthawable {:class-name class-name}})))
+
 (defn thaw-from-in!
   "Deserializes a frozen object from given DataInput to its original Clojure
   data type.
@@ -1127,6 +1155,8 @@
         id-record-sm       (read-record       in (read-utf8 in (read-sm-count in)))
         id-record-md       (read-record       in (read-utf8 in (read-md-count in)))
         id-record-lg       (read-record       in (read-utf8 in (read-lg-count in)))
+
+        id-type        (read-type in (thaw-from-in! in))
 
         id-nil         nil
         id-true        true
@@ -1469,6 +1499,9 @@
 ;;;; Stress data
 
 (defrecord StressRecord [data])
+(deftype StressType [data]
+  Object
+  (equals [a b] (= (.-data a) (.-data ^StressType b))))
 (def stress-data "Reference data used for tests & benchmarks"
   {:bytes     (byte-array [(byte 1) (byte 2) (byte 3)])
    :nil       nil
@@ -1527,6 +1560,7 @@
    :date         (java.util.Date.)
 
    :stress-record (StressRecord. "data")
+   :stress-type   (StressType. "data")
 
    ;; Serializable
    :throwable    (Throwable. "Yolo")
@@ -1542,7 +1576,7 @@
   be benching against"
   (dissoc stress-data
     :bytes :throwable :exception :ex-info :queue :queue-empty
-    :byte :stress-record :regex))
+    :byte :stress-record :stress-type :regex))
 
 ;;;; Tools
 
