@@ -905,17 +905,20 @@
           (write-bytes-md out cname-ba)))
 
     (-freeze-without-meta! (into {} x) out)))
+
 (freezer IType
    (let [aclass (class x)
          cname  (.getName aclass)]
-     (write-id out id-type)
-     (-freeze-without-meta! cname out)
+     (write-id  out id-type)
+     (write-str out cname)
      (let [basis-method (.getMethod aclass "getBasis" nil)
            basis        (.invoke basis-method nil nil)]
-       (doseq [b basis]
-         (let [^Field cfield (.getField aclass (name b))]
-           (let [fvalue (.get cfield x)]
-             (-freeze-without-meta! fvalue out)))))))
+       (-run!
+         (fn [b]
+           (let [^Field cfield (.getField aclass (name b))]
+             (let [fvalue (.get cfield x)]
+               (-freeze-without-meta! fvalue out))))
+         basis))))
 
 (freezer Object
   (when-debug (println (str "freeze-fallback: " (type x))))
@@ -1122,16 +1125,23 @@
 
 (defn- read-type [in class-name]
   (try
-    (let [aclass            (clojure.lang.RT/classForName class-name)
-          basis-method      (.getMethod aclass "getBasis" nil)
-          basis             (.invoke basis-method nil nil)
-          cvalues           (object-array (count basis))
-          ctors             (.getConstructors aclass)
-          ^Constructor ctor (aget ctors 0)                  ;; Is this safe?
-          ]
-      (dotimes [i (count basis)]
-        (aset cvalues i (thaw-from-in! in)))
-      (.newInstance ctor (into-array Object cvalues)))
+    (let [aclass (clojure.lang.RT/classForName class-name)
+          nbasis
+          (let [basis-method (.getMethod aclass "getBasis" nil)
+                basis        (.invoke basis-method nil nil)]
+            (count basis))
+
+          cvalues (object-array nbasis)]
+
+      (enc/reduce-n
+        (fn [_ i] (aset cvalues i (thaw-from-in! in)))
+        nil nbasis)
+
+      (let [ctors (.getConstructors aclass)
+            ^Constructor ctor (aget ctors 0) ; Impl. detail? Ref. https://goo.gl/XWmckR
+            ]
+        (.newInstance ctor cvalues)))
+
     (catch Exception e
       {:type             :type
        :throwable        e
