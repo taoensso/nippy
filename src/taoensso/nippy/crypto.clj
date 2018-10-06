@@ -59,9 +59,14 @@
 (defn sha512-key-ba
   "SHA512-based key generator. Good JVM availability without extra dependencies
   (PBKDF2, bcrypt, scrypt, etc.). Decent security when using many rounds."
-  (^bytes [?salt-ba         utf8               ] (sha512-key-ba ?salt-ba utf8 (* Short/MAX_VALUE 5)))
-  (^bytes [?salt-ba ^String utf8 ^long n-rounds]
-   (let [ba (add-salt ?salt-ba (utf8->ba utf8))
+  (^bytes [?salt-ba utf8-or-ba               ] (sha512-key-ba ?salt-ba utf8-or-ba (* Short/MAX_VALUE 5)))
+  (^bytes [?salt-ba utf8-or-ba ^long n-rounds]
+   (let [ba
+         (add-salt ?salt-ba
+           (if (string? utf8-or-ba)
+             (utf8->ba utf8-or-ba)
+             (enc/have enc/bytes? utf8-or-ba)))
+
          md (sha512-md)]
      (enc/reduce-n (fn [acc in] (.digest md acc)) ba n-rounds))))
 
