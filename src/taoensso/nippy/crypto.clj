@@ -12,25 +12,25 @@
 
 (do
   (enc/compile-if (fn [] (java.security.SecureRandom/getInstanceStrong)) ; Java 8+, blocking
-    (def ^:private prng* (enc/thread-local-proxy (java.security.SecureRandom/getInstanceStrong)))
-    (def ^:private prng* (enc/thread-local-proxy (java.security.SecureRandom/getInstance "SHA1PRNG"))))
+    (def ^:private srng* (enc/thread-local-proxy (java.security.SecureRandom/getInstanceStrong)))
+    (def ^:private srng* (enc/thread-local-proxy (java.security.SecureRandom/getInstance "SHA1SRNG"))))
 
-  (defn prng
+  (defn srng
     "Favours security over performance. May block while waiting on system entropy!"
     ^java.security.SecureRandom []
-    (let [rng ^java.security.SecureRandom (.get ^ThreadLocal prng*)]
+    (let [rng ^java.security.SecureRandom (.get ^ThreadLocal srng*)]
       ;; Occasionally supplement current seed for extra security.
       ;; Otherwise an attacker could *theoretically* observe large amounts of
-      ;; prng output to determine initial seed, Ref. https://goo.gl/MPM91w
+      ;; srng output to determine initial seed, Ref. https://goo.gl/MPM91w
       (when (< (.nextDouble rng) 2.44140625E-4) (.setSeed rng (.generateSeed rng 8)))
       rng))
 
-  (defn rand-bytes  "Uses `prng`" ^bytes  [size] (let [ba (byte-array size)] (.nextBytes    (prng) ba) ba))
-  (defn rand-double "Uses `prng`" ^double []                                 (.nextDouble   (prng)))
-  (defn rand-long   "Uses `prng`" ^long   []                                 (.nextLong     (prng)))
-  (defn rand-gauss  "Uses `prng`" ^double []                                 (.nextGaussian (prng)))
-  (defn rand-bool   "Uses `prng`"         []                                 (.nextBoolean  (prng)))
-  (defn rand-nth    "Uses `prng`"
+  (defn rand-bytes  "Uses `srng`" ^bytes  [size] (let [ba (byte-array size)] (.nextBytes    (srng) ba) ba))
+  (defn rand-double "Uses `srng`" ^double []                                 (.nextDouble   (srng)))
+  (defn rand-long   "Uses `srng`" ^long   []                                 (.nextLong     (srng)))
+  (defn rand-gauss  "Uses `srng`" ^double []                                 (.nextGaussian (srng)))
+  (defn rand-bool   "Uses `srng`"         []                                 (.nextBoolean  (srng)))
+  (defn rand-nth    "Uses `srng`"
     [coll] (nth coll (int (* (rand-double) (count coll))))))
 
 (comment (seq (rand-bytes 16)))
