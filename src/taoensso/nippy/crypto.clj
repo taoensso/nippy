@@ -109,7 +109,7 @@
 ;;  Output bytes: [         <iv>            <?salt> <encrypted>]
 ;; Could also do: [<iv-len> <iv> <salt-len> <?salt> <encrypted>]
 (defn encrypt
-  [{:keys [cipher-kit ?salt-ba key-ba ba rand-bytes-fn]
+  [{:keys [cipher-kit ?salt-ba key-ba plain-ba rand-bytes-fn]
     :or   {cipher-kit    cipher-kit-aes-gcm
            rand-bytes-fn rand-bytes}}]
   (let [iv-size     (long (get-iv-size cipher-kit))
@@ -120,20 +120,20 @@
         cipher      (get-cipher     cipher-kit)]
 
     (.init cipher javax.crypto.Cipher/ENCRYPT_MODE key-spec param-spec)
-    (enc/ba-concat prefix-ba (.doFinal cipher ba))))
+    (enc/ba-concat prefix-ba (.doFinal cipher plain-ba))))
 
-(comment (encrypt {:?salt-ba nil :key-ba (take-ba 16 (sha512-key-ba nil "pwd")) :ba (utf8->ba "data")}))
+(comment (encrypt {:?salt-ba nil :key-ba (take-ba 16 (sha512-key-ba nil "pwd")) :plain-ba (utf8->ba "data")}))
 
 (defn decrypt
-  [{:keys [cipher-kit salt-size salt->key-fn ba]
+  [{:keys [cipher-kit salt-size salt->key-fn enc-ba]
     :or   {cipher-kit cipher-kit-aes-gcm}}]
-  (let [salt-size           (long salt-size)
-        iv-size             (long (get-iv-size cipher-kit))
-        prefix-size         (+ iv-size salt-size)
-        [prefix-ba data-ba] (enc/ba-split ba prefix-size)
-        [iv-ba salt-ba]     (if (pos? salt-size)
-                              (enc/ba-split prefix-ba iv-size)
-                              [prefix-ba nil])
+  (let [salt-size          (long salt-size)
+        iv-size            (long (get-iv-size cipher-kit))
+        prefix-size        (+ iv-size salt-size)
+        [prefix-ba enc-ba] (enc/ba-split enc-ba prefix-size)
+        [iv-ba salt-ba]    (if (pos? salt-size)
+                             (enc/ba-split prefix-ba iv-size)
+                             [prefix-ba nil])
 
         key-ba     (salt->key-fn salt-ba)
         key-spec   (get-key-spec   cipher-kit key-ba)
@@ -141,21 +141,21 @@
         cipher     (get-cipher     cipher-kit)]
 
     (.init cipher javax.crypto.Cipher/DECRYPT_MODE key-spec param-spec)
-    (.doFinal cipher data-ba)))
+    (.doFinal cipher enc-ba)))
 
 (comment
   (do
     (defn sha512-k16 [?salt-ba pwd] (take-ba 16 (sha512-key-ba ?salt-ba pwd)))
     (defn roundtrip [kit ?salt-ba key-ba key-fn]
       (let [salt-size (count ?salt-ba)
-            encr (encrypt {:cipher-kit kit :?salt-ba ?salt-ba :key-ba key-ba :ba (utf8->ba "data")})
-            decr (decrypt {:cipher-kit kit :salt-size salt-size :salt->key-fn key-fn :ba encr})]
+            encr (encrypt {:cipher-kit kit :?salt-ba ?salt-ba :key-ba key-ba :plain-ba (utf8->ba "data")})
+            decr (decrypt {:cipher-kit kit :salt-size salt-size :salt->key-fn key-fn :enc-ba encr})]
         (String. ^bytes decr "UTF-8")))
 
-    [(let [s (rand-bytes 16)] (roundtrip cipher-kit-aes-gcm s (sha512-k16 s "pwd") #(sha512-16 % "pwd")))
-     (let [s             nil] (roundtrip cipher-kit-aes-gcm s (sha512-k16 s "pwd") #(sha512-16 % "pwd")))
-     (let [s (rand-bytes 16)] (roundtrip cipher-kit-aes-cbc s (sha512-k16 s "pwd") #(sha512-16 % "pwd")))
-     (let [s             nil] (roundtrip cipher-kit-aes-cbc s (sha512-k16 s "pwd") #(sha512-16 % "pwd")))])
+    [(let [s (rand-bytes 16)] (roundtrip cipher-kit-aes-gcm s (sha512-k16 s "pwd") #(sha512-k16 % "pwd")))
+     (let [s             nil] (roundtrip cipher-kit-aes-gcm s (sha512-k16 s "pwd") #(sha512-k16 % "pwd")))
+     (let [s (rand-bytes 16)] (roundtrip cipher-kit-aes-cbc s (sha512-k16 s "pwd") #(sha512-k16 % "pwd")))
+     (let [s             nil] (roundtrip cipher-kit-aes-cbc s (sha512-k16 s "pwd") #(sha512-k16 % "pwd")))])
 
   (enc/qb 10
     (let [s (rand-bytes 16)]
