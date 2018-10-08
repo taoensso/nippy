@@ -31,7 +31,7 @@
 (deftype AES128Encryptor [header-id salted-key-fn cached-key-fn]
   IEncryptor
   (header-id [_] header-id)
-  (encrypt   [_ typed-pwd ba]
+  (encrypt   [_ typed-pwd plain-ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
           salt?      (identical? type :salted)
           ?salt-ba   (when salt? (crypto/rand-bytes 16))
@@ -45,9 +45,9 @@
         {:cipher-kit crypto/cipher-kit-aes-cbc
          :?salt-ba   ?salt-ba
          :key-ba     key-ba
-         :ba         ba})))
+         :plain-ba   plain-ba})))
 
-  (decrypt [_ typed-pwd ba]
+  (decrypt [_ typed-pwd enc-ba]
     (let [[type pwd] (destructure-typed-pwd typed-pwd)
           salt?      (identical? type :salted)
           salt->key-fn
@@ -59,7 +59,7 @@
         {:cipher-kit   crypto/cipher-kit-aes-cbc
          :salt-size    (if salt? 16 0)
          :salt->key-fn salt->key-fn
-         :ba           ba}))))
+         :enc-ba       enc-ba}))))
 
 (def aes128-encryptor
   "Default 128bit AES encryptor with many-round SHA-512 key-gen.
