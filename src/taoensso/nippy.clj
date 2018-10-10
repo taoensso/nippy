@@ -139,6 +139,8 @@
    69  :vec-md
    21  :vec-lg
 
+   115 :objects-lg
+
    18  :set-0
    111 :set-sm
    32  :set-md
@@ -651,6 +653,12 @@
 
         (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
 
+(defn- write-object-array [^DataOutput out ^objects ary]
+  (let [len (alength ary)]
+    (write-id out id-objects-lg)
+    (write-lg-count out len)
+    (-run! (fn [in] (-freeze-with-meta! in out)) ary)))
+
 (defn- write-serializable [^DataOutput out x]
   (when-debug (println (str "write-serializable: " (type x))))
   (let [cname    (.getName (class x)) ; Reflect
@@ -870,6 +878,7 @@
 
 (freezer Boolean              (if x (write-id out id-true) (write-id out id-false)))
 (freezer (Class/forName "[B") (write-bytes out x))
+(freezer (Class/forName "[Ljava.lang.Object;") (write-object-array out x))
 (freezer String               (write-str   out x))
 (freezer Keyword              (write-kw    out x))
 (freezer Symbol               (write-sym   out x))
@@ -1061,6 +1070,13 @@
 
     (enc/reduce-n (fn [acc _] (conj acc (thaw-from-in! in))) to n)))
 
+(defn- read-filling-object-array [^objects ary ^DataInput in]
+  (enc/reduce-n
+    (fn [^objects ary i]
+      (aset ary i (thaw-from-in! in))
+      ary)
+    ary (alength ary)))
+
 (defn- read-kvs-into [to ^DataInput in ^long n]
   (if (and (editable? to) (> n 10))
     (persistent!
@@ -1211,6 +1227,9 @@
         id-vec-sm      (read-into [] in (read-sm-count in))
         id-vec-md      (read-into [] in (read-md-count in))
         id-vec-lg      (read-into [] in (read-lg-count in))
+
+        id-objects-lg  (read-filling-object-array (object-array (read-lg-count in)) in)
+
 
         id-set-0       #{}
         id-set-sm      (read-into    #{} in (read-sm-count in))
@@ -1574,6 +1593,7 @@
    :uri          (URI. "https://clojure.org/reference/data_structures")
    :uuid         (java.util.UUID/randomUUID)
    :date         (java.util.Date.)
+   :objects      (object-array [1 "two" {:data "data"}])
 
    :stress-record (StressRecord. "data")
    :stress-type   (StressType. "data")
@@ -1585,14 +1605,14 @@
 
 (def stress-data-comparable
   "Reference data with stuff removed that breaks roundtrip equality"
-  (dissoc stress-data :bytes :throwable :exception :ex-info :regex))
+  (dissoc stress-data :bytes :throwable :exception :ex-info :regex :objects))
 
 (def stress-data-benchable
   "Reference data with stuff removed that breaks reader or other utils we'll
   be benching against"
   (dissoc stress-data
     :bytes :throwable :exception :ex-info :queue :queue-empty
-    :byte :stress-record :stress-type :regex))
+    :byte :stress-record :stress-type :regex :objects))
 
 ;;;; Tools
 
