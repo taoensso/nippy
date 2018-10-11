@@ -1071,9 +1071,11 @@
     (enc/reduce-n (fn [acc _] (conj acc (thaw-from-in! in))) to n)))
 
 (defn- read-filling-object-array [^objects ary ^DataInput in]
-  (enc/reduce-n (fn [^objects ary i] (aset ary i (thaw-from-in! in)))
-                ary (alength ary))
-  ary)
+  (enc/reduce-n
+    (fn [^objects ary i]
+      (aset ary i (thaw-from-in! in))
+      ary)
+    ary (alength ary)))
 
 (defn- read-kvs-into [to ^DataInput in ^long n]
   (if (and (editable? to) (> n 10))
@@ -1591,7 +1593,7 @@
    :uri          (URI. "https://clojure.org/reference/data_structures")
    :uuid         (java.util.UUID/randomUUID)
    :date         (java.util.Date.)
-   :objects      (object-array [1 "one" 2 (java.util.Date.)])
+   :objects      (object-array [1 "two" {:data "data"}])
 
    :stress-record (StressRecord. "data")
    :stress-type   (StressType. "data")
