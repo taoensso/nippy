@@ -139,7 +139,7 @@
    69  :vec-md
    21  :vec-lg
 
-   115 :objects-lg
+   115 :objects-lg ; TODO Could include md, sm, 0 later if there's demand
 
    18  :set-0
    111 :set-sm
@@ -653,9 +653,9 @@
 
         (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
 
-(defn- write-object-array [^DataOutput out ^objects ary]
+(defn- write-objects [^DataOutput out ^objects ary]
   (let [len (alength ary)]
-    (write-id out id-objects-lg)
+    (write-id       out id-objects-lg)
     (write-lg-count out len)
     (-run! (fn [in] (-freeze-with-meta! in out)) ary)))
 
@@ -877,8 +877,8 @@
   (.writeLong out (.getLeastSignificantBits x)))
 
 (freezer Boolean              (if x (write-id out id-true) (write-id out id-false)))
-(freezer (Class/forName "[B") (write-bytes out x))
-(freezer (Class/forName "[Ljava.lang.Object;") (write-object-array out x))
+(freezer (Class/forName "[B")                  (write-bytes   out x))
+(freezer (Class/forName "[Ljava.lang.Object;") (write-objects out x))
 (freezer String               (write-str   out x))
 (freezer Keyword              (write-kw    out x))
 (freezer Symbol               (write-sym   out x))
@@ -1070,7 +1070,7 @@
 
     (enc/reduce-n (fn [acc _] (conj acc (thaw-from-in! in))) to n)))
 
-(defn- read-filling-object-array [^objects ary ^DataInput in]
+(defn- read-objects [^objects ary ^DataInput in]
   (enc/reduce-n
     (fn [^objects ary i]
       (aset ary i (thaw-from-in! in))
@@ -1211,6 +1211,8 @@
         id-bytes-md    (read-bytes in (read-md-count in))
         id-bytes-lg    (read-bytes in (read-lg-count in))
 
+        id-objects-lg  (read-objects (object-array (read-lg-count in)) in)
+
         id-str-0       ""
         id-str-sm               (read-utf8 in (read-sm-count in))
         id-str-md               (read-utf8 in (read-md-count in))
@@ -1227,9 +1229,6 @@
         id-vec-sm      (read-into [] in (read-sm-count in))
         id-vec-md      (read-into [] in (read-md-count in))
         id-vec-lg      (read-into [] in (read-lg-count in))
-
-        id-objects-lg  (read-filling-object-array (object-array (read-lg-count in)) in)
-
 
         id-set-0       #{}
         id-set-sm      (read-into    #{} in (read-sm-count in))
