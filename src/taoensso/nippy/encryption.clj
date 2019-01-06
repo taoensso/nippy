@@ -4,7 +4,10 @@
    [taoensso.encore       :as enc]
    [taoensso.nippy.crypto :as crypto]))
 
-(def standard-header-ids "These'll support :auto thaw" #{:aes128-sha512})
+(def standard-header-ids
+  "These'll support :auto thaw"
+  #{:aes128-cbc-sha512
+    :aes128-gcm-sha512})
 
 (defprotocol IEncryptor
   (header-id      [encryptor])
@@ -15,7 +18,7 @@
   (throw (ex-info
            (str "Expected password form: "
              "[<#{:salted :cached}> <password-string>].\n "
-             "See `default-aes128-encryptor` docstring for details!")
+             "See `aes128-encryptor` docstring for details!")
            {:typed-password typed-password})))
 
 (defn- destructure-typed-pwd [typed-password]
@@ -28,7 +31,7 @@
 
 (comment (destructure-typed-pwd [:salted "foo"]))
 
-(deftype AES128Encryptor [header-id salted-key-fn cached-key-fn]
+(deftype AES128Encryptor [header-id cipher-kit salted-key-fn cached-key-fn]
   IEncryptor
   (header-id [_] header-id)
   (encrypt   [_ typed-pwd plain-ba]
@@ -42,7 +45,7 @@
               (cached-key-fn nil     pwd)))]
 
       (crypto/encrypt
-        {:cipher-kit crypto/cipher-kit-aes-cbc
+        {:cipher-kit cipher-kit
          :?salt-ba   ?salt-ba
          :key-ba     key-ba
          :plain-ba   plain-ba})))
@@ -56,13 +59,13 @@
             #(cached-key-fn % pwd))]
 
       (crypto/decrypt
-        {:cipher-kit   crypto/cipher-kit-aes-cbc
+        {:cipher-kit   cipher-kit
          :salt-size    (if salt? 16 0)
          :salt->key-fn salt->key-fn
          :enc-ba       enc-ba}))))
 
-(def aes128-encryptor
-  "Default 128bit AES encryptor with many-round SHA-512 key-gen.
+(def aes128-gcm-encryptor
+  "Default 128bit AES-GCM encryptor with many-round SHA-512 key-gen.
 
   Password form [:salted \"my-password\"]
   ---------------------------------------
@@ -97,7 +100,16 @@
   Faster than `aes128-salted`, and harder to attack any particular key - but
   increased danger if a key is somehow compromised."
 
-  (AES128Encryptor. :aes128-sha512
+  (AES128Encryptor. :aes128-gcm-sha512
+    crypto/cipher-kit-aes-gcm
+    (do           (fn [ salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba salt-ba pwd (* Short/MAX_VALUE 5)))))
+    (enc/memoize_ (fn [_salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba nil     pwd (* Short/MAX_VALUE 64)))))))
+
+(def aes128-cbc-encryptor
+  "Default 128bit AES-CBC encryptor with many-round SHA-512 key-gen.
+  See also `aes-128-cbc-encryptor`."
+  (AES128Encryptor. :aes128-cbc-sha512
+    crypto/cipher-kit-aes-cbc
     (do           (fn [ salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba salt-ba pwd (* Short/MAX_VALUE 5)))))
     (enc/memoize_ (fn [_salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba nil     pwd (* Short/MAX_VALUE 64)))))))
 

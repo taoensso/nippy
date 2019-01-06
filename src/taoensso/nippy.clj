@@ -58,25 +58,38 @@
 (def ^:private ^:const head-version "Current Nippy header format version" 1)
 (def ^:private ^:const head-meta
   "Final byte of 4-byte Nippy header stores version-dependent metadata"
+
+  ;; Currently
+  ;;   - 5 compressors, #{nil :snappy :lz4 :lzma2 :else}
+  ;;   - 4 encryptors,  #{nil :aes128-cbc-sha512 :aes128-gcm-sha512 :else}
+
   {(byte 0)  {:version 1 :compressor-id nil     :encryptor-id nil}
+   (byte 2)  {:version 1 :compressor-id nil     :encryptor-id :aes128-cbc-sha512}
+   (byte 14) {:version 1 :compressor-id nil     :encryptor-id :aes128-gcm-sha512}
    (byte 4)  {:version 1 :compressor-id nil     :encryptor-id :else}
-   (byte 5)  {:version 1 :compressor-id :else   :encryptor-id nil}
-   (byte 6)  {:version 1 :compressor-id :else   :encryptor-id :else}
-   ;;
-   (byte 2)  {:version 1 :compressor-id nil     :encryptor-id :aes128-sha512}
-   ;;
+
    (byte 1)  {:version 1 :compressor-id :snappy :encryptor-id nil}
-   (byte 3)  {:version 1 :compressor-id :snappy :encryptor-id :aes128-sha512}
+   (byte 3)  {:version 1 :compressor-id :snappy :encryptor-id :aes128-cbc-sha512}
+   (byte 15) {:version 1 :compressor-id :snappy :encryptor-id :aes128-gcm-sha512}
    (byte 7)  {:version 1 :compressor-id :snappy :encryptor-id :else}
-   ;;
+
    ;;; :lz4 used for both lz4 and lz4hc compressor (the two are compatible)
    (byte 8)  {:version 1 :compressor-id :lz4    :encryptor-id nil}
-   (byte 9)  {:version 1 :compressor-id :lz4    :encryptor-id :aes128-sha512}
+   (byte 9)  {:version 1 :compressor-id :lz4    :encryptor-id :aes128-cbc-sha512}
+   (byte 16) {:version 1 :compressor-id :lz4    :encryptor-id :aes128-gcm-sha512}
    (byte 10) {:version 1 :compressor-id :lz4    :encryptor-id :else}
-   ;;
+
    (byte 11) {:version 1 :compressor-id :lzma2  :encryptor-id nil}
-   (byte 12) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-sha512}
-   (byte 13) {:version 1 :compressor-id :lzma2  :encryptor-id :else}})
+   (byte 12) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-cbc-sha512}
+   (byte 17) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-gcm-sha512}
+   (byte 13) {:version 1 :compressor-id :lzma2  :encryptor-id :else}
+
+   (byte 5)  {:version 1 :compressor-id :else   :encryptor-id nil}
+   (byte 18) {:version 1 :compressor-id :else   :encryptor-id :aes128-cbc-sha512}
+   (byte 19) {:version 1 :compressor-id :else   :encryptor-id :aes128-gcm-sha512}
+   (byte 6)  {:version 1 :compressor-id :else   :encryptor-id :else}})
+
+(comment (count (sort (keys head-meta))))
 
 (defmacro ^:private when-debug [& body] (when #_true false `(do ~@body)))
 
@@ -242,7 +255,10 @@
 
   (enc/defalias encrypt           encryption/encrypt)
   (enc/defalias decrypt           encryption/decrypt)
-  (enc/defalias aes128-encryptor  encryption/aes128-encryptor)
+
+  (enc/defalias aes128-gcm-encryptor encryption/aes128-gcm-encryptor)
+  (enc/defalias aes128-cbc-encryptor encryption/aes128-cbc-encryptor)
+  (enc/defalias aes128-encryptor     encryption/aes128-gcm-encryptor) ; Default
 
   (enc/defalias freezable?        utils/freezable?))
 
@@ -988,7 +1004,7 @@
   ([x] (freeze x nil))
   ([x {:keys [compressor encryptor password]
        :or   {compressor :auto
-              encryptor  aes128-encryptor}
+              encryptor  aes128-gcm-encryptor}
        :as   opts}]
     (let [;; Intentionally undocumented:
           no-header? (or (get opts :no-header?)
@@ -1322,18 +1338,19 @@
     :lzma2     lzma2-compressor
     :lz4       lz4-compressor
     :no-header (throw (ex-info ":auto not supported on headerless data." {}))
-    :else (throw (ex-info ":auto not supported for non-standard compressors." {}))
-    (throw (ex-info (str "Unrecognized :auto compressor id: " compressor-id)
-             {:compressor-id compressor-id}))))
+    :else      (throw (ex-info ":auto not supported for non-standard compressors." {}))
+    (do        (throw (ex-info (str "Unrecognized :auto compressor id: " compressor-id)
+                        {:compressor-id compressor-id})))))
 
 (defn- get-auto-encryptor [encryptor-id]
   (case encryptor-id
-    nil            nil
-    :aes128-sha512 aes128-encryptor
-    :no-header     (throw (ex-info ":auto not supported on headerless data." {}))
-    :else (throw (ex-info ":auto not supported for non-standard encryptors." {}))
-    (throw (ex-info (str "Unrecognized :auto encryptor id: " encryptor-id)
-             {:encryptor-id encryptor-id}))))
+    nil                nil
+    :aes128-gcm-sha512 aes128-gcm-encryptor
+    :aes128-cbc-sha512 aes128-cbc-encryptor
+    :no-header (throw (ex-info ":auto not supported on headerless data." {}))
+    :else      (throw (ex-info ":auto not supported for non-standard encryptors." {}))
+    (do        (throw (ex-info (str "Unrecognized :auto encryptor id: " encryptor-id)
+                        {:encryptor-id encryptor-id})))))
 
 (def ^:private err-msg-unknown-thaw-failure
   "Decryption/decompression failure, or data unfrozen/damaged.")

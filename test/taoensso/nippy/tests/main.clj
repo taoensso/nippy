@@ -77,7 +77,12 @@
         (thaw (org.xerial.snappy.Snappy/uncompress xerial-ba))
         (thaw (org.xerial.snappy.Snappy/uncompress iq80-ba))
         (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
-        (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba)))))))
+        (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
+
+  (is ; CBC auto-encryptor compatibility
+    (= "payload"
+      (thaw (freeze "payload" {:password [:salted "pwd"] :encryptor nippy/aes128-cbc-encryptor})
+        (do                   {:password [:salted "pwd"]})))))
 
 ;;;; Custom types & records
 
