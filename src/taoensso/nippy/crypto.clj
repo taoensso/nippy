@@ -52,21 +52,19 @@
 ;; (fn [salt-ba utf8]) -> bytes
 
 ;; (defn  ba->hex [^bytes ba] (org.apache.commons.codec.binary.Hex/encodeHexString ba))
-(defn  take-ba ^bytes [n ^bytes ba] (java.util.Arrays/copyOf ba ^int n)) ; Pads if ba too small
-(defn utf8->ba ^bytes [^String s] (.getBytes s "UTF-8"))
-(defn add-salt ^bytes [?salt-ba ba] (if ?salt-ba (enc/ba-concat ?salt-ba ba) ba))
+(defn   take-ba ^bytes [n ^bytes ba] (java.util.Arrays/copyOf ba ^int n)) ; Pads if ba too small
+(defn  utf8->ba ^bytes [^String s] (.getBytes s "UTF-8"))
+(defn- add-salt ^bytes [?salt-ba ba] (if ?salt-ba (enc/ba-concat ?salt-ba ba) ba))
+(defn pwd-as-ba ^bytes [utf8-or-ba] (if (string? utf8-or-ba) (utf8->ba utf8-or-ba) (enc/have enc/bytes? utf8-or-ba)))
+
+(comment (seq (pwd-as-ba "foo")))
 
 (defn sha512-key-ba
   "SHA512-based key generator. Good JVM availability without extra dependencies
   (PBKDF2, bcrypt, scrypt, etc.). Decent security when using many rounds."
-  (^bytes [?salt-ba utf8-or-ba               ] (sha512-key-ba ?salt-ba utf8-or-ba (* Short/MAX_VALUE 5)))
+  (^bytes [?salt-ba utf8-or-ba               ] (sha512-key-ba ?salt-ba utf8-or-ba 163835 #_(* Short/MAX_VALUE 5)))
   (^bytes [?salt-ba utf8-or-ba ^long n-rounds]
-   (let [ba
-         (add-salt ?salt-ba
-           (if (string? utf8-or-ba)
-             (utf8->ba utf8-or-ba)
-             (enc/have enc/bytes? utf8-or-ba)))
-
+   (let [ba (add-salt ?salt-ba (pwd-as-ba utf8-or-ba))
          md (sha512-md)]
      (enc/reduce-n (fn [acc in] (.digest md acc)) ba n-rounds))))
 
@@ -112,6 +110,7 @@
   [{:keys [cipher-kit ?salt-ba key-ba plain-ba rand-bytes-fn]
     :or   {cipher-kit    cipher-kit-aes-gcm
            rand-bytes-fn rand-bytes}}]
+
   (let [iv-size     (long (get-iv-size cipher-kit))
         iv-ba       (rand-bytes-fn iv-size)
         prefix-ba   (if ?salt-ba (enc/ba-concat iv-ba ?salt-ba) iv-ba)
