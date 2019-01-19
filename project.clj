@@ -18,7 +18,7 @@
    [com.taoensso/encore      "2.105.0"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.8"]
-   [net.jpountz.lz4/lz4      "1.3"]]
+   [org.lz4/lz4-java         "1.5.0"]]
 
   :profiles
   {;; :default [:base :system :user :provided :dev]
