@@ -1,15 +1,16 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
-## v2.15.0-alpha9 / 2019 Jan 6
+## v2.15.0-RC1 / 2019 Feb 16
 
 ```clojure
-[com.taoensso/nippy "2.15.0-alpha9"]
+[com.taoensso/nippy "2.15.0-RC1"]
 ```
 
 > This is a major feature release. It should be non-breaking but **please report any problems** - thanks!
 
 * [#113 #114] **New**: Support object arrays (@isaksky)
 * [#101] **Change**: Switch default encryptor from AES-CBC to AES-GCM (faster, includes integrity check)
+* [#116] **Impl**: Update lz4 lib: 1.3->1.5 (@johnmcconnell)
 * **Impl**: Update a number of dependencies
 * **Impl**: Refactor encryption utils for extra flexibility in future
 
