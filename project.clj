@@ -15,7 +15,7 @@
   :dependencies
   [[org.clojure/clojure      "1.5.1"]
    [org.clojure/tools.reader "1.3.2"]
-   [com.taoensso/encore      "2.105.0"]
+   [com.taoensso/encore      "2.106.0"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.8"]
    [org.lz4/lz4-java         "1.5.0"]]
@@ -33,11 +33,11 @@
           :dependencies [[org.clojure/test.check        "0.9.0"]
                          [org.clojure/data.fressian     "0.2.1"]
                          [org.xerial.snappy/snappy-java "1.1.7.2"]]}
-   :dev [:1.9 :test :server-jvm
+   :dev [:1.10 :test :server-jvm
          {:plugins
           [[lein-pprint  "1.2.0"]
            [lein-ancient "0.6.15"]
-           [lein-codox   "0.10.5"]]}]}
+           [lein-codox   "0.10.6"]]}]}
 
   :test-paths ["test" "src"]
 
