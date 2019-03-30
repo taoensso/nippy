@@ -25,15 +25,19 @@
       (when (< (.nextDouble rng) 2.44140625E-4) (.setSeed rng (.generateSeed rng 8)))
       rng))
 
+  (defn rand-nth    "Uses `srng`"         [coll] (nth coll (int (* (.nextDouble (srng)) (count coll)))))
   (defn rand-bytes  "Uses `srng`" ^bytes  [size] (let [ba (byte-array size)] (.nextBytes    (srng) ba) ba))
   (defn rand-double "Uses `srng`" ^double []                                 (.nextDouble   (srng)))
-  (defn rand-long   "Uses `srng`" ^long   []                                 (.nextLong     (srng)))
   (defn rand-gauss  "Uses `srng`" ^double []                                 (.nextGaussian (srng)))
   (defn rand-bool   "Uses `srng`"         []                                 (.nextBoolean  (srng)))
-  (defn rand-nth    "Uses `srng`"
-    [coll] (nth coll (int (* (rand-double) (count coll))))))
+  (defn rand-long   "Uses `srng`"
+    (^long   [ ]                   (.nextLong   (srng)))
+    (^long   [n] (long (* (long n) (.nextDouble (srng)))))))
 
-(comment (seq (rand-bytes 16)))
+(comment
+  (seq (rand-bytes 16))
+  (rand-nth [:a :b :c :d])
+  (rand-long 100))
 
 ;;;; Hashing
 
