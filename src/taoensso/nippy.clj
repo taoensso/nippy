@@ -1660,12 +1660,29 @@
   (inspect-ba (freeze "hello"))
   (seq (:data-ba (inspect-ba (freeze "hello")))))
 
+(defn freeze-to-string
+  "Convenience util: like `freeze`, but returns a Base64-encoded string.
+  See also `thaw-from-string`."
+  ([x            ] (freeze-to-string x nil))
+  ([x freeze-opts]
+   (let [ba (freeze x freeze-opts)]
+     (.encodeToString (java.util.Base64/getEncoder)
+       ba))))
+
+(defn thaw-from-string
+  "Convenience util: like `thaw`, but takes a Base64-encoded string.
+  See also `freeze-to-string`."
+  ([s                  ] (thaw-from-string s nil))
+  ([^String s thaw-opts]
+   (let [ba (.decode (java.util.Base64/getDecoder) s)]
+     (thaw ba thaw-opts))))
+
+(comment (thaw-from-string (freeze-to-string {:a :A :b [:B1 :B2]})))
+
 (defn freeze-to-file
-  "Convenience util: writes `(freeze x freeze-opts)` byte array to
-  `(clojure.java.io/file file)` and returns the byte array.
-
-  (freeze-to-file \"my-filename.npy\" my-val) => Serialized byte array"
-
+  "Convenience util: like `freeze`, but writes to `(clojure.java.io/file <file>)`
+  and returns the byte array written.
+  See also `thaw-from-file`."
   ([file x            ] (freeze-to-file file x nil))
   ([file x freeze-opts]
    (let [^bytes ba (freeze x freeze-opts)]
@@ -1674,14 +1691,12 @@
      ba)))
 
 (defn thaw-from-file
-  "Convenience util: returns `(thaw ba thaw-opts)` Clojure value for the
-  byte array read from `(clojure.java.io/file file)`.
-
-  (thaw-from-file \"my-filename.npy\") => Deserialized Clojure value
+  "Convenience util: like `thaw`, but reads from `(clojure.java.io/file <file>)`.
 
   To thaw from a resource on classpath (e.g in Leiningen `resources` dir):
-    (thaw-from-file (clojure.java.io/resource \"my-resource-name.npy\"))"
+    (thaw-from-file (clojure.java.io/resource \"my-resource-name.npy\"))
 
+  See also `freeze-to-file`."
   ([file          ] (thaw-from-file file nil))
   ([file thaw-opts]
    (let [file (jio/file file),
