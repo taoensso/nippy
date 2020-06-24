@@ -11,28 +11,14 @@
 ;;;; Randomness
 
 (do
-  (enc/compile-if (fn [] (java.security.SecureRandom/getInstanceStrong)) ; Java 8+, blocking
-    (def ^:private srng* (enc/thread-local-proxy (java.security.SecureRandom/getInstanceStrong)))
-    (def ^:private srng* (enc/thread-local-proxy (java.security.SecureRandom/getInstance "SHA1SRNG"))))
-
-  (defn srng
-    "Favours security over performance. May block while waiting on system entropy!"
-    ^java.security.SecureRandom []
-    (let [rng ^java.security.SecureRandom (.get ^ThreadLocal srng*)]
-      ;; Occasionally supplement current seed for extra security.
-      ;; Otherwise an attacker could *theoretically* observe large amounts of
-      ;; srng output to determine initial seed, Ref. https://goo.gl/MPM91w
-      (when (< (.nextDouble rng) 2.44140625E-4) (.setSeed rng (.generateSeed rng 8)))
-      rng))
-
-  (defn rand-nth    "Uses `srng`"         [coll] (nth coll (int (* (.nextDouble (srng)) (count coll)))))
-  (defn rand-bytes  "Uses `srng`" ^bytes  [size] (let [ba (byte-array size)] (.nextBytes    (srng) ba) ba))
-  (defn rand-double "Uses `srng`" ^double []                                 (.nextDouble   (srng)))
-  (defn rand-gauss  "Uses `srng`" ^double []                                 (.nextGaussian (srng)))
-  (defn rand-bool   "Uses `srng`"         []                                 (.nextBoolean  (srng)))
-  (defn rand-long   "Uses `srng`"
-    (^long   [ ]                   (.nextLong   (srng)))
-    (^long   [n] (long (* (long n) (.nextDouble (srng)))))))
+  (defn rand-nth            [coll]           (nth coll (int (* (.nextDouble   (enc/srng)) (count coll)))))
+  (defn rand-bytes  ^bytes  [size] (let [ba (byte-array size)] (.nextBytes    (enc/srng) ba) ba))
+  (defn rand-double ^double []                                 (.nextDouble   (enc/srng)))
+  (defn rand-gauss  ^double []                                 (.nextGaussian (enc/srng)))
+  (defn rand-bool           []                                 (.nextBoolean  (enc/srng)))
+  (defn rand-long
+    (^long   [ ]                   (.nextLong   (enc/srng)))
+    (^long   [n] (long (* (long n) (.nextDouble (enc/srng)))))))
 
 (comment
   (seq (rand-bytes 16))
