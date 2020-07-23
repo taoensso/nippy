@@ -33,6 +33,7 @@
   (thaw (freeze stress-data)))
 
 ;;;; TODO
+;; - Ensure all error responses are entirely under {:nippy/_ <...>} key?
 ;; - Performance would benefit from ^:static support / direct linking / etc.
 ;; - Ability to compile out metadata support?
 ;; - Auto cache keywords? When map keys? Configurable? Per-map
@@ -111,9 +112,8 @@
    52  :reader-lg
    5   :reader-lg2 ; == :reader-lg, used only for back-compatible thawing
 
-   46  :serializable-sm
-   50  :serializable-md
-   6   :serializable-lg ; Used only for back-compatible thawing
+   75  :serializable-sm
+   76  :serializable-md
 
    48  :record-sm
    49  :record-md
@@ -212,14 +212,18 @@
    67  :cached-sm
    68  :cached-md
 
-   ;;; DEPRECATED (old types are supported only for thawing)
-   1   :reader-depr1       ; v0.9.2+ for +64k support
-   11  :str-depr1          ; v0.9.2+ for +64k support
-   22  :map-depr1          ; v0.9.0+ for more efficient thaw
-   12  :kw-depr1           ; v2.0.0-alpha5+ for str consistecy
-   27  :map-depr2          ; v2.11+ for count/2
-   29  :sorted-map-depr1   ; v2.11+ for count/2
-   4   :boolean-depr1      ; v2.12+ for switch to true/false ids
+   ;;; DEPRECATED (only support thawing)
+   1   :reader-depr1          ; v0.9.2+ for +64k support
+   11  :str-depr1             ; ''
+   22  :map-depr1             ; v0.9.0+ for more efficient thaw
+   12  :kw-depr1              ; v2.0.0-alpha5+ for str consistecy
+   27  :map-depr2             ; v2.11+ for count/2
+   29  :sorted-map-depr1      ; ''
+   4   :boolean-depr1         ; v2.12+ for switch to true/false ids
+
+   46  :serializable-sm-depr1 ; v2.14.1+ for quarantined object bas
+   50  :serializable-md-depr1 ; ''
+   6   :serializable-lg-depr1 ; ''
    })
 
 (comment
@@ -275,9 +279,81 @@
   nil => default"
   nil)
 
+(enc/defonce ^:dynamic *serializable-whitelist*
+  "Used when attempting to freeze or thaw an object that:
+    - Does not implement Nippy's Freezable    protocol.
+    - Does     implement Java's  Serializable interface.
+
+  In this case, Java's Serializable interface will be permitted iff
+  the predicate (*serializable-whitelist* <class-name>) returns true.
+
+  I.e. this is a predicate (fn [class-name]) that specifies whether
+  Nippy may use a given class's Serializable implementation as
+  fallback when its own protocol is unfamiliar with the type.
+
+  This is a security measure to prevent Remote Code Execution (RCE).
+
+  Context:
+
+    Reading arbitrary Serializable classes can be dangerous if they
+    come from an untrusted source.
+
+    Specifically: if your classpath contains a vulnerable (\"gadget\")
+    class - it is possible for an attacker to produce an object that
+    can run arbitrary code when read via Serializable.
+
+    Note that Clojure <= 1.8 itself contains such a class [1].
+
+  What to use as a whitelist?
+
+    1. If you DO NOT wish to support Serializable: `#{}` is safest,
+       and just entirely disallows its use.
+
+    2. If you DO with to support Serializable:
+
+      2a. If you might serialize data from an untrusted source, or
+          if you'll only be serializing a limited number of known
+          classes: enumerate those class names, e.g.:
+            `#{\"java.lang.Throwable\", ...}`.
+
+      2b. If you're CERTAIN to NEVER serialize data from an untrusted
+          source, you can use `(constantly true)` as predicate. This
+          will whitelist everything, allowing Serializable for ANY class.
+
+  Default value as of v2.15.0 is: #{}.
+
+  PRs welcome for additional known-safe classes to be added to default
+  whitelist.
+
+  Note: if `thaw` encounters an unwhitelisted Serialized class:
+
+    - `thaw` will throw if it's not possible to safely quarantine.
+    - Otherwise the object will be thawed as:
+      `{:nippy/unthawable {:class-name _ :content <quarantined-ba> ...}}`.
+
+  Thanks to Timo Mihaljov (@solita-timo-mihaljov) for an excellent report
+  identifying this vulnerability.
+
+  See also `swap-serializable-whitelist!`.
+
+  [1] https://groups.google.com/forum/#!msg/clojure/WaL3hHzsevI/7zHU-L7LBQAJ"
+
+  #{#_"java.lang.Throwable"})
+
 (defn set-freeze-fallback!        [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
 (defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
 (defn swap-custom-readers!        [f] (alter-var-root #'*custom-readers* f))
+(defn swap-serializable-whitelist!
+  "Changes root `*serializable-whitelist*` value to (f old-val).
+  Example `f` arguments:
+
+    - (fn [_old] true)                                ; Whitelist everything (allow    all classes)
+    - (fn [_old] #{})                                 ; Whitelist nothing    (disallow all classes)
+    - (fn [_old] #{\"java.lang.Throwable\"})          ; Reset class    whitelist
+    - (fn [ old] (conj old \"java.lang.Throwable\"))) ; Add   class to whitelist
+
+  See also `*serializable-whitelist*."
+  [f] (alter-var-root #'*serializable-whitelist* f))
 
 ;;;; Freezing
 
@@ -674,23 +750,30 @@
     (write-lg-count out len)
     (-run! (fn [in] (-freeze-with-meta! in out)) ary)))
 
-(defn- write-serializable [^DataOutput out x]
+(defn- write-serializable [^DataOutput out x ^String class-name]
   (when-debug (println (str "write-serializable: " (type x))))
-  (let [cname    (.getName (class x)) ; Reflect
-        cname-ba (.getBytes cname charset)
-        len      (alength cname-ba)]
+  (let [class-name-ba (.getBytes class-name charset)
+        len           (alength   class-name-ba)]
+
     (cond*
       (sm-count? len)
       (do (write-id       out id-serializable-sm)
-          (write-bytes-sm out cname-ba))
+          (write-bytes-sm out class-name-ba))
 
-      ;; Note no :serializable-lg freeze support (unrealistic)
+      ;; Note no :serializable-lg freeze support (unrealistic name length)
 
       :else
       (do (write-id       out id-serializable-md)
-          (write-bytes-md out cname-ba)))
+          (write-bytes-md out class-name-ba)))
 
-    (.writeObject (ObjectOutputStream. out) x)))
+    ;; Legacy: write object directly to out.
+    ;; (.writeObject (ObjectOutputStream. out) x)
+
+    ;; Quarantined: write object to ba, then ba to out.
+    ;; We'll have object length during thaw, allowing us to skip readObject.
+    (let [quarantined-ba (ByteArrayOutputStream. 32)]
+      (.writeObject (ObjectOutputStream. (DataOutputStream. quarantined-ba)) x)
+      (write-bytes out (.toByteArray quarantined-ba)))))
 
 (defn- write-readable [^DataOutput out x]
   (when-debug (println (str "write-readable: " (type x))))
@@ -713,8 +796,10 @@
 (defn try-write-serializable [out x]
   (when (utils/serializable? x)
     (try
-      (write-serializable out x)
-      true
+      (let [class-name (.getName (class x))] ; Reflect
+        (when (*serializable-whitelist* class-name)
+          (write-serializable out x class-name)
+          true))
       (catch Throwable _ nil))))
 
 (defn try-write-readable [out x]
@@ -947,13 +1032,14 @@
 (freezer Object
   (when-debug (println (str "freeze-fallback: " (type x))))
   (if-let [ff *freeze-fallback*]
-    (if (identical? ff :write-unfreezable)
-      (or
+    (if-not (identical? ff :write-unfreezable)
+      (ff out x) ; Modern approach with ff
+      (or        ; Legacy approach with ff
         (try-write-serializable out x)
         (try-write-readable     out x)
-        (write-unfreezable      out x))
-      (ff out x))
+        (write-unfreezable      out x)))
 
+    ;; Without ff
     (or
       (try-write-serializable out x)
       (try-write-readable     out x)
@@ -1007,6 +1093,7 @@
         (-> nil
           (opt->bindings :freeze-fallback        #'*freeze-fallback*)
           (opt->bindings :auto-freeze-compressor #'*auto-freeze-compressor*)
+          (opt->bindings :serializable-whitelist #'*serializable-whitelist*)
           (opt->bindings :custom-readers         #'*custom-readers*))]
 
     (if-not bindings
@@ -1166,7 +1253,7 @@
        :throwable e
        :nippy/unthawable edn})))
 
-(defn- read-serializable [^DataInput in class-name]
+(defn- read-object [^DataInput in class-name]
   (try
     (let [content (.readObject (ObjectInputStream. in))]
       (try
@@ -1174,11 +1261,32 @@
         (catch Exception e
           {:type :serializable
            :throwable e
-           :nippy/unthawable {:class-name class-name :content content}})))
+           :nippy/unthawable
+           {:class-name class-name :content content
+            :serializable-whitelist-pass? true}})))
+
     (catch Exception e
       {:type :serializable
        :throwable e
-       :nippy/unthawable {:class-name class-name :content nil}})))
+       :nippy/unthawable
+       {:class-name class-name :content nil
+        :serializable-whitelist-pass? true}})))
+
+(defn- read-serializable [^DataInput in class-name]
+  (let [quarantined-ba (read-bytes in)]
+    (if (*serializable-whitelist* class-name)
+      (read-object (DataInputStream. (ByteArrayInputStream. quarantined-ba)) class-name)
+      {:type :serializable
+       :nippy/unthawable
+       {:class-name class-name :content quarantined-ba
+        :serializable-whitelist-pass? false}})))
+
+(defn- read-serializable-depr1 [^DataInput in class-name]
+  (if (*serializable-whitelist* class-name)
+    (read-object in class-name)
+    (throw ; No way to skip bytes, so best we can do is throw
+      (ex-info "Cannot thaw object: `*serializable-whitelist*` check failed. See docstring for details."
+        {:class-name class-name}))))
 
 (defn- read-record [in class-name]
   (let [content (thaw-from-in! in)]
@@ -1233,7 +1341,6 @@
         id-reader-lg2      (read-edn             (read-utf8 in (read-lg-count in)))
         id-serializable-sm (read-serializable in (read-utf8 in (read-sm-count in)))
         id-serializable-md (read-serializable in (read-utf8 in (read-md-count in)))
-        id-serializable-lg (read-serializable in (read-utf8 in (read-lg-count in)))
         id-record-sm       (read-record       in (read-utf8 in (read-sm-count in)))
         id-record-md       (read-record       in (read-utf8 in (read-md-count in)))
         id-record-lg       (read-record       in (read-utf8 in (read-lg-count in)))
@@ -1341,6 +1448,10 @@
         id-map-depr1        (apply hash-map
                               (enc/repeatedly-into [] (* 2 (.readInt in))
                                 (fn [] (thaw-from-in! in))))
+
+        id-serializable-sm-depr1 (read-serializable-depr1 in (read-utf8 in (read-sm-count in)))
+        id-serializable-md-depr1 (read-serializable-depr1 in (read-utf8 in (read-md-count in)))
+        id-serializable-lg-depr1 (read-serializable-depr1 in (read-utf8 in (read-lg-count in)))
         ;; -----------------------------------------------------------------
 
         id-prefixed-custom (read-custom! in :prefixed (.readShort in))

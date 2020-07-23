@@ -246,6 +246,35 @@
 (deftest _redefs
   (is (= (str (thaw (freeze (MyFoo.)))) "v2")))
 
+;;;; Serializable
+
+(deftest _serializable
+
+  (is
+    (thrown? Exception
+      (binding [nippy/*serializable-whitelist* #{}]
+        (nippy/freeze (java.util.concurrent.Semaphore. 1))))
+
+    "Can't freeze Serializable object unless approved by whitelist")
+
+  (is
+    (:nippy/unthawable
+
+     (let [ba (binding [nippy/*serializable-whitelist* #{"java.util.concurrent.Semaphore"}]
+                (nippy/freeze (java.util.concurrent.Semaphore. 1)))]
+
+       (binding [nippy/*serializable-whitelist* #{}]
+         (nippy/thaw ba))))
+
+    "Can't thaw Serializable object unless approved by whitelist")
+
+  (is
+    (instance? java.util.concurrent.Semaphore
+      (binding [nippy/*serializable-whitelist* #{"java.util.concurrent.Semaphore"}]
+        (nippy/thaw (nippy/freeze (java.util.concurrent.Semaphore. 1)))))
+
+    "Can freeze and thaw Serializable object if approved by whitelist"))
+
 ;;;; Benchmarks
 
 (deftest _benchmarks
