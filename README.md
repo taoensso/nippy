@@ -4,9 +4,16 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "2.14.0"]     ; Stable
-[com.taoensso/nippy "2.15.0-RC1"] ; Dev, see CHANGELOG for details
+[com.taoensso/nippy "2.15.0"] ; BREAKING, see CHANGELOG for details
 ```
+
+## ** SECURITY ADVISORY **
+
+Users of Nippy older than **v2.15.0 final** should **please upgrade ASAP** due to a **Remote Code Execution vulnerability** when deserializing data from an **untrusted source**.
+
+Please see [here](https://github.com/ptaoussanis/nippy/issues/130) for details, including upgrade instructions.
+
+--
 
 > Please consider helping to [support my continued open-source Clojure/Script work]? 
 > 
@@ -39,7 +46,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your project:
 
 ```clojure
-[com.taoensso/nippy "2.14.0"]
+[com.taoensso/nippy "2.15.0"]
 ```
 
 And setup your namespace imports:

@@ -1,18 +1,56 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
-## v2.15.0-RC1 / 2019 Feb 16
+## v2.15.0 / 2020 Jul 24
 
 ```clojure
-[com.taoensso/nippy "2.15.0-RC1"]
+[com.taoensso/nippy "2.15.0"]
 ```
 
-> This is a major feature release. It should be non-breaking but **please report any problems** - thanks!
+> This is a **major** feature release. It may be **BREAKING**!
 
-* [#113 #114] **New**: Support object arrays (@isaksky)
-* [#101] **Change**: Switch default encryptor from AES-CBC to AES-GCM (faster, includes integrity check)
-* [#116] **Impl**: Update lz4 lib: 1.3->1.5 (@johnmcconnell)
-* **Impl**: Update a number of dependencies
-* **Impl**: Refactor encryption utils for extra flexibility in future
+**BREAKING CHANGES** since `v2.14.0`:
+
+* [#130] Add `*serialization-whitelist*`, **ENABLED BY DEFAULT**.
+
+See https://github.com/ptaoussanis/nippy/issues/130 for details, incl. upgrade instructions.
+
+Big thanks to **Timo Mihaljov** (@solita-timo-mihaljov) for an excellent report identifying this vulnerability!
+
+**New** since `v2.14.0`:
+
+* [#127] Add utils: `freeze-to-string`, `thaw-from-string` (@piotr-yuxuan)
+* [#113 #114] Add support for object arrays (@isaksky)
+* [#83 #112] Add support for deftype (@isaksky)
+* [#83 #113] Add support for URIs (@isaksky)
+
+**Changes** since `v2.14.0`:
+
+* [#101] Switch default encryptor from `AES-CBC` to `AES-GCM` (faster, includes integrity check)
+* Refactor encryption utils for extra flexibility in future
+* Latest dependencies
+
+**Fixes** since `v2.14.0`:
+
+* [#120] Update `freezable?` to cover `nil`
+
+
+## v2.14.2 / 2020 Jul 24
+
+```clojure
+[com.taoensso/nippy "2.14.2"]
+```
+
+> This is a non-breaking **hotfix security release**. PLEASE READ CAREFULLY.
+
+**New** since `v2.14.0`:
+
+* [#130] Add `*serialization-whitelist*` feature, **DISABLED BY DEFAULT**.
+
+### *** SECURITY ADVISORY ***
+
+To prevent a possible **Remote Code Execution (RCE) vulnerability** (#130), you must **opt-in** to use the new `*serialization-whitelist*` feature.
+
+See the `nippy/*serialization-whitelist*` docstring for usage instructions.
 
 ## v2.14.0 / 2017 Dec 21
 
