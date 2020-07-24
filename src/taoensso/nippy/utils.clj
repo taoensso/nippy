@@ -22,19 +22,22 @@
 
 (def     readable? (memoize-type-test (fn [x] (-> x enc/pr-edn enc/read-edn) true)))
 (def serializable?
-  (let [test-fn
-        (fn [x]
-          (let [class-name (.getName (class x))
-                class ^Class (Class/forName class-name) ; Try 1st (fail fast)
-                bas (ByteArrayOutputStream.)
-                _   (.writeObject (ObjectOutputStream. bas) x)
-                ba  (.toByteArray bas)
-                object (.readObject (ObjectInputStream.
-                                     (ByteArrayInputStream. ba)))]
-            (cast class object)
-            true))
+  (let [mtt
+        (memoize-type-test
+          (fn [x]
+            (let [class-name (.getName (class x))
+                  c   (Class/forName class-name) ; Try 1st (fail fast)
+                  bas (ByteArrayOutputStream.)
+                  _   (.writeObject (ObjectOutputStream. bas) x)
+                  ba  (.toByteArray bas)]
 
-        mtt (memoize-type-test test-fn)]
+              #_
+              (cast c
+                (.readObject ; Unsafe + usu. unnecessary to check
+                  (ObjectInputStream.
+                    (ByteArrayInputStream. ba))))
+
+              true)))]
 
     (fn [x]
       (if (instance? Serializable x)
@@ -44,12 +47,12 @@
        false))))
 
 (comment
-  (enc/qb 10000
+  (enc/qb 1e4
     (readable?     "Hello world") ; Cacheable
     (serializable? "Hello world") ; Cacheable
-    (readable?     (fn []))        ; Uncacheable
-    (serializable? (fn []))        ; Uncacheable
-    ))
+    (readable?     (fn []))       ; Uncacheable
+    (serializable? (fn []))       ; Uncacheable
+    )) ; [5.65 5.88 1129.46 1.4]
 
 ;;;;
 
