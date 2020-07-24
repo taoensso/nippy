@@ -265,10 +265,11 @@
 ;;;; Dynamic config
 ;; See also `nippy.tools` ns for further dynamic config support
 
-;; TODO Switch to thread-local proxies?
+;; For back compatibility (nb Timbre's Carmine appender)
+(enc/defonce ^:dynamic *final-freeze-fallback* "DEPRECATED: prefer `*freeze-fallback`."       nil)
+(enc/defonce ^:dynamic       *freeze-fallback* "(fn [data-output x])->freeze, nil => default" nil)
 
-(enc/defonce ^:dynamic *freeze-fallback* "(fn [data-output x]), nil => default" nil)
-(enc/defonce ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
+(enc/defonce ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])->read}" nil)
 (enc/defonce ^:dynamic *auto-freeze-compressor*
   "(fn [byte-array])->compressor used by `(freeze <x> {:compressor :auto}),
   nil => default"
@@ -277,8 +278,6 @@
 (defn set-freeze-fallback!        [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
 (defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
 (defn swap-custom-readers!        [f] (alter-var-root #'*custom-readers* f))
-
-(declare ^:dynamic *final-freeze-fallback*) ; DEPRECATED
 
 ;;;; Freezing
 
@@ -959,10 +958,7 @@
       (try-write-serializable out x)
       (try-write-readable     out x)
 
-      ;; For back compatibility (nb Timbre's Carmine appender)
-      (when-let [fff *final-freeze-fallback*]
-        (fff out x)
-        true)
+      (when-let [fff *final-freeze-fallback*] (fff out x) true) ; Deprecated
 
       (throw-unfreezable x))))
 
@@ -1713,6 +1709,4 @@
 
 ;;;; Deprecated
 
-(enc/deprecated
-  (enc/defonce ^:dynamic *final-freeze-fallback* "DEPRECATED" nil)
-  (def freeze-fallback-as-str "DEPRECATED" write-unfreezable))
+(enc/deprecated (def freeze-fallback-as-str "DEPRECATED" write-unfreezable))
