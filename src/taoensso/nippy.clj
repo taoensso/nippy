@@ -1056,10 +1056,18 @@
 
 ;;;; Thawing
 
-(defn- read-bytes [^DataInput in len]
-  (let [ba (byte-array len)]
-    (.readFully in ba 0 len)
-    ba))
+(defn- read-bytes
+  ([^DataInput in len]
+   (let [ba (byte-array len)]
+     (.readFully in ba 0 len)
+     ba))
+
+  ([^DataInput in]
+   (enc/case-eval (.readByte in)
+    id-bytes-0  (byte-array 0)
+    id-bytes-sm (read-bytes in (read-sm-count in))
+    id-bytes-md (read-bytes in (read-md-count in))
+    id-bytes-lg (read-bytes in (read-lg-count in)))))
 
 (defn- read-bytes-sm [^DataInput in] (read-bytes in (read-sm-count in)))
 (defn- read-bytes-md [^DataInput in] (read-bytes in (read-md-count in)))
