@@ -3,8 +3,6 @@
   Used by Carmine, Faraday, etc."
   (:require [taoensso.nippy :as nippy]))
 
-;; TODO Switch to thread-local proxies?
-
 (def ^:dynamic *freeze-opts* nil)
 (def ^:dynamic *thaw-opts*   nil)
 
