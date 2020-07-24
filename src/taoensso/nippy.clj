@@ -994,65 +994,97 @@
     (with-cache (-freeze-with-meta! x dos))
     (.toByteArray baos)))
 
+(defn- call-with-bindings
+  "Allow opts to override config bindings. Undocumented."
+  [opts f]
+  (let [opt->bindings
+        (fn [bindings id var]
+          (if-let [o (find opts id)]
+            (assoc bindings var (val o))
+            (do    bindings)))
+
+        bindings
+        (-> nil
+          (opt->bindings :freeze-fallback        #'*freeze-fallback*)
+          (opt->bindings :auto-freeze-compressor #'*auto-freeze-compressor*)
+          (opt->bindings :custom-readers         #'*custom-readers*))]
+
+    (if-not bindings
+      (f) ; Common case
+      (try
+        (push-thread-bindings bindings)
+        (f)
+        (finally
+          (pop-thread-bindings))))))
+
+(comment
+  (enc/qb 1e4
+    (call-with-bindings {}                       (fn [] *freeze-fallback*))
+    (call-with-bindings {:freeze-fallback "foo"} (fn [] *freeze-fallback*))))
+
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
   types, extend the Clojure reader or see `extend-freeze`."
   ([x] (freeze x nil))
-  ([x {:keys [compressor encryptor password]
+  ([x {:as   opts
+       :keys [compressor encryptor password]
        :or   {compressor :auto
-              encryptor  aes128-gcm-encryptor}
-       :as   opts}]
-    (let [;; Intentionally undocumented:
-          no-header? (or (get opts :no-header?)
-                         (get opts :skip-header?))
-          encryptor  (when password encryptor)
-          baos (ByteArrayOutputStream. 64)
-          dos  (DataOutputStream. baos)]
+              encryptor  aes128-gcm-encryptor}}]
 
-      (if (and (nil? compressor) (nil? encryptor))
-        (do ; Optimized case
-          (when-not no-header? ; Avoid `wrap-header`'s array copy:
-            (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
-              (.write dos head-ba 0 4)))
-          (with-cache (-freeze-with-meta! x dos))
-          (.toByteArray baos))
+   (call-with-bindings opts
+     (fn []
 
-        (do
-          (with-cache (-freeze-with-meta! x dos))
-          (let [ba (.toByteArray baos)
+       (let [;; Intentionally undocumented:
+             no-header? (or (get opts :no-header?)
+                          (get opts :skip-header?))
+             encryptor  (when password encryptor)
+             baos (ByteArrayOutputStream. 64)
+             dos  (DataOutputStream. baos)]
 
-                compressor
-                (if (identical? compressor :auto)
-                  (if no-header?
-                    lz4-compressor
-                    (if-let [fc *auto-freeze-compressor*]
-                      (fc ba)
-                      ;; Intelligently enable compression only if benefit
-                      ;; is likely to outweigh cost:
-                      (when (> (alength ba) 8192) lz4-compressor)))
+         (if (and (nil? compressor) (nil? encryptor))
+           (do                           ; Optimized case
+             (when-not no-header?        ; Avoid `wrap-header`'s array copy:
+               (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
+                 (.write dos head-ba 0 4)))
+             (with-cache (-freeze-with-meta! x dos))
+             (.toByteArray baos))
 
-                  (if (fn? compressor)
-                    (compressor ba) ; Assume compressor selector fn
-                    compressor      ; Assume compressor
-                    ))
+           (do
+             (with-cache (-freeze-with-meta! x dos))
+             (let [ba (.toByteArray baos)
 
-                ba (if compressor (compress compressor         ba) ba)
-                ba (if encryptor  (encrypt  encryptor password ba) ba)]
+                   compressor
+                   (if (identical? compressor :auto)
+                     (if no-header?
+                       lz4-compressor
+                       (if-let [fc *auto-freeze-compressor*]
+                         (fc ba)
+                         ;; Intelligently enable compression only if benefit
+                         ;; is likely to outweigh cost:
+                         (when (> (alength ba) 8192) lz4-compressor)))
 
-            (if no-header?
-              ba
-              (wrap-header ba
-                {:compressor-id
-                 (when-let [c compressor]
-                   (or (compression/standard-header-ids
-                       (compression/header-id c))
-                       :else))
+                     (if (fn? compressor)
+                       (compressor ba)   ; Assume compressor selector fn
+                       compressor        ; Assume compressor
+                       ))
 
-                 :encryptor-id
-                 (when-let [e encryptor]
-                   (or (encryption/standard-header-ids
-                       (encryption/header-id e))
-                       :else))}))))))))
+                   ba (if compressor (compress compressor         ba) ba)
+                   ba (if encryptor  (encrypt  encryptor password ba) ba)]
+
+               (if no-header?
+                 ba
+                 (wrap-header ba
+                   {:compressor-id
+                    (when-let [c compressor]
+                      (or (compression/standard-header-ids
+                            (compression/header-id c))
+                        :else))
+
+                    :encryptor-id
+                    (when-let [e encryptor]
+                      (or (encryption/standard-header-ids
+                            (encryption/header-id e))
+                        :else))}))))))))))
 
 ;;;; Thawing
 
@@ -1388,80 +1420,83 @@
 
   ([ba] (thaw ba nil))
   ([^bytes ba
-    {:keys [v1-compatibility? compressor encryptor password]
+    {:as   opts
+     :keys [v1-compatibility? compressor encryptor password]
      :or   {compressor :auto
-            encryptor  :auto}
-     :as   opts}]
+            encryptor  :auto}}]
 
    (assert (not (get opts :headerless-meta))
      ":headerless-meta `thaw` opt removed in Nippy v2.7+")
 
-   (let [v2+?       (not v1-compatibility?)
-         no-header? (get opts :no-header?) ; Intentionally undocumented
-         ex (fn ex
-              ([  msg] (ex nil msg))
-              ([e msg] (throw (ex-info (str "Thaw failed: " msg)
-                                {:opts (assoc opts
-                                         :compressor compressor
-                                         :encryptor  encryptor)}
-                                e))))
+   (call-with-bindings opts
+     (fn []
 
-         thaw-data
-         (fn [data-ba compressor-id encryptor-id ex-fn]
-           (let [compressor (if (identical? compressor :auto)
-                              (get-auto-compressor compressor-id)
-                              compressor)
-                 encryptor  (if (identical? encryptor :auto)
-                              (get-auto-encryptor encryptor-id)
-                              encryptor)]
+       (let [v2+?       (not v1-compatibility?)
+             no-header? (get opts :no-header?) ; Intentionally undocumented
+             ex (fn ex
+                  ([  msg] (ex nil msg))
+                  ([e msg] (throw (ex-info (str "Thaw failed: " msg)
+                                    {:opts (assoc opts
+                                             :compressor compressor
+                                             :encryptor  encryptor)}
+                                    e))))
 
-             (when (and encryptor (not password))
-               (ex "Password required for decryption."))
+             thaw-data
+             (fn [data-ba compressor-id encryptor-id ex-fn]
+               (let [compressor (if (identical? compressor :auto)
+                                  (get-auto-compressor compressor-id)
+                                  compressor)
+                     encryptor  (if (identical? encryptor :auto)
+                                  (get-auto-encryptor encryptor-id)
+                                  encryptor)]
 
-             (try
-               (let [ba data-ba
-                     ba (if encryptor  (decrypt    encryptor password ba) ba)
-                     ba (if compressor (decompress compressor         ba) ba)
-                     dis (DataInputStream. (ByteArrayInputStream. ba))]
+                 (when (and encryptor (not password))
+                   (ex "Password required for decryption."))
 
-                 (with-cache (thaw-from-in! dis)))
+                 (try
+                   (let [ba data-ba
+                         ba (if encryptor  (decrypt    encryptor password ba) ba)
+                         ba (if compressor (decompress compressor         ba) ba)
+                         dis (DataInputStream. (ByteArrayInputStream. ba))]
 
-               (catch Exception e (ex-fn e)))))
+                     (with-cache (thaw-from-in! dis)))
 
-         ;; Hackish + can actually segfault JVM due to Snappy bug,
-         ;; Ref. http://goo.gl/mh7Rpy - no better alternatives, unfortunately
-         thaw-v1-data
-         (fn [data-ba ex-fn]
-           (thaw-data data-ba :snappy nil
-             (fn [_] (thaw-data data-ba nil nil (fn [_] (ex-fn nil))))))]
+                   (catch Exception e (ex-fn e)))))
 
-     (if no-header?
-       (if v2+?
-         (thaw-data ba :no-header :no-header (fn [e] (ex e err-msg-unknown-thaw-failure)))
-         (thaw-data ba :no-header :no-header
-           (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure))))))
+             ;; Hackish + can actually segfault JVM due to Snappy bug,
+             ;; Ref. http://goo.gl/mh7Rpy - no better alternatives, unfortunately
+             thaw-v1-data
+             (fn [data-ba ex-fn]
+               (thaw-data data-ba :snappy nil
+                 (fn [_] (thaw-data data-ba nil nil (fn [_] (ex-fn nil))))))]
 
-       ;; At this point we assume that we have a header iff we have v2+ data
-       (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
-                          :as   head-meta}] (try-parse-header ba)]
+         (if no-header?
+           (if v2+?
+             (thaw-data ba :no-header :no-header (fn [e] (ex e err-msg-unknown-thaw-failure)))
+             (thaw-data ba :no-header :no-header
+               (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure))))))
 
-         ;; A well-formed header _appears_ to be present (it's possible though
-         ;; unlikely that this is a fluke and data is actually headerless):
-         (if v2+?
-           (if unrecognized-meta?
-             (ex err-msg-unrecognized-header)
-             (thaw-data data-ba compressor-id encryptor-id
-               (fn [e] (ex e err-msg-unknown-thaw-failure))))
+           ;; At this point we assume that we have a header iff we have v2+ data
+           (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
+                              :as   head-meta}] (try-parse-header ba)]
 
-           (if unrecognized-meta?
-             (thaw-v1-data ba (fn [_] (ex err-msg-unrecognized-header)))
-             (thaw-data data-ba compressor-id encryptor-id
-               (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure)))))))
+             ;; A well-formed header _appears_ to be present (it's possible though
+             ;; unlikely that this is a fluke and data is actually headerless):
+             (if v2+?
+               (if unrecognized-meta?
+                 (ex err-msg-unrecognized-header)
+                 (thaw-data data-ba compressor-id encryptor-id
+                   (fn [e] (ex e err-msg-unknown-thaw-failure))))
 
-         ;; Well-formed header definitely not present
-         (if v2+?
-           (ex err-msg-unknown-thaw-failure)
-           (thaw-v1-data ba (fn [_] (ex err-msg-unknown-thaw-failure)))))))))
+               (if unrecognized-meta?
+                 (thaw-v1-data ba (fn [_] (ex err-msg-unrecognized-header)))
+                 (thaw-data data-ba compressor-id encryptor-id
+                   (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure)))))))
+
+             ;; Well-formed header definitely not present
+             (if v2+?
+               (ex err-msg-unknown-thaw-failure)
+               (thaw-v1-data ba (fn [_] (ex err-msg-unknown-thaw-failure)))))))))))
 
 (comment
   (thaw (freeze "hello"))
