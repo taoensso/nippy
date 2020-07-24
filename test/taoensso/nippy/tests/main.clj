@@ -38,9 +38,6 @@
                           #(freeze % {:password [:salted "p"]}))
                     test-data)))
 
-  (is (= (vec (:objects nippy/stress-data))
-         ((comp vec thaw freeze) (:objects nippy/stress-data))))
-
   (is (= test-data ((comp #(thaw   % {:compressor nippy/lzma2-compressor})
                           #(freeze % {:compressor nippy/lzma2-compressor}))
                     test-data)))
@@ -77,12 +74,7 @@
         (thaw (org.xerial.snappy.Snappy/uncompress xerial-ba))
         (thaw (org.xerial.snappy.Snappy/uncompress iq80-ba))
         (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
-        (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
-
-  (is ; CBC auto-encryptor compatibility
-    (= "payload"
-      (thaw (freeze "payload" {:password [:salted "pwd"] :encryptor nippy/aes128-cbc-encryptor})
-        (do                   {:password [:salted "pwd"]})))))
+        (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba)))))))
 
 ;;;; Custom types & records
 

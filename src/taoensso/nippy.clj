@@ -13,19 +13,19 @@
    [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
     DataOutputStream Serializable ObjectOutputStream ObjectInputStream
     DataOutput DataInput]
-   [java.lang.reflect Method Field Constructor]
-   [java.net URI]
+   [java.lang.reflect Method]
+   ;; [java.net URI] ; TODO
    [java.util Date UUID]
    [java.util.regex Pattern]
    [clojure.lang Keyword Symbol BigInt Ratio
     APersistentMap APersistentVector APersistentSet
     IPersistentMap ; IPersistentVector IPersistentSet IPersistentList
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
-    LazySeq IRecord ISeq IType]))
+    LazySeq IRecord ISeq]))
 
 (if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [2 121 0])
-  (enc/assert-min-encore-version  2.121))
+  (enc/assert-min-encore-version [2 67 1])
+  (enc/assert-min-encore-version  2.67))
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
@@ -59,38 +59,25 @@
 (def ^:private ^:const head-version "Current Nippy header format version" 1)
 (def ^:private ^:const head-meta
   "Final byte of 4-byte Nippy header stores version-dependent metadata"
-
-  ;; Currently
-  ;;   - 5 compressors, #{nil :snappy :lz4 :lzma2 :else}
-  ;;   - 4 encryptors,  #{nil :aes128-cbc-sha512 :aes128-gcm-sha512 :else}
-
   {(byte 0)  {:version 1 :compressor-id nil     :encryptor-id nil}
-   (byte 2)  {:version 1 :compressor-id nil     :encryptor-id :aes128-cbc-sha512}
-   (byte 14) {:version 1 :compressor-id nil     :encryptor-id :aes128-gcm-sha512}
    (byte 4)  {:version 1 :compressor-id nil     :encryptor-id :else}
-
+   (byte 5)  {:version 1 :compressor-id :else   :encryptor-id nil}
+   (byte 6)  {:version 1 :compressor-id :else   :encryptor-id :else}
+   ;;
+   (byte 2)  {:version 1 :compressor-id nil     :encryptor-id :aes128-sha512}
+   ;;
    (byte 1)  {:version 1 :compressor-id :snappy :encryptor-id nil}
-   (byte 3)  {:version 1 :compressor-id :snappy :encryptor-id :aes128-cbc-sha512}
-   (byte 15) {:version 1 :compressor-id :snappy :encryptor-id :aes128-gcm-sha512}
+   (byte 3)  {:version 1 :compressor-id :snappy :encryptor-id :aes128-sha512}
    (byte 7)  {:version 1 :compressor-id :snappy :encryptor-id :else}
-
+   ;;
    ;;; :lz4 used for both lz4 and lz4hc compressor (the two are compatible)
    (byte 8)  {:version 1 :compressor-id :lz4    :encryptor-id nil}
-   (byte 9)  {:version 1 :compressor-id :lz4    :encryptor-id :aes128-cbc-sha512}
-   (byte 16) {:version 1 :compressor-id :lz4    :encryptor-id :aes128-gcm-sha512}
+   (byte 9)  {:version 1 :compressor-id :lz4    :encryptor-id :aes128-sha512}
    (byte 10) {:version 1 :compressor-id :lz4    :encryptor-id :else}
-
+   ;;
    (byte 11) {:version 1 :compressor-id :lzma2  :encryptor-id nil}
-   (byte 12) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-cbc-sha512}
-   (byte 17) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-gcm-sha512}
-   (byte 13) {:version 1 :compressor-id :lzma2  :encryptor-id :else}
-
-   (byte 5)  {:version 1 :compressor-id :else   :encryptor-id nil}
-   (byte 18) {:version 1 :compressor-id :else   :encryptor-id :aes128-cbc-sha512}
-   (byte 19) {:version 1 :compressor-id :else   :encryptor-id :aes128-gcm-sha512}
-   (byte 6)  {:version 1 :compressor-id :else   :encryptor-id :else}})
-
-(comment (count (sort (keys head-meta))))
+   (byte 12) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-sha512}
+   (byte 13) {:version 1 :compressor-id :lzma2  :encryptor-id :else}})
 
 (defmacro ^:private when-debug [& body] (when #_true false `(do ~@body)))
 
@@ -119,7 +106,7 @@
    49  :record-md
    80  :record-lg ; Used only for back-compatible thawing
 
-   81  :type
+   81  :type ; TODO Implement?
 
    3   :nil
    8   :true
@@ -138,7 +125,7 @@
    57  :sym-lg
 
    58  :regex
-   71  :uri
+   71  :uri ; TODO Implement?
 
    53  :bytes-0
    7   :bytes-sm
@@ -151,8 +138,6 @@
    110 :vec-sm
    69  :vec-md
    21  :vec-lg
-
-   115 :objects-lg ; TODO Could include md, sm, 0 later if there's demand
 
    18  :set-0
    111 :set-sm
@@ -259,21 +244,17 @@
 
   (enc/defalias encrypt           encryption/encrypt)
   (enc/defalias decrypt           encryption/decrypt)
-
-  (enc/defalias aes128-gcm-encryptor encryption/aes128-gcm-encryptor)
-  (enc/defalias aes128-cbc-encryptor encryption/aes128-cbc-encryptor)
-  (enc/defalias aes128-encryptor     encryption/aes128-gcm-encryptor) ; Default
+  (enc/defalias aes128-encryptor  encryption/aes128-encryptor)
 
   (enc/defalias freezable?        utils/freezable?))
 
 ;;;; Dynamic config
 ;; See also `nippy.tools` ns for further dynamic config support
 
-;; For back compatibility (nb Timbre's Carmine appender)
-(enc/defonce ^:dynamic *final-freeze-fallback* "DEPRECATED: prefer `*freeze-fallback`."       nil)
-(enc/defonce ^:dynamic       *freeze-fallback* "(fn [data-output x])->freeze, nil => default" nil)
+;; TODO Switch to thread-local proxies?
 
-(enc/defonce ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])->read}" nil)
+(enc/defonce ^:dynamic *freeze-fallback* "(fn [data-output x]), nil => default" nil)
+(enc/defonce ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])}" nil)
 (enc/defonce ^:dynamic *auto-freeze-compressor*
   "(fn [byte-array])->compressor used by `(freeze <x> {:compressor :auto}),
   nil => default"
@@ -320,7 +301,12 @@
           source, you can use `(constantly true)` as predicate. This
           will whitelist everything, allowing Serializable for ANY class.
 
-  Default value as of v2.15.0 is: #{}.
+  **** IMPORTANT *********************************************************
+  To avoid a breaking change in an <x.y.patch> release, the default value
+  in Nippy v2.14.1 is `(constantly true)`, which MAY BE UNSAFE!!!
+
+  PLEASE REVIEW AND ADJUST THIS SETTING AS NECESSARY FOR YOUR ENVIRONMENT!
+  ************************************************************************
 
   PRs welcome for additional known-safe classes to be added to default
   whitelist.
@@ -338,7 +324,8 @@
 
   [1] https://groups.google.com/forum/#!msg/clojure/WaL3hHzsevI/7zHU-L7LBQAJ"
 
-  #{#_"java.lang.Throwable"})
+  #_#{#_"java.lang.Throwable"}
+  (constantly true))
 
 (defn set-freeze-fallback!        [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
 (defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
@@ -354,6 +341,8 @@
 
   See also `*serializable-whitelist*."
   [f] (alter-var-root #'*serializable-whitelist* f))
+
+(declare ^:dynamic *final-freeze-fallback*) ; DEPRECATED
 
 ;;;; Freezing
 
@@ -744,12 +733,6 @@
 
         (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
 
-(defn- write-objects [^DataOutput out ^objects ary]
-  (let [len (alength ary)]
-    (write-id       out id-objects-lg)
-    (write-lg-count out len)
-    (-run! (fn [in] (-freeze-with-meta! in out)) ary)))
-
 (defn- write-serializable [^DataOutput out x ^String class-name]
   (when-debug (println (str "write-serializable: " (type x))))
   (let [class-name-ba (.getBytes class-name charset)
@@ -968,17 +951,12 @@
   (write-biginteger out (.denominator x)))
 
 (id-freezer Date id-date (.writeLong out (.getTime x)))
-
-(id-freezer URI id-uri
-  (write-str out (.toString x)))
-
 (id-freezer UUID id-uuid
   (.writeLong out (.getMostSignificantBits  x))
   (.writeLong out (.getLeastSignificantBits x)))
 
 (freezer Boolean              (if x (write-id out id-true) (write-id out id-false)))
-(freezer (Class/forName "[B")                  (write-bytes   out x))
-(freezer (Class/forName "[Ljava.lang.Object;") (write-objects out x))
+(freezer (Class/forName "[B") (write-bytes out x))
 (freezer String               (write-str   out x))
 (freezer Keyword              (write-kw    out x))
 (freezer Symbol               (write-sym   out x))
@@ -1015,20 +993,6 @@
 
     (-freeze-without-meta! (into {} x) out)))
 
-(freezer IType
-   (let [aclass (class x)
-         cname  (.getName aclass)]
-     (write-id  out id-type)
-     (write-str out cname)
-     (let [basis-method (.getMethod aclass "getBasis" nil)
-           basis        (.invoke basis-method nil nil)]
-       (-run!
-         (fn [b]
-           (let [^Field cfield (.getField aclass (name b))]
-             (let [fvalue (.get cfield x)]
-               (-freeze-without-meta! fvalue out))))
-         basis))))
-
 (freezer Object
   (when-debug (println (str "freeze-fallback: " (type x))))
   (if-let [ff *freeze-fallback*]
@@ -1044,7 +1008,10 @@
       (try-write-serializable out x)
       (try-write-readable     out x)
 
-      (when-let [fff *final-freeze-fallback*] (fff out x) true) ; Deprecated
+      ;; For back compatibility (nb Timbre's Carmine appender)
+      (when-let [fff *final-freeze-fallback*]
+        (fff out x)
+        true)
 
       (throw-unfreezable x))))
 
@@ -1080,98 +1047,65 @@
     (with-cache (-freeze-with-meta! x dos))
     (.toByteArray baos)))
 
-(defn- call-with-bindings
-  "Allow opts to override config bindings. Undocumented."
-  [opts f]
-  (let [opt->bindings
-        (fn [bindings id var]
-          (if-let [o (find opts id)]
-            (assoc bindings var (val o))
-            (do    bindings)))
-
-        bindings
-        (-> nil
-          (opt->bindings :freeze-fallback        #'*freeze-fallback*)
-          (opt->bindings :auto-freeze-compressor #'*auto-freeze-compressor*)
-          (opt->bindings :serializable-whitelist #'*serializable-whitelist*)
-          (opt->bindings :custom-readers         #'*custom-readers*))]
-
-    (if-not bindings
-      (f) ; Common case
-      (try
-        (push-thread-bindings bindings)
-        (f)
-        (finally
-          (pop-thread-bindings))))))
-
-(comment
-  (enc/qb 1e4
-    (call-with-bindings {}                       (fn [] *freeze-fallback*))
-    (call-with-bindings {:freeze-fallback "foo"} (fn [] *freeze-fallback*))))
-
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
   types, extend the Clojure reader or see `extend-freeze`."
   ([x] (freeze x nil))
-  ([x {:as   opts
-       :keys [compressor encryptor password]
+  ([x {:keys [compressor encryptor password]
        :or   {compressor :auto
-              encryptor  aes128-gcm-encryptor}}]
+              encryptor  aes128-encryptor}
+       :as   opts}]
+    (let [;; Intentionally undocumented:
+          no-header? (or (get opts :no-header?)
+                         (get opts :skip-header?))
+          encryptor  (when password encryptor)
+          baos (ByteArrayOutputStream. 64)
+          dos  (DataOutputStream. baos)]
 
-   (call-with-bindings opts
-     (fn []
+      (if (and (nil? compressor) (nil? encryptor))
+        (do ; Optimized case
+          (when-not no-header? ; Avoid `wrap-header`'s array copy:
+            (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
+              (.write dos head-ba 0 4)))
+          (with-cache (-freeze-with-meta! x dos))
+          (.toByteArray baos))
 
-       (let [;; Intentionally undocumented:
-             no-header? (or (get opts :no-header?)
-                          (get opts :skip-header?))
-             encryptor  (when password encryptor)
-             baos (ByteArrayOutputStream. 64)
-             dos  (DataOutputStream. baos)]
+        (do
+          (with-cache (-freeze-with-meta! x dos))
+          (let [ba (.toByteArray baos)
 
-         (if (and (nil? compressor) (nil? encryptor))
-           (do                           ; Optimized case
-             (when-not no-header?        ; Avoid `wrap-header`'s array copy:
-               (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
-                 (.write dos head-ba 0 4)))
-             (with-cache (-freeze-with-meta! x dos))
-             (.toByteArray baos))
+                compressor
+                (if (identical? compressor :auto)
+                  (if no-header?
+                    lz4-compressor
+                    (if-let [fc *auto-freeze-compressor*]
+                      (fc ba)
+                      ;; Intelligently enable compression only if benefit
+                      ;; is likely to outweigh cost:
+                      (when (> (alength ba) 8192) lz4-compressor)))
 
-           (do
-             (with-cache (-freeze-with-meta! x dos))
-             (let [ba (.toByteArray baos)
+                  (if (fn? compressor)
+                    (compressor ba) ; Assume compressor selector fn
+                    compressor      ; Assume compressor
+                    ))
 
-                   compressor
-                   (if (identical? compressor :auto)
-                     (if no-header?
-                       lz4-compressor
-                       (if-let [fc *auto-freeze-compressor*]
-                         (fc ba)
-                         ;; Intelligently enable compression only if benefit
-                         ;; is likely to outweigh cost:
-                         (when (> (alength ba) 8192) lz4-compressor)))
+                ba (if compressor (compress compressor         ba) ba)
+                ba (if encryptor  (encrypt  encryptor password ba) ba)]
 
-                     (if (fn? compressor)
-                       (compressor ba)   ; Assume compressor selector fn
-                       compressor        ; Assume compressor
-                       ))
+            (if no-header?
+              ba
+              (wrap-header ba
+                {:compressor-id
+                 (when-let [c compressor]
+                   (or (compression/standard-header-ids
+                       (compression/header-id c))
+                       :else))
 
-                   ba (if compressor (compress compressor         ba) ba)
-                   ba (if encryptor  (encrypt  encryptor password ba) ba)]
-
-               (if no-header?
-                 ba
-                 (wrap-header ba
-                   {:compressor-id
-                    (when-let [c compressor]
-                      (or (compression/standard-header-ids
-                            (compression/header-id c))
-                        :else))
-
-                    :encryptor-id
-                    (when-let [e encryptor]
-                      (or (encryption/standard-header-ids
-                            (encryption/header-id e))
-                        :else))}))))))))))
+                 :encryptor-id
+                 (when-let [e encryptor]
+                   (or (encryption/standard-header-ids
+                       (encryption/header-id e))
+                       :else))}))))))))
 
 ;;;; Thawing
 
@@ -1208,13 +1142,6 @@
         (transient to) n))
 
     (enc/reduce-n (fn [acc _] (conj acc (thaw-from-in! in))) to n)))
-
-(defn- read-objects [^objects ary ^DataInput in]
-  (enc/reduce-n
-    (fn [^objects ary i]
-      (aset ary i (thaw-from-in! in))
-      ary)
-    ary (alength ary)))
 
 (defn- read-kvs-into [to ^DataInput in ^long n]
   (if (and (editable? to) (> n 10))
@@ -1299,30 +1226,6 @@
          :throwable e
          :nippy/unthawable {:class-name class-name :content content}}))))
 
-(defn- read-type [in class-name]
-  (try
-    (let [aclass (clojure.lang.RT/classForName class-name)
-          nbasis
-          (let [basis-method (.getMethod aclass "getBasis" nil)
-                basis        (.invoke basis-method nil nil)]
-            (count basis))
-
-          cvalues (object-array nbasis)]
-
-      (enc/reduce-n
-        (fn [_ i] (aset cvalues i (thaw-from-in! in)))
-        nil nbasis)
-
-      (let [ctors (.getConstructors aclass)
-            ^Constructor ctor (aget ctors 0) ; Impl. detail? Ref. https://goo.gl/XWmckR
-            ]
-        (.newInstance ctor cvalues)))
-
-    (catch Exception e
-      {:type             :type
-       :throwable        e
-       :nippy/unthawable {:class-name class-name}})))
-
 (defn thaw-from-in!
   "Deserializes a frozen object from given DataInput to its original Clojure
   data type.
@@ -1344,8 +1247,6 @@
         id-record-sm       (read-record       in (read-utf8 in (read-sm-count in)))
         id-record-md       (read-record       in (read-utf8 in (read-md-count in)))
         id-record-lg       (read-record       in (read-utf8 in (read-lg-count in)))
-
-        id-type        (read-type in (thaw-from-in! in))
 
         id-nil         nil
         id-true        true
@@ -1369,8 +1270,6 @@
         id-bytes-sm    (read-bytes in (read-sm-count in))
         id-bytes-md    (read-bytes in (read-md-count in))
         id-bytes-lg    (read-bytes in (read-lg-count in))
-
-        id-objects-lg  (read-objects (object-array (read-lg-count in)) in)
 
         id-str-0       ""
         id-str-sm               (read-utf8 in (read-sm-count in))
@@ -1435,7 +1334,6 @@
                          (read-biginteger in))
 
         id-date        (Date. (.readLong in))
-        id-uri         (URI. (thaw-from-in! in))
         id-uuid        (UUID. (.readLong in) (.readLong in))
 
         ;; Deprecated ------------------------------------------------------
@@ -1485,19 +1383,18 @@
     :lzma2     lzma2-compressor
     :lz4       lz4-compressor
     :no-header (throw (ex-info ":auto not supported on headerless data." {}))
-    :else      (throw (ex-info ":auto not supported for non-standard compressors." {}))
-    (do        (throw (ex-info (str "Unrecognized :auto compressor id: " compressor-id)
-                        {:compressor-id compressor-id})))))
+    :else (throw (ex-info ":auto not supported for non-standard compressors." {}))
+    (throw (ex-info (str "Unrecognized :auto compressor id: " compressor-id)
+             {:compressor-id compressor-id}))))
 
 (defn- get-auto-encryptor [encryptor-id]
   (case encryptor-id
-    nil                nil
-    :aes128-gcm-sha512 aes128-gcm-encryptor
-    :aes128-cbc-sha512 aes128-cbc-encryptor
-    :no-header (throw (ex-info ":auto not supported on headerless data." {}))
-    :else      (throw (ex-info ":auto not supported for non-standard encryptors." {}))
-    (do        (throw (ex-info (str "Unrecognized :auto encryptor id: " encryptor-id)
-                        {:encryptor-id encryptor-id})))))
+    nil            nil
+    :aes128-sha512 aes128-encryptor
+    :no-header     (throw (ex-info ":auto not supported on headerless data." {}))
+    :else (throw (ex-info ":auto not supported for non-standard encryptors." {}))
+    (throw (ex-info (str "Unrecognized :auto encryptor id: " encryptor-id)
+             {:encryptor-id encryptor-id}))))
 
 (def ^:private err-msg-unknown-thaw-failure
   "Decryption/decompression failure, or data unfrozen/damaged.")
@@ -1531,83 +1428,80 @@
 
   ([ba] (thaw ba nil))
   ([^bytes ba
-    {:as   opts
-     :keys [v1-compatibility? compressor encryptor password]
+    {:keys [v1-compatibility? compressor encryptor password]
      :or   {compressor :auto
-            encryptor  :auto}}]
+            encryptor  :auto}
+     :as   opts}]
 
    (assert (not (get opts :headerless-meta))
      ":headerless-meta `thaw` opt removed in Nippy v2.7+")
 
-   (call-with-bindings opts
-     (fn []
+   (let [v2+?       (not v1-compatibility?)
+         no-header? (get opts :no-header?) ; Intentionally undocumented
+         ex (fn ex
+              ([  msg] (ex nil msg))
+              ([e msg] (throw (ex-info (str "Thaw failed: " msg)
+                                {:opts (assoc opts
+                                         :compressor compressor
+                                         :encryptor  encryptor)}
+                                e))))
 
-       (let [v2+?       (not v1-compatibility?)
-             no-header? (get opts :no-header?) ; Intentionally undocumented
-             ex (fn ex
-                  ([  msg] (ex nil msg))
-                  ([e msg] (throw (ex-info (str "Thaw failed: " msg)
-                                    {:opts (assoc opts
-                                             :compressor compressor
-                                             :encryptor  encryptor)}
-                                    e))))
+         thaw-data
+         (fn [data-ba compressor-id encryptor-id ex-fn]
+           (let [compressor (if (identical? compressor :auto)
+                              (get-auto-compressor compressor-id)
+                              compressor)
+                 encryptor  (if (identical? encryptor :auto)
+                              (get-auto-encryptor encryptor-id)
+                              encryptor)]
 
-             thaw-data
-             (fn [data-ba compressor-id encryptor-id ex-fn]
-               (let [compressor (if (identical? compressor :auto)
-                                  (get-auto-compressor compressor-id)
-                                  compressor)
-                     encryptor  (if (identical? encryptor :auto)
-                                  (get-auto-encryptor encryptor-id)
-                                  encryptor)]
+             (when (and encryptor (not password))
+               (ex "Password required for decryption."))
 
-                 (when (and encryptor (not password))
-                   (ex "Password required for decryption."))
+             (try
+               (let [ba data-ba
+                     ba (if encryptor  (decrypt    encryptor password ba) ba)
+                     ba (if compressor (decompress compressor         ba) ba)
+                     dis (DataInputStream. (ByteArrayInputStream. ba))]
 
-                 (try
-                   (let [ba data-ba
-                         ba (if encryptor  (decrypt    encryptor password ba) ba)
-                         ba (if compressor (decompress compressor         ba) ba)
-                         dis (DataInputStream. (ByteArrayInputStream. ba))]
+                 (with-cache (thaw-from-in! dis)))
 
-                     (with-cache (thaw-from-in! dis)))
+               (catch Exception e (ex-fn e)))))
 
-                   (catch Exception e (ex-fn e)))))
+         ;; Hackish + can actually segfault JVM due to Snappy bug,
+         ;; Ref. http://goo.gl/mh7Rpy - no better alternatives, unfortunately
+         thaw-v1-data
+         (fn [data-ba ex-fn]
+           (thaw-data data-ba :snappy nil
+             (fn [_] (thaw-data data-ba nil nil (fn [_] (ex-fn nil))))))]
 
-             ;; Hackish + can actually segfault JVM due to Snappy bug,
-             ;; Ref. http://goo.gl/mh7Rpy - no better alternatives, unfortunately
-             thaw-v1-data
-             (fn [data-ba ex-fn]
-               (thaw-data data-ba :snappy nil
-                 (fn [_] (thaw-data data-ba nil nil (fn [_] (ex-fn nil))))))]
+     (if no-header?
+       (if v2+?
+         (thaw-data ba :no-header :no-header (fn [e] (ex e err-msg-unknown-thaw-failure)))
+         (thaw-data ba :no-header :no-header
+           (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure))))))
 
-         (if no-header?
-           (if v2+?
-             (thaw-data ba :no-header :no-header (fn [e] (ex e err-msg-unknown-thaw-failure)))
-             (thaw-data ba :no-header :no-header
-               (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure))))))
+       ;; At this point we assume that we have a header iff we have v2+ data
+       (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
+                          :as   head-meta}] (try-parse-header ba)]
 
-           ;; At this point we assume that we have a header iff we have v2+ data
-           (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
-                              :as   head-meta}] (try-parse-header ba)]
+         ;; A well-formed header _appears_ to be present (it's possible though
+         ;; unlikely that this is a fluke and data is actually headerless):
+         (if v2+?
+           (if unrecognized-meta?
+             (ex err-msg-unrecognized-header)
+             (thaw-data data-ba compressor-id encryptor-id
+               (fn [e] (ex e err-msg-unknown-thaw-failure))))
 
-             ;; A well-formed header _appears_ to be present (it's possible though
-             ;; unlikely that this is a fluke and data is actually headerless):
-             (if v2+?
-               (if unrecognized-meta?
-                 (ex err-msg-unrecognized-header)
-                 (thaw-data data-ba compressor-id encryptor-id
-                   (fn [e] (ex e err-msg-unknown-thaw-failure))))
+           (if unrecognized-meta?
+             (thaw-v1-data ba (fn [_] (ex err-msg-unrecognized-header)))
+             (thaw-data data-ba compressor-id encryptor-id
+               (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure)))))))
 
-               (if unrecognized-meta?
-                 (thaw-v1-data ba (fn [_] (ex err-msg-unrecognized-header)))
-                 (thaw-data data-ba compressor-id encryptor-id
-                   (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure)))))))
-
-             ;; Well-formed header definitely not present
-             (if v2+?
-               (ex err-msg-unknown-thaw-failure)
-               (thaw-v1-data ba (fn [_] (ex err-msg-unknown-thaw-failure)))))))))))
+         ;; Well-formed header definitely not present
+         (if v2+?
+           (ex err-msg-unknown-thaw-failure)
+           (thaw-v1-data ba (fn [_] (ex err-msg-unknown-thaw-failure)))))))))
 
 (comment
   (thaw (freeze "hello"))
@@ -1699,9 +1593,6 @@
 ;;;; Stress data
 
 (defrecord StressRecord [data])
-(deftype StressType [data]
-  Object
-  (equals [a b] (= (.-data a) (.-data ^StressType b))))
 (def stress-data "Reference data used for tests & benchmarks"
   {:bytes     (byte-array [(byte 1) (byte 2) (byte 3)])
    :nil       nil
@@ -1756,13 +1647,10 @@
    :bigdec       (bigdec 3.1415926535897932384626433832795)
 
    :ratio        22/7
-   :uri          (URI. "https://clojure.org/reference/data_structures")
    :uuid         (java.util.UUID/randomUUID)
    :date         (java.util.Date.)
-   :objects      (object-array [1 "two" {:data "data"}])
 
    :stress-record (StressRecord. "data")
-   :stress-type   (StressType. "data")
 
    ;; Serializable
    :throwable    (Throwable. "Yolo")
@@ -1771,14 +1659,14 @@
 
 (def stress-data-comparable
   "Reference data with stuff removed that breaks roundtrip equality"
-  (dissoc stress-data :bytes :throwable :exception :ex-info :regex :objects))
+  (dissoc stress-data :bytes :throwable :exception :ex-info :regex))
 
 (def stress-data-benchable
   "Reference data with stuff removed that breaks reader or other utils we'll
   be benching against"
   (dissoc stress-data
     :bytes :throwable :exception :ex-info :queue :queue-empty
-    :byte :stress-record :stress-type :regex :objects))
+    :byte :stress-record :regex))
 
 ;;;; Tools
 
@@ -1810,29 +1698,12 @@
   (inspect-ba (freeze "hello"))
   (seq (:data-ba (inspect-ba (freeze "hello")))))
 
-(defn freeze-to-string
-  "Convenience util: like `freeze`, but returns a Base64-encoded string.
-  See also `thaw-from-string`."
-  ([x            ] (freeze-to-string x nil))
-  ([x freeze-opts]
-   (let [ba (freeze x freeze-opts)]
-     (.encodeToString (java.util.Base64/getEncoder)
-       ba))))
-
-(defn thaw-from-string
-  "Convenience util: like `thaw`, but takes a Base64-encoded string.
-  See also `freeze-to-string`."
-  ([s                  ] (thaw-from-string s nil))
-  ([^String s thaw-opts]
-   (let [ba (.decode (java.util.Base64/getDecoder) s)]
-     (thaw ba thaw-opts))))
-
-(comment (thaw-from-string (freeze-to-string {:a :A :b [:B1 :B2]})))
-
 (defn freeze-to-file
-  "Convenience util: like `freeze`, but writes to `(clojure.java.io/file <file>)`
-  and returns the byte array written.
-  See also `thaw-from-file`."
+  "Convenience util: writes `(freeze x freeze-opts)` byte array to
+  `(clojure.java.io/file file)` and returns the byte array.
+
+  (freeze-to-file \"my-filename.npy\" my-val) => Serialized byte array"
+
   ([file x            ] (freeze-to-file file x nil))
   ([file x freeze-opts]
    (let [^bytes ba (freeze x freeze-opts)]
@@ -1841,12 +1712,14 @@
      ba)))
 
 (defn thaw-from-file
-  "Convenience util: like `thaw`, but reads from `(clojure.java.io/file <file>)`.
+  "Convenience util: returns `(thaw ba thaw-opts)` Clojure value for the
+  byte array read from `(clojure.java.io/file file)`.
+
+  (thaw-from-file \"my-filename.npy\") => Deserialized Clojure value
 
   To thaw from a resource on classpath (e.g in Leiningen `resources` dir):
-    (thaw-from-file (clojure.java.io/resource \"my-resource-name.npy\"))
+    (thaw-from-file (clojure.java.io/resource \"my-resource-name.npy\"))"
 
-  See also `freeze-to-file`."
   ([file          ] (thaw-from-file file nil))
   ([file thaw-opts]
    (let [file (jio/file file),
@@ -1863,4 +1736,6 @@
 
 ;;;; Deprecated
 
-(enc/deprecated (def freeze-fallback-as-str "DEPRECATED" write-unfreezable))
+(enc/deprecated
+  (enc/defonce ^:dynamic *final-freeze-fallback* "DEPRECATED" nil)
+  (def freeze-fallback-as-str "DEPRECATED" write-unfreezable))

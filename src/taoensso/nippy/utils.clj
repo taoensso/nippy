@@ -93,9 +93,6 @@
   test for pre/post serialization value equality (there's no good general
   way of doing so)."
 
-  ;; TODO Not happy with this approach in general, could do with a refactor.
-  ;; Maybe return true/false/nil (nil => maybe)?
-
   ([x] (freezable? x nil))
   ([x {:keys [allow-clojure-reader? allow-java-serializable?]}]
    (if (is-coll? x)
@@ -105,7 +102,6 @@
        (is? x java.lang.String)
        (is? x java.lang.Long)
        (is? x java.lang.Double)
-       (nil? x)
 
        (is? x clojure.lang.BigInt)
        (is? x clojure.lang.Ratio)
