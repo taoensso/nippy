@@ -1264,27 +1264,30 @@
 
 ;;;; Thawing
 
+(declare ^:private read-bytes)
+(defn- read-bytes-sm [^DataInput in] (read-bytes in (read-sm-count in)))
+(defn- read-bytes-md [^DataInput in] (read-bytes in (read-md-count in)))
+(defn- read-bytes-lg [^DataInput in] (read-bytes in (read-lg-count in)))
 (defn- read-bytes
-  ([^DataInput in len]
-   (let [ba (byte-array len)]
-     (.readFully in ba 0 len)
-     ba))
-
-  ([^DataInput in]
+  ([^DataInput in len] (let [ba (byte-array len)] (.readFully in ba 0 len) ba))
+  ([^DataInput in    ]
    (enc/case-eval (.readByte in)
     id-bytes-0  (byte-array 0)
     id-bytes-sm (read-bytes in (read-sm-count in))
     id-bytes-md (read-bytes in (read-md-count in))
     id-bytes-lg (read-bytes in (read-lg-count in)))))
 
-(defn- read-bytes-sm [^DataInput in] (read-bytes in (read-sm-count in)))
-(defn- read-bytes-md [^DataInput in] (read-bytes in (read-md-count in)))
-(defn- read-bytes-lg [^DataInput in] (read-bytes in (read-lg-count in)))
-
-(defn- read-utf8    [in len]        (String. ^bytes (read-bytes in len)                charset))
 (defn- read-utf8-sm [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count in)) charset))
 (defn- read-utf8-md [^DataInput in] (String. ^bytes (read-bytes in (read-md-count in)) charset))
 (defn- read-utf8-lg [^DataInput in] (String. ^bytes (read-bytes in (read-lg-count in)) charset))
+(defn- read-utf8
+  ([^DataInput in len] (String. ^bytes (read-bytes in len) charset))
+  ([^DataInput in    ]
+   (enc/case-eval (.readByte in)
+     id-str-0  ""
+     id-str-sm (String. ^bytes (read-bytes in (read-sm-count in)) charset)
+     id-str-md (String. ^bytes (read-bytes in (read-md-count in)) charset)
+     id-str-lg (String. ^bytes (read-bytes in (read-lg-count in)) charset))))
 
 (defn- read-biginteger [^DataInput in] (BigInteger. ^bytes (read-bytes in (.readInt in))))
 
