@@ -205,16 +205,13 @@
 
 ;;;; Thread safety
 
-;; Not sure why, but record equality test fails in futures:
-(def test-data-threaded (dissoc nippy/stress-data-comparable :stress-record))
-
 (deftest _thread-safe
   (is
     (let [futures
           (mapv
             (fn [_]
               (future
-                (= (thaw (freeze test-data-threaded)) test-data-threaded)))
+                (= (thaw (freeze test-data)) test-data)))
             (range 50))]
       (every? deref futures)))
 
@@ -223,9 +220,9 @@
           (mapv
             (fn [_]
               (future
-                (= (thaw (freeze test-data-threaded {:password [:salted "password"]})
-                                                    {:password [:salted "password"]})
-                  test-data-threaded)))
+                (= (thaw (freeze test-data {:password [:salted "password"]})
+                                           {:password [:salted "password"]})
+                  test-data)))
             (range 50))]
       (every? deref futures)))
 
@@ -234,9 +231,9 @@
           (mapv
             (fn [_]
               (future
-                (= (thaw (freeze test-data-threaded {:password [:cached "password"]})
-                                                    {:password [:cached "password"]})
-                  test-data-threaded)))
+                (= (thaw (freeze test-data {:password [:cached "password"]})
+                                           {:password [:cached "password"]})
+                  test-data)))
             (range 50))]
       (every? deref futures))))
 

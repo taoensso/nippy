@@ -39,8 +39,6 @@
            [lein-ancient "0.6.15"]
            [lein-codox   "0.10.7"]]}]}
 
-  :test-paths ["test" "src"]
-
   :codox
   {:language :clojure
    :source-uri "https://github.com/ptaoussanis/nippy/blob/master/{filepath}#L{line}"}
