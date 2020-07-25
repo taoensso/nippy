@@ -1622,8 +1622,8 @@
               (and (integer? custom-type-id) (<= 1 custom-type-id 128)))))
 
 (defn- coerce-custom-type-id
-  "* +ive byte id -> -ive byte id (for unprefixed custom types)
-  * Keyword id   -> Short hash id (for prefixed custom types)"
+  "* +ive byte id ->  -ive byte id (for unprefixed custom types)
+ *   Keyword id -> Short hash id (for   prefixed custom types)"
   [custom-type-id]
   (assert-custom-type-id custom-type-id)
   (if-not (keyword? custom-type-id)
@@ -1635,6 +1635,7 @@
       ;; Make sure hash ids can't collide with byte ids (unlikely anyway):
       (assert (not (<= -128 short-hash-id -1))
         "Custom type id hash collision; please choose a different id")
+
       (int short-hash-id))))
 
 (comment (coerce-custom-type-id 77)
@@ -1643,8 +1644,9 @@
 (defmacro extend-freeze
   "Extends Nippy to support freezing of a custom type (ideally concrete) with
   given id of form:
-    * Keyword           - 2 byte overhead, resistent to id collisions
-    * Integer ∈[1, 128] - no overhead, subject to id collisions
+
+    * Keyword    - 2 byte overhead, keywords hashed to 16 bit id
+    * ℕ∈[1, 128] - 0 byte overhead
 
   NB: be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU.
 
@@ -1654,6 +1656,7 @@
   ;; or
   (extend-freeze MyRec 1 [x data-output] ; Byte id
     (.writeUTF [data-output] (:data x)))"
+
   [type custom-type-id [x out] & body]
   (assert-custom-type-id custom-type-id)
   (let [write-id-form
