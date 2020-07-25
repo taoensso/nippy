@@ -280,7 +280,24 @@
   nil => default"
   nil)
 
-(def default-serializable-whitelist #{})
+(def default-serializable-whitelist
+  "PRs welcome to add additional known-safe classes to default."
+  #{"[I" "[F" "[Z" "[B" "[C" "[D" "[S" "[J"
+
+    "java.lang.Throwable"
+    "java.lang.Exception"
+    "java.lang.RuntimeException"
+    "java.lang.ArithmeticException"
+    "java.lang.IllegalArgumentException"
+    "java.lang.NullPointerException"
+    "java.lang.IndexOutOfBoundsException"
+
+    "java.net.URI"
+    "java.util.UUID"
+    "java.util.Date"
+    #_"java.time.*" ; Safe?
+    "clojure.lang.ExceptionInfo"
+    "clojure.lang.ArityException"})
 
 (defn- split-class-names>set [s] (when (string? s) (if (= s "") #{} (set (mapv str/trim (str/split s #"[,:]"))))))
 (comment
@@ -306,8 +323,9 @@
 
   This is a security measure to prevent Remote Code Execution (RCE).
 
-  Default value for v2.14.2 is: `(constantly true)`.
-  Default value for v2.15.x is: `#{}`.
+  Default value is a set containing a number of known-safe classes,
+  see `default-serializable-whitelist` for details. PRs welcome to add
+  additional known-safe classes to default.
 
   Value may be overridden with `swap-serializable-whitelist!` or with:
 
