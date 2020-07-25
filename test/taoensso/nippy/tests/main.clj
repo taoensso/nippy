@@ -278,10 +278,10 @@
   (is
     (= :quarantined
       (get-in
-        (binding [nippy/*serializable-whitelist* #{}]
-          (nippy/thaw
-            (binding [nippy/*serializable-whitelist* "*"]
-              (nippy/freeze (java.util.concurrent.Semaphore. 1)))))
+        (nippy/thaw
+          (nippy/freeze (java.util.concurrent.Semaphore. 1)
+            {:serializable-whitelist "*"})
+          {:serializable-whitelist #{}})
         [:nippy/unthawable :cause]))
 
     "Thaw will quarantine Serializable objects approved when freezing.")
