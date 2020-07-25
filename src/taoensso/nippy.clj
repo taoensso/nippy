@@ -279,6 +279,8 @@
   nil => default"
   nil)
 
+(def default-serializable-whitelist #{})
+
 (enc/defonce ^:dynamic *serializable-whitelist*
   "Used when attempting to freeze or thaw an object that:
     - Does not implement Nippy's Freezable    protocol.
@@ -287,18 +289,29 @@
   In this case, Java's Serializable interface will be permitted iff
   the predicate (*serializable-whitelist* <class-name>) returns true.
 
-  I.e. this is a predicate (fn [class-name]) that specifies whether
-  Nippy may use a given class's Serializable implementation as
+  I.e. this is a predicate (fn allow-class? [class-name]) that specifies
+  whether Nippy may use a given class's Serializable implementation as
   fallback when its own protocol is unfamiliar with the type.
+
+  If `thaw` encounters an unwhitelisted Serialized class:
+    - `thaw` will throw if it's not possible to safely quarantine.
+    - Otherwise the object will be thawed as:
+      `{:nippy/unthawable {:class-name _ :content <quarantined-ba> ...}}`.
 
   This is a security measure to prevent Remote Code Execution (RCE).
 
-  Context:
+  Default value for v2.14.2 is: `(constantly true)`.
+  Default value for v2.15.x is: `#{}`.
+
+  See also `swap-serializable-whitelist!`.
+
+  ================
+  Further context:
 
     Reading arbitrary Serializable classes can be dangerous if they
     come from an untrusted source.
 
-    Specifically: if your classpath contains a vulnerable (\"gadget\")
+    Specifically: if your classpath contains a vulnerable (\"gadget\")[2]
     class - it is possible for an attacker to produce an object that
     can run arbitrary code when read via Serializable.
 
@@ -320,25 +333,30 @@
           source, you can use `(constantly true)` as predicate. This
           will whitelist everything, allowing Serializable for ANY class.
 
-  Default value as of v2.15.0 is: #{}.
+  Upgrading from an older version of Nippy and not sure whether you've
+  been using Nippy's Serializable support? Here's a code snippet that
+  will allow AND RECORD any class using Nippy's Serializable fallback:
 
-  PRs welcome for additional known-safe classes to be added to default
-  whitelist.
+    ;; Deref for set of all class names that made use of Nippy's Serializable support:
+    (defonce observed-serializables_ (atom #{}))
 
-  Note: if `thaw` encounters an unwhitelisted Serialized class:
-
-    - `thaw` will throw if it's not possible to safely quarantine.
-    - Otherwise the object will be thawed as:
-      `{:nippy/unthawable {:class-name _ :content <quarantined-ba> ...}}`.
+    (swap-serializable-whitelist!
+      (fn [_]
+        (fn allow-class? [class-name]
+          (swap! observed-serializables_ conj class-name) ; Record class name
+          true ; Allow any class
+          )))
 
   Thanks to Timo Mihaljov (@solita-timo-mihaljov) for an excellent report
   identifying this vulnerability.
 
-  See also `swap-serializable-whitelist!`.
+  [1] https://groups.google.com/forum/#!msg/clojure/WaL3hHzsevI/7zHU-L7LBQAJ
+  [2] Jackson maintains a list of common gadget classes at
+    https://github.com/FasterXML/jackson-databind/blob/master/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/SubTypeValidator.java"
 
-  [1] https://groups.google.com/forum/#!msg/clojure/WaL3hHzsevI/7zHU-L7LBQAJ"
+  default-serializable-whitelist)
 
-  #{#_"java.lang.Throwable"})
+(comment (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
 
 (defn set-freeze-fallback!        [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
 (defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
