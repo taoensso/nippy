@@ -2,6 +2,7 @@
   "High-performance serialization library for Clojure"
   {:author "Peter Taoussanis (@ptaoussanis)"}
   (:require
+   [clojure.string  :as str]
    [clojure.java.io :as jio]
    [taoensso.encore :as enc :refer [cond*]]
    [taoensso.nippy
@@ -24,8 +25,8 @@
     LazySeq IRecord ISeq IType]))
 
 (if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [2 121 0])
-  (enc/assert-min-encore-version  2.121))
+  (enc/assert-min-encore-version [2 124 0])
+  (enc/assert-min-encore-version  2.124))
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
@@ -281,6 +282,11 @@
 
 (def default-serializable-whitelist #{})
 
+(defn- split-class-names>set [s] (when (string? s) (if (= s "") #{} (set (mapv str/trim (str/split s #"[,:]"))))))
+(comment
+  (split-class-names>set "")
+  (split-class-names>set "foo, bar:baz"))
+
 (enc/defonce ^:dynamic *serializable-whitelist*
   "Used when attempting to freeze or thaw an object that:
     - Does not implement Nippy's Freezable    protocol.
@@ -303,7 +309,21 @@
   Default value for v2.14.2 is: `(constantly true)`.
   Default value for v2.15.x is: `#{}`.
 
-  See also `swap-serializable-whitelist!`.
+  Value may be overridden with `swap-serializable-whitelist!` or with:
+
+    - `taoensso.nippy.serializable-whitelist-base` JVM property
+    - `taoensso.nippy.serializable-whitelist-add`  JVM property
+
+    - `TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_BASE` env var
+    - `TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_ADD`  env var
+
+    If present, these will be read as comma-separated lists of class
+    names and formed into sets. Initial whitelist value will then be:
+    (into (or <?base> <default>) <?additions>).
+
+    I.e. you can use:
+      - The \"base\" property/var to override Nippy's default whitelist.
+      - The \"add\"  property/var to add to   Nippy's default whitelist.
 
   Strings in sets may contain \"*\" wildcards.
 
@@ -359,7 +379,23 @@
   [2] Jackson maintains a list of common gadget classes at
     https://github.com/FasterXML/jackson-databind/blob/master/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/SubTypeValidator.java"
 
-  default-serializable-whitelist)
+  (let [whitelist-base
+        (or
+          (when-let [s (enc/get-sys-val
+                         "taoensso.nippy.serializable-whitelist-base"
+                         "TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_BASE")]
+            (split-class-names>set s))
+          default-serializable-whitelist)
+
+        whitelist-add
+        (when-let [s (enc/get-sys-val
+                       "taoensso.nippy.serializable-whitelist-add"
+                       "TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_ADD")]
+          (split-class-names>set s))]
+
+    (if (and whitelist-base whitelist-add)
+      (into (enc/have set? whitelist-base) whitelist-add)
+      (do                  whitelist-base))))
 
 (comment (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
 

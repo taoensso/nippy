@@ -280,7 +280,10 @@
       (binding [nippy/*serializable-whitelist* #{"java.util.concurrent.*"}]
         (nippy/thaw (nippy/freeze (java.util.concurrent.Semaphore. 1)))))
 
-    "Strings in whitelist sets may contain \"*\" wildcards"))
+    "Strings in whitelist sets may contain \"*\" wildcards")
+
+  (is (= nippy/*serializable-whitelist* #{"base.1" "base.2" "add.1" "add.2"})
+    "JVM properties override initial serializable-whitelist value"))
 
 ;;;; Benchmarks
 
