@@ -273,7 +273,14 @@
       (binding [nippy/*serializable-whitelist* #{"java.util.concurrent.Semaphore"}]
         (nippy/thaw (nippy/freeze (java.util.concurrent.Semaphore. 1)))))
 
-    "Can freeze and thaw Serializable object if approved by whitelist"))
+    "Can freeze and thaw Serializable object if approved by whitelist")
+
+  (is
+    (instance? java.util.concurrent.Semaphore
+      (binding [nippy/*serializable-whitelist* #{"java.util.concurrent.*"}]
+        (nippy/thaw (nippy/freeze (java.util.concurrent.Semaphore. 1)))))
+
+    "Strings in whitelist sets may contain \"*\" wildcards"))
 
 ;;;; Benchmarks
 

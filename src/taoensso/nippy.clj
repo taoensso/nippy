@@ -305,6 +305,11 @@
 
   See also `swap-serializable-whitelist!`.
 
+  Strings in sets may contain \"*\" wildcards.
+
+  See also `taoensso.encore/compile-str-filter`, a util to help
+  easily build more advanced predicate functions.
+
   ================
   Further context:
 
@@ -358,6 +363,15 @@
 
 (comment (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
 
+(let [compile-whitelist (enc/memoize_ (fn [x] (if (set? x) (enc/compile-str-filter x) x)))]
+  (defn- serializable-whitelisted? [class-name]
+    ((compile-whitelist *serializable-whitelist*) class-name)))
+
+(comment
+  (enc/qb 1e5 (serializable-whitelisted? "foo"))
+  (binding [*serializable-whitelist* #{"foo.*" "bar"}]
+    (serializable-whitelisted? "foo.bar")))
+
 (defn set-freeze-fallback!        [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
 (defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
 (defn swap-custom-readers!        [f] (alter-var-root #'*custom-readers* f))
@@ -367,8 +381,11 @@
 
     - (fn [_old] true)                                ; Whitelist everything (allow    all classes)
     - (fn [_old] #{})                                 ; Whitelist nothing    (disallow all classes)
-    - (fn [_old] #{\"java.lang.Throwable\"})          ; Reset class    whitelist
-    - (fn [ old] (conj old \"java.lang.Throwable\"))) ; Add   class to whitelist
+    - (fn [_old] #{\"java.lang.Throwable\"})          ; Reset class      whitelist set
+    - (fn [ old] (conj old \"java.lang.Throwable\"))) ; Add   class   to whitelist set
+    - (fn [ old] (conj old \"java.lang.*\"))          ; Add   classes to whitelist set (note wildcard)
+
+  Strings in sets may contain \"*\" wildcards.
 
   See also `*serializable-whitelist*."
   [f] (alter-var-root #'*serializable-whitelist* f))
@@ -815,7 +832,7 @@
   (when (utils/serializable? x)
     (try
       (let [class-name (.getName (class x))] ; Reflect
-        (when (*serializable-whitelist* class-name)
+        (when (serializable-whitelisted? class-name)
           (write-serializable out x class-name)
           true))
       (catch Throwable _ nil))))
@@ -1292,7 +1309,7 @@
 
 (defn- read-serializable [^DataInput in class-name]
   (let [quarantined-ba (read-bytes in)]
-    (if (*serializable-whitelist* class-name)
+    (if (serializable-whitelisted? class-name)
       (read-object (DataInputStream. (ByteArrayInputStream. quarantined-ba)) class-name)
       {:type :serializable
        :nippy/unthawable
@@ -1300,7 +1317,7 @@
         :serializable-whitelist-pass? false}})))
 
 (defn- read-serializable-depr1 [^DataInput in class-name]
-  (if (*serializable-whitelist* class-name)
+  (if (serializable-whitelisted? class-name)
     (read-object in class-name)
     (throw ; No way to skip bytes, so best we can do is throw
       (ex-info "Cannot thaw object: `*serializable-whitelist*` check failed. See docstring for details."
