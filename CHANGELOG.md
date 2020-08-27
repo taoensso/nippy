@@ -1,5 +1,23 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.15.1 / 2020 Aug 27
+
+```clojure
+[com.taoensso/nippy "2.15.1"]
+```
+
+> This is a minor feature release. Should be non-breaking.
+
+**New** since `v2.15.0`:
+
+  - `*serializable-whitelist*`: sets of approved class names may now contain "*" wildcards.
+  - `*serializable-whitelist*`: added JVM properties and env vars to override initial value. See updated docstring for details.
+
+**Changes** since `v2.15.0`:
+
+  - [#126] `extend-freeze`: include id collision odds in docstring.
+
+
 ## v2.15.0 / 2020 Jul 24
 
 ```clojure
