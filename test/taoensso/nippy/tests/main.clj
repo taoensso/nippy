@@ -280,7 +280,7 @@
       (get-in
         (binding [nippy/*serializable-whitelist* #{}]
           (nippy/thaw
-            (binding [nippy/*serializable-whitelist* #{"java.util.concurrent.Semaphore"}]
+            (binding [nippy/*serializable-whitelist* "*"]
               (nippy/freeze (java.util.concurrent.Semaphore. 1)))))
         [:nippy/unthawable :serializable-whitelist-pass?]))
 

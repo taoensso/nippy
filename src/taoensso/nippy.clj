@@ -420,12 +420,20 @@
 
 (comment (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
 
-(let [compile-whitelist (enc/memoize_ (fn [x] (if (set? x) (enc/compile-str-filter x) x)))]
+(let [fn?       fn?
+      compile   (enc/fmemoize (fn [x] (enc/compile-str-filter x)))
+      conform?* (fn [x ns] ((compile x) ns)) ; Uncached because input domain possibly infinite
+      conform?
+      (fn [x ns]
+        (if (fn? x)
+          (x ns) ; Intentionally uncached, can be handy
+          (conform?* x ns)))]
+
   (defn- serializable-whitelisted? [class-name]
-    ((compile-whitelist *serializable-whitelist*) class-name)))
+    (conform? *serializable-whitelist* class-name)))
 
 (comment
-  (enc/qb 1e5 (serializable-whitelisted? "foo"))
+  (enc/qb 1e6 (serializable-whitelisted? "foo"))
   (binding [*serializable-whitelist* #{"foo.*" "bar"}]
     (serializable-whitelisted? "foo.bar")))
 
