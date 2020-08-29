@@ -25,8 +25,8 @@
     LazySeq IRecord ISeq IType]))
 
 (if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [2 124 0])
-  (enc/assert-min-encore-version  2.124))
+  (enc/assert-min-encore-version [2 126 2])
+  (enc/assert-min-encore-version  2.126))
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
