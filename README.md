@@ -4,7 +4,7 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "2.15.1"] ; BREAKING, see CHANGELOG for details
+[com.taoensso/nippy "2.15.2"] ; BREAKING, see CHANGELOG for details
 ```
 
 ## ** SECURITY ADVISORY **
@@ -46,7 +46,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your project:
 
 ```clojure
-[com.taoensso/nippy "2.15.1"]
+[com.taoensso/nippy "2.15.2"]
 ```
 
 And setup your namespace imports:

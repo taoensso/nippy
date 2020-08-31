@@ -1,5 +1,23 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.15.2 / 2020 Aug 31
+
+```clojure
+[com.taoensso/nippy "2.15.2"]
+```
+
+> This is a quick hotfix release, should be non-breaking.
+
+Only change since `v2.15.0` is to bump Encore dependency (`v2.124.0`->`v2.126.2`).
+
+Encore `v1.123.0` introduced an issue affecting Timbre.
+Issue was addressed with Encore `v2.125.2`.
+
+Updating Encore here doesn't affect Nippy, but may be helpful for users of
+Nippy that also use Timbre and that haven't otherwise updated to a newer
+version of Encore yet.
+
+
 ## v2.15.1 / 2020 Aug 27
 
 ```clojure
