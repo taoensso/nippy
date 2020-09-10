@@ -36,8 +36,8 @@
    :test
    {:jvm-opts
     ["-Xms1024m" "-Xmx2048m"
-     "-Dtaoensso.nippy.serializable-whitelist-base=base.1, base.2"
-     "-Dtaoensso.nippy.serializable-whitelist-add=add.1 , add.2"]
+     "-Dtaoensso.nippy.thaw-serializable-allowlist-base=base.1, base.2"
+     "-Dtaoensso.nippy.thaw-serializable-allowlist-add=add.1 , add.2"]
     :dependencies
     [[org.clojure/test.check        "1.1.0"]
      [org.clojure/data.fressian     "1.0.0"]

@@ -282,8 +282,23 @@
 
 (enc/defonce ^:dynamic *incl-metadata?* "Include metadata when freezing/thawing?" true)
 
-(def default-serializable-whitelist
-  "PRs welcome to add additional known-safe classes to default."
+(defn set-freeze-fallback!        [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
+(defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
+(defn swap-custom-readers!        [f] (alter-var-root #'*custom-readers* f))
+
+;;;; Java Serializable config
+;; Unfortunately quite a bit of complexity to do this safely
+
+(def default-freeze-serializable-allowlist
+  "Allows *any* class-name to be frozen using Java's Serializable interface.
+  This is generally safe since RCE risk is present only when thawing.
+  See also `*freeze-serializable-allowlist*`."
+  #{"*"})
+
+(def   default-thaw-serializable-allowlist
+  "A set of common safe class-names to allow to be frozen using Java's
+  Serializable interface. PRs welcome for additions.
+  See also `*thaw-serializable-allowlist*`."
   #{"[I" "[F" "[Z" "[B" "[C" "[D" "[S" "[J"
 
     "java.lang.Throwable"
@@ -306,155 +321,129 @@
   (split-class-names>set "")
   (split-class-names>set "foo, bar:baz"))
 
-(enc/defonce ^:dynamic *serializable-whitelist*
-  "Used when attempting to freeze or thaw an object that:
+(comment (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
+
+(let [ids
+      {:legacy {:base {:prop        "taoensso.nippy.serializable-whitelist-base" :env        "TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_BASE"}
+                :add  {:prop        "taoensso.nippy.serializable-whitelist-add"  :env        "TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_ADD"}}
+       :freeze {:base {:prop "taoensso.nippy.freeze-serializable-allowlist-base" :env "TAOENSSO_NIPPY_FREEZE_SERIALIZABLE_ALLOWLIST_BASE"}
+                :add  {:prop "taoensso.nippy.freeze-serializable-allowlist-add"  :env "TAOENSSO_NIPPY_FREEZE_SERIALIZABLE_ALLOWLIST_ADD"}}
+       :thaw   {:base {:prop   "taoensso.nippy.thaw-serializable-allowlist-base" :env   "TAOENSSO_NIPPY_THAW_SERIALIZABLE_ALLOWLIST_BASE"}
+                :add  {:prop   "taoensso.nippy.thaw-serializable-allowlist-add"  :env   "TAOENSSO_NIPPY_THAW_SERIALIZABLE_ALLOWLIST_ADD"}}}]
+
+  (defn- init-allowlist [action default]
+    (let [allowlist-base
+          (or
+            (when-let [s (or
+                           (enc/get-sys-val (get-in ids [action  :base :prop]) (get-in ids [action  :base :env]))
+                           (enc/get-sys-val (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env])))]
+              (split-class-names>set s))
+            default)
+
+          allowlist-add
+          (when-let [s (or
+                         (enc/get-sys-val (get-in ids [action  :add :prop]) (get-in ids [action  :add :env]))
+                         (enc/get-sys-val (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env])))]
+            (split-class-names>set s))]
+
+      (if (and allowlist-base allowlist-add)
+        (into (enc/have set? allowlist-base) allowlist-add)
+        (do                  allowlist-base)))))
+
+(let [doc
+      "Used when attempting to <freeze/thaw> an object that:
     - Does not implement Nippy's Freezable    protocol.
     - Does     implement Java's  Serializable interface.
 
   In this case, Java's Serializable interface will be permitted iff
-  the predicate (*serializable-whitelist* <class-name>) returns true.
+  (<allowlist> <class-name>) predicate call returns true.
 
-  I.e. this is a predicate (fn allow-class? [class-name]) that specifies
-  whether Nippy may use a given class's Serializable implementation as
-  fallback when its own protocol is unfamiliar with the type.
+  This is a security measure to prevent possible Remote Code Execution
+  (RCE) when thawing malicious payloads. See [1] for details.
 
-  If `thaw` encounters an unwhitelisted Serialized class:
-    - `thaw` will throw if it's not possible to safely quarantine.
-    - Otherwise the object will be thawed as:
-      `{:nippy/unthawable {:class-name <> :content <quarantined-ba> ...}}`.
-      - Objects thus quarantined may be manually unquarantined with
+  If `freeze` encounters a disallowed Serialized class, it will throw.
+  If `thaw`   encounters a disallowed Serialized class, it will:
+
+    - Throw if it's not possible to safely quarantine the object
+      (object was frozen with Nippy < v2.15.0-final).
+
+    - Otherwise it will return a safely quarantined object of form
+      `{:nippy/unthawable {:class-name <> :content <quarantined-ba>}}`.
+      - Quarantined objects may be manually unquarantined with
         `read-quarantined-serializable-object-unsafe!`.
 
-  This is a security measure to prevent Remote Code Execution (RCE).
+  There are 2x allowlists: *<freeze/thaw>-serializable-allowlist*.
 
-  Default value is a set containing a number of known-safe classes,
-  see `default-serializable-whitelist` for details. PRs welcome to add
-  additional known-safe classes to default.
+  Example values:
+    - (fn allow-class? [class-name] true)            ; Arbitrary fn
+    - #{\"java.lang.Throwable\", \"clojure.lang.*\"} ; Set of class-names
 
-  Value may be overridden with `swap-serializable-whitelist!` or with:
+    Note that class-names in sets may contain \"*\" wildcards.
 
-    - `taoensso.nippy.serializable-whitelist-base` JVM property
-    - `taoensso.nippy.serializable-whitelist-add`  JVM property
+  Default allowlist values are:
+    - default-freeze-serializable-allowlist ; {\"*\"} => allow any class
+    -   default-thaw-serializable-allowlist ; A set of common safe classes
 
-    - `TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_BASE` env var
-    - `TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_ADD`  env var
+  Allowlist values may be overridden with `binding`, `alter-var-root`, or:
 
-    If present, these will be read as comma-separated lists of class
-    names and formed into sets. Initial whitelist value will then be:
-    (into (or <?base> <default>) <?additions>).
+    - `taoensso.nippy.<freeze/thaw>-serializable-allowlist-base` JVM property
+    - `taoensso.nippy.<freeze/thaw>-serializable-allowlist-add`  JVM property
+
+    - `TAOENSSO_NIPPY_<FREEZE/THAW>_SERIALIZABLE_ALLOWLIST_BASE` env var
+    - `TAOENSSO_NIPPY_<FREEZE/THAW>_SERIALIZABLE_ALLOWLIST_ADD`  env var
+
+  If present, these will be read as comma-separated lists of class names
+  and formed into sets. Each initial allowlist value will then be:
+  (into (or <?base> <default>) <?additions>).
 
     I.e. you can use:
-      - The \"base\" property/var to override Nippy's default whitelist.
-      - The \"add\"  property/var to add to   Nippy's default whitelist.
-
-  Strings in sets may contain \"*\" wildcards.
+      - The \"base\" property/var to replace Nippy's default allowlists.
+      - The \"add\"  property/var to add to  Nippy's default allowlists.
 
   See also `taoensso.encore/compile-str-filter`, a util to help
   easily build more advanced predicate functions.
 
-  ================
-  Further context:
 
-    Reading arbitrary Serializable classes can be dangerous if they
-    come from an untrusted source.
-
-    Specifically: if your classpath contains a vulnerable (\"gadget\")[2]
-    class - it is possible for an attacker to produce an object that
-    can run arbitrary code when read via Serializable.
-
-    Note that Clojure <= 1.8 itself contains such a class [1].
-
-  What to use as a whitelist?
-
-    1. If you DO NOT wish to support Serializable: `#{}` is safest,
-       and just entirely disallows its use.
-
-    2. If you DO with to support Serializable:
-
-      2a. If you might serialize data from an untrusted source, or
-          if you'll only be serializing a limited number of known
-          classes: enumerate those class names, e.g.:
-            `#{\"java.lang.Throwable\", ...}`.
-
-      2b. If you're CERTAIN to NEVER serialize data from an untrusted
-          source, you can use `(constantly true)` as predicate. This
-          will whitelist everything, allowing Serializable for ANY class.
-
-  Upgrading from an older version of Nippy and not sure whether you've
-  been using Nippy's Serializable support? Here's a code snippet that
-  will allow AND RECORD any class using Nippy's Serializable fallback:
+  Upgrading from an older version of Nippy and unsure whether you've been
+  using Nippy's Serializable support? Here's a snippet to ALLOW and RECORD
+  any class requesting Nippy's Serializable fallback:
 
     ;; Deref for set of all class names that made use of Nippy's Serializable support:
     (defonce observed-serializables_ (atom #{}))
 
-    (swap-serializable-whitelist!
-      (fn [_]
-        (fn allow-class? [class-name]
-          (swap! observed-serializables_ conj class-name) ; Record class name
-          true ; Allow any class
-          )))
+    (let [f (fn allow-class? [class-name]
+              (swap! observed-serializables_ conj class-name) ; Record class name
+              true ; Allow any class
+              )]
+
+      (alter-var-root #'*freeze-serializable-allowlist* (fn [_] f))
+      (alter-var-root   #'*thaw-serializable-allowlist* (fn [_] f)))
+
 
   Thanks to Timo Mihaljov (@solita-timo-mihaljov) for an excellent report
   identifying this vulnerability.
 
-  [1] https://groups.google.com/forum/#!msg/clojure/WaL3hHzsevI/7zHU-L7LBQAJ
-  [2] Jackson maintains a list of common gadget classes at
-    https://github.com/FasterXML/jackson-databind/blob/master/src/main/java/com/fasterxml/jackson/databind/jsontype/impl/SubTypeValidator.java"
+  [1] https://github.com/ptaoussanis/nippy/issues/130"]
 
-  (let [whitelist-base
-        (or
-          (when-let [s (enc/get-sys-val
-                         "taoensso.nippy.serializable-whitelist-base"
-                         "TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_BASE")]
-            (split-class-names>set s))
-          default-serializable-whitelist)
-
-        whitelist-add
-        (when-let [s (enc/get-sys-val
-                       "taoensso.nippy.serializable-whitelist-add"
-                       "TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_ADD")]
-          (split-class-names>set s))]
-
-    (if (and whitelist-base whitelist-add)
-      (into (enc/have set? whitelist-base) whitelist-add)
-      (do                  whitelist-base))))
-
-(comment (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
+  (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (init-allowlist :freeze default-freeze-serializable-allowlist))
+  (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (init-allowlist :thaw     default-thaw-serializable-allowlist)))
 
 (let [fn?       fn?
       compile   (enc/fmemoize (fn [x] (enc/compile-str-filter x)))
-      conform?* (fn [x ns] ((compile x) ns)) ; Uncached because input domain possibly infinite
+      conform?* (fn [x cn] ((compile x) cn)) ; Uncached because input domain possibly infinite
       conform?
-      (fn [x ns]
+      (fn [x cn]
         (if (fn? x)
-          (x ns) ; Intentionally uncached, can be handy
-          (conform?* x ns)))]
+          (x cn) ; Intentionally uncached, can be handy
+          (conform?* x cn)))]
 
-  (defn- serializable-whitelisted? [class-name]
-    (conform? *serializable-whitelist* class-name)))
+  (defn- freeze-serializable-allowed? [class-name] (conform? *freeze-serializable-allowlist* class-name))
+  (defn-   thaw-serializable-allowed? [class-name] (conform?   *thaw-serializable-allowlist* class-name)))
 
 (comment
-  (enc/qb 1e6 (serializable-whitelisted? "foo"))
-  (binding [*serializable-whitelist* #{"foo.*" "bar"}]
-    (serializable-whitelisted? "foo.bar")))
-
-(defn set-freeze-fallback!        [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
-(defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
-(defn swap-custom-readers!        [f] (alter-var-root #'*custom-readers* f))
-(defn swap-serializable-whitelist!
-  "Changes root `*serializable-whitelist*` value to (f old-val).
-  Example `f` arguments:
-
-    - (fn [_old] true)                                ; Whitelist everything (allow    all classes)
-    - (fn [_old] #{})                                 ; Whitelist nothing    (disallow all classes)
-    - (fn [_old] #{\"java.lang.Throwable\"})          ; Reset class      whitelist set
-    - (fn [ old] (conj old \"java.lang.Throwable\"))) ; Add   class   to whitelist set
-    - (fn [ old] (conj old \"java.lang.*\"))          ; Add   classes to whitelist set (note wildcard)
-
-  Strings in sets may contain \"*\" wildcards.
-
-  See also `*serializable-whitelist*."
-  [f] (alter-var-root #'*serializable-whitelist* f))
+  (enc/qb 1e6 (freeze-serializable-allowed? "foo")) ; 119.92
+  (binding [*freeze-serializable-allowlist* #{"foo.*" "bar"}]
+    (freeze-serializable-allowed? "foo.bar")))
 
 ;;;; Freezing
 
@@ -849,7 +838,7 @@
 
     ;; Quarantined: write object to ba, then ba to out.
     ;; We'll have object length during thaw, allowing us to skip readObject.
-    (let [quarantined-ba (ByteArrayOutputStream. 32)]
+    (let [quarantined-ba (ByteArrayOutputStream.)]
       (.writeObject (ObjectOutputStream. (DataOutputStream. quarantined-ba)) x)
       (write-bytes out (.toByteArray quarantined-ba)))))
 
@@ -872,10 +861,10 @@
           (write-bytes-lg out edn-ba)))))
 
 (defn try-write-serializable [out x]
-  (when (utils/serializable? x)
+  (when (and (instance? Serializable x) (not (fn? x)))
     (try
       (let [class-name (.getName (class x))] ; Reflect
-        (when (serializable-whitelisted? class-name)
+        (when (freeze-serializable-allowed? class-name)
           (write-serializable out x class-name)
           true))
       (catch Throwable _ nil))))
@@ -1156,7 +1145,7 @@
 
 (defn- call-with-bindings
   "Allow opts to override config bindings."
-  [opts f]
+  [action opts f]
   (if (empty? opts)
     (f)
     (let [opt->bindings
@@ -1170,9 +1159,12 @@
           (-> nil
             (opt->bindings :freeze-fallback        #'*freeze-fallback*)
             (opt->bindings :auto-freeze-compressor #'*auto-freeze-compressor*)
-            (opt->bindings :serializable-whitelist #'*serializable-whitelist*)
             (opt->bindings :custom-readers         #'*custom-readers*)
-            (opt->bindings :incl-metadata?         #'*incl-metadata?*))]
+            (opt->bindings :incl-metadata?         #'*incl-metadata?*)
+            (opt->bindings :serializable-allowlist
+              (case action
+                :freeze #'*freeze-serializable-allowlist*
+                :thaw     #'*thaw-serializable-allowlist*)))]
 
       (if-not bindings
         (f) ; Common case
@@ -1184,8 +1176,8 @@
 
 (comment
   (enc/qb 1e4
-    (call-with-bindings {}                       (fn [] *freeze-fallback*))
-    (call-with-bindings {:freeze-fallback "foo"} (fn [] *freeze-fallback*))))
+    (call-with-bindings :freeze {}                       (fn [] *freeze-fallback*))
+    (call-with-bindings :freeze {:freeze-fallback "foo"} (fn [] *freeze-fallback*))))
 
 (defn fast-freeze
   "Like `freeze` but:
@@ -1198,28 +1190,22 @@
     - :encryptor  nil
     - :no-header? true"
   [x]
-  (binding [*serializable-whitelist* "*"]
-    (let [baos (ByteArrayOutputStream. 64)
-          dos  (DataOutputStream. baos)]
-      (with-cache (-freeze-with-meta! x dos))
-      (.toByteArray baos))))
+  (let [baos (ByteArrayOutputStream. 64)
+        dos  (DataOutputStream. baos)]
+    (with-cache (-freeze-with-meta! x dos))
+    (.toByteArray baos)))
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
-  types, extend the Clojure reader or see `extend-freeze`.
-
-  Note: `serializable-whitelist` is \"*\" by default for freezing (not thawing!).
-  If you want to use the value of `*serializable-whitelist*` instead, include
-  `:serializable-whitelist :default` in opts."
+  types, extend the Clojure reader or see `extend-freeze`."
 
   ([x] (freeze x nil))
   ([x {:as   opts
-       :keys [compressor encryptor password serializable-whitelist incl-metadata?]
+       :keys [compressor encryptor password serializable-allowlist incl-metadata?]
        :or   {compressor :auto
-              encryptor  aes128-gcm-encryptor
-              serializable-whitelist "*"}}]
+              encryptor  aes128-gcm-encryptor}}]
 
-   (call-with-bindings (assoc opts :serializable-whitelist serializable-whitelist)
+   (call-with-bindings :freeze opts
      (fn []
 
        (let [;; Intentionally undocumented:
@@ -1386,12 +1372,12 @@
 (defn read-quarantined-serializable-object-unsafe!
   "Given a quarantined Serializable object like
   {:nippy/unthawable {:class-name <> :content <quarantined-ba>}}, reads and
-  returns the object WITHOUT regard for `*serializable-whitelist*`.
+  returns the object WITHOUT regard for `*thaw-serializable-allowlist*`.
 
   **MAY BE UNSAFE!** Don't call this unless you absolutely trust the payload
   to not contain any malicious code.
 
-  See `*serializable-whitelist*` for more info."
+  See `*thaw-serializable-allowlist*` for more info."
   [m]
   (when-let [m (get m :nippy/unthawable)]
     (let [{:keys [class-name content]} m]
@@ -1406,10 +1392,10 @@
 
 (defn- read-serializable-q
   "Quarantined => object serialized to ba, then ba written to output stream.
-  Has length prefix => can skip `readObject` in event of whitelist failure."
+  Has length prefix => can skip `readObject` in event of allowlist failure."
   [^DataInput in class-name]
   (let [quarantined-ba (read-bytes in)]
-    (if (serializable-whitelisted? class-name)
+    (if (thaw-serializable-allowed? class-name)
       (read-object (DataInputStream. (ByteArrayInputStream. quarantined-ba)) class-name)
       {:nippy/unthawable
        {:type  :serializable
@@ -1420,12 +1406,12 @@
 
 (defn- read-serializable-uq
   "Unquarantined => object serialized directly to output stream.
-  No length prefix => cannot skip `readObject` in event of whitelist failure."
+  No length prefix => cannot skip `readObject` in event of allowlist failure."
   [^DataInput in class-name]
-  (if (serializable-whitelisted? class-name)
+  (if (thaw-serializable-allowed? class-name)
     (read-object in class-name)
     (throw ; No way to skip bytes, so best we can do is throw
-      (ex-info "Cannot thaw object: `*serializable-whitelist*` check failed. See docstring for details."
+      (ex-info "Cannot thaw object: `*thaw-serializable-allowlist*` check failed. See docstring for details."
         {:class-name class-name}))))
 
 (defn- read-record [in class-name]
@@ -1690,14 +1676,14 @@
   ([^bytes ba
     {:as   opts
      :keys [v1-compatibility? compressor encryptor password
-            serializable-whitelist incl-metadata?]
+            serializable-allowlist incl-metadata?]
      :or   {compressor :auto
             encryptor  :auto}}]
 
    (assert (not (get opts :headerless-meta))
      ":headerless-meta `thaw` opt removed in Nippy v2.7+")
 
-   (call-with-bindings opts
+   (call-with-bindings :thaw opts
      (fn []
 
        (let [v2+?       (not v1-compatibility?)

@@ -252,28 +252,28 @@
 (defn-         sem? [x] (instance? java.util.concurrent.Semaphore x))
 
 (deftest _serializable
-  (is (= nippy/*serializable-whitelist* #{"base.1" "base.2" "add.1" "add.2"})
-    "JVM properties override initial serializable-whitelist value")
+  (is (= nippy/*thaw-serializable-allowlist* #{"base.1" "base.2" "add.1" "add.2"})
+    "JVM properties override initial allowlist values")
 
-  (is (thrown? Exception (nippy/freeze sem {:serializable-whitelist #{}}))
-    "Can't freeze Serializable objects unless approved by whitelist")
-
-  (is (sem?
-        (nippy/thaw
-          (nippy/freeze sem {:serializable-whitelist #{"java.util.concurrent.Semaphore"}})
-          {:serializable-whitelist #{"java.util.concurrent.Semaphore"}}))
-
-    "Can freeze and thaw Serializable objects if approved by whitelist")
+  (is (thrown? Exception (nippy/freeze sem {:serializable-allowlist #{}}))
+    "Can't freeze Serializable objects unless approved by allowlist")
 
   (is (sem?
         (nippy/thaw
-          (nippy/freeze sem {:serializable-whitelist #{"java.util.concurrent.*"}})
-          {:serializable-whitelist #{"java.util.concurrent.*"}}))
+          (nippy/freeze sem {:serializable-allowlist #{"java.util.concurrent.Semaphore"}})
+          {:serializable-allowlist #{"java.util.concurrent.Semaphore"}}))
 
-    "Strings in whitelist sets may contain \"*\" wildcards")
+    "Can freeze and thaw Serializable objects if approved by allowlist")
 
-  (let [ba     (nippy/freeze sem #_{:serializable-whitelist "*"})
-        thawed (nippy/thaw   ba    {:serializable-whitelist #{}})]
+  (is (sem?
+        (nippy/thaw
+          (nippy/freeze sem {:serializable-allowlist #{"java.util.concurrent.*"}})
+          {:serializable-allowlist #{"java.util.concurrent.*"}}))
+
+    "Strings in allowlist sets may contain \"*\" wildcards")
+
+  (let [ba     (nippy/freeze sem #_{:serializable-allowlist "*"})
+        thawed (nippy/thaw   ba    {:serializable-allowlist #{}})]
 
     (is (= :quarantined (get-in thawed [:nippy/unthawable :cause]))
       "Serializable objects will be quarantined when approved for freezing but not thawing.")
