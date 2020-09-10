@@ -276,13 +276,13 @@
     "Can freeze and thaw Serializable object if approved by whitelist")
 
   (is
-    (false?
+    (= :quarantined
       (get-in
         (binding [nippy/*serializable-whitelist* #{}]
           (nippy/thaw
             (binding [nippy/*serializable-whitelist* "*"]
               (nippy/freeze (java.util.concurrent.Semaphore. 1)))))
-        [:nippy/unthawable :serializable-whitelist-pass?]))
+        [:nippy/unthawable :cause]))
 
     "Thaw will quarantine Serializable objects approved when freezing.")
 

@@ -34,8 +34,6 @@
   (thaw (freeze stress-data)))
 
 ;;;; TODO
-;; - Ensure all error responses are entirely under {:nippy/_ <...>} key?
-;;;  Would be a nice change, but breaking.
 ;; - Performance would benefit from ^:static support / direct linking / etc.
 ;; - Ability to compile out metadata support?
 ;; - Auto cache keywords? When map keys? Configurable? Per-map
@@ -892,19 +890,22 @@
     (catch Throwable _
       (try
         (str x)
-        (catch Throwable _ :nippy/unprintable)))))
+        (catch Throwable _
+          :nippy/unprintable)))))
 
 (defn write-unfreezable [out x]
   (-freeze-without-meta!
-    {:type (type x)
-     :nippy/unfreezable (try-pr-edn x)}
+    {:nippy/unfreezable
+     {:type    (type       x)
+      :content (try-pr-edn x)}}
     out))
 
 (defn throw-unfreezable [x]
-  (throw
-    (ex-info (str "Unfreezable type: " (type x))
-      {:type   (type x)
-       :as-str (try-pr-edn x)})))
+  (let [t (type x)]
+    (throw
+      (ex-info (str "Unfreezable type: " t)
+        {:type   t
+         :as-str (try-pr-edn x)}))))
 
 ;; Public `-freeze-with-meta!` with different arg order
 (defn freeze-to-out!
@@ -1336,9 +1337,12 @@
   (try
     (enc/read-edn {:readers *data-readers*} edn)
     (catch Exception e
-      {:type :reader
-       :throwable e
-       :nippy/unthawable edn})))
+      {:nippy/unthawable
+       {:type  :reader
+        :cause :exception
+
+        :content   edn
+        :exception e}})))
 
 (defn- read-object [^DataInput in class-name]
   (try
@@ -1346,18 +1350,22 @@
       (try
         (let [class (Class/forName class-name)] (cast class content))
         (catch Exception e
-          {:type :serializable
-           :throwable e
-           :nippy/unthawable
-           {:class-name class-name :content content
-            :serializable-whitelist-pass? true}})))
+          {:nippy/unthawable
+           {:type  :serializable
+            :cause :exception
+
+            :class-name class-name
+            :content    content
+            :exception  e}})))
 
     (catch Exception e
-      {:type :serializable
-       :throwable e
-       :nippy/unthawable
-       {:class-name class-name :content nil
-        :serializable-whitelist-pass? true}})))
+      {:nippy/unthawable
+       {:type  :serializable
+        :cause :exception
+
+        :class-name class-name
+        :content    nil
+        :exception  e}})))
 
 (defn- read-serializable-q
   "Quarantined => object serialized to ba, then ba written to output stream.
@@ -1366,10 +1374,12 @@
   (let [quarantined-ba (read-bytes in)]
     (if (serializable-whitelisted? class-name)
       (read-object (DataInputStream. (ByteArrayInputStream. quarantined-ba)) class-name)
-      {:type :serializable
-       :nippy/unthawable
-       {:class-name class-name :content quarantined-ba
-        :serializable-whitelist-pass? false}})))
+      {:nippy/unthawable
+       {:type  :serializable
+        :cause :quarantined
+
+        :class-name class-name
+        :content    quarantined-ba}})))
 
 (defn- read-serializable-uq
   "Unquarantined => object serialized directly to output stream.
@@ -1388,9 +1398,13 @@
             method (.getMethod class "create" class-method-sig)]
         (.invoke method class (into-array Object [content])))
       (catch Exception e
-        {:type :record
-         :throwable e
-         :nippy/unthawable {:class-name class-name :content content}}))))
+        {:nippy/unthawable
+         {:type  :record
+          :cause :exception
+
+          :class-name class-name
+          :content    content
+          :exception  e}}))))
 
 (defn- read-type [in class-name]
   (try
@@ -1412,9 +1426,12 @@
         (.newInstance ctor cvalues)))
 
     (catch Exception e
-      {:type             :type
-       :throwable        e
-       :nippy/unthawable {:class-name class-name}})))
+      {:nippy/unthawable
+       {:type  :type
+        :cause :exception
+
+        :class-name class-name
+        :exception  e}})))
 
 (defn thaw-from-in!
   "Deserializes a frozen object from given DataInput to its original Clojure
