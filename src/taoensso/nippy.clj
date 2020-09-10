@@ -954,7 +954,7 @@
   See also `cache`."
   [& body]
   `(try
-     (.set -cache-proxy (enc/-vol! nil))
+     (.set -cache-proxy (volatile! nil))
      (do ~@body)
      (finally (.remove -cache-proxy))))
 
@@ -980,7 +980,7 @@
             ?idx     (get cache k)
             ^int idx (or ?idx
                        (let [idx (count cache)]
-                         (enc/-vol-swap! cache_ assoc k idx)
+                         (vswap! cache_ assoc k idx)
                          idx))
 
             first-occurance? (nil? ?idx)]
@@ -1023,7 +1023,7 @@
         (let [v (get @cache_ idx not-found)]
           (if (identical? v not-found)
             (let [x (thaw-from-in! in)]
-              (enc/-vol-swap! cache_ assoc idx x)
+              (vswap! cache_ assoc idx x)
               x)
             v))
         (throw (ex-info "No cache_ established, can't thaw. See `with-cache`."

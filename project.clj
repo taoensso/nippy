@@ -14,7 +14,7 @@
 
   :dependencies
   [[org.clojure/tools.reader "1.3.3"]
-   [com.taoensso/encore      "2.127.0"]
+   [com.taoensso/encore      "3.0.0"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.8"]
    [org.lz4/lz4-java         "1.7.1"]]

@@ -11,14 +11,14 @@
 ;;;; Randomness
 
 (do
-  (defn rand-nth            [coll]           (nth coll (int (* (.nextDouble   (enc/srng)) (count coll)))))
-  (defn rand-bytes  ^bytes  [size] (let [ba (byte-array size)] (.nextBytes    (enc/srng) ba) ba))
-  (defn rand-double ^double []                                 (.nextDouble   (enc/srng)))
-  (defn rand-gauss  ^double []                                 (.nextGaussian (enc/srng)))
-  (defn rand-bool           []                                 (.nextBoolean  (enc/srng)))
+  (defn rand-nth            [coll]           (nth coll (int (* (.nextDouble   (enc/secure-rng)) (count coll)))))
+  (defn rand-bytes  ^bytes  [size] (let [ba (byte-array size)] (.nextBytes    (enc/secure-rng) ba) ba))
+  (defn rand-double ^double []                                 (.nextDouble   (enc/secure-rng)))
+  (defn rand-gauss  ^double []                                 (.nextGaussian (enc/secure-rng)))
+  (defn rand-bool           []                                 (.nextBoolean  (enc/secure-rng)))
   (defn rand-long
-    (^long   [ ]                   (.nextLong   (enc/srng)))
-    (^long   [n] (long (* (long n) (.nextDouble (enc/srng)))))))
+    (^long   [ ]                   (.nextLong   (enc/secure-rng)))
+    (^long   [n] (long (* (long n) (.nextDouble (enc/secure-rng)))))))
 
 (comment
   (seq (rand-bytes 16))

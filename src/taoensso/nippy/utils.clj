@@ -8,7 +8,7 @@
 ;; Unfortunately the only ~reliable way we can tell if something's
 ;; really serializable/readable is to actually try a full roundtrip.
 
-(let [swap-cache! @#'enc/-swap-cache!] ; TODO Public with newer Encore
+(let [swap-cache! enc/-swap-val!]
   (defn- memoize-type-test [test-fn]
     (let [cache (atom {})] ; {<type> <type-okay?>}
       (fn [x]
