@@ -248,65 +248,42 @@
 
 ;;;; Serializable
 
+(def ^:private sem                (java.util.concurrent.Semaphore. 1))
+(defn-         sem? [x] (instance? java.util.concurrent.Semaphore x))
+
 (deftest _serializable
+  (is (= nippy/*serializable-whitelist* #{"base.1" "base.2" "add.1" "add.2"})
+    "JVM properties override initial serializable-whitelist value")
 
-  (is
-    (thrown? Exception
-      (nippy/freeze (java.util.concurrent.Semaphore. 1)
-        {:serializable-whitelist #{}}))
+  (is (thrown? Exception (nippy/freeze sem {:serializable-whitelist #{}}))
+    "Can't freeze Serializable objects unless approved by whitelist")
 
-    "Can't freeze Serializable object unless approved by whitelist")
+  (is (sem?
+        (nippy/thaw
+          (nippy/freeze sem {:serializable-whitelist #{"java.util.concurrent.Semaphore"}})
+          {:serializable-whitelist #{"java.util.concurrent.Semaphore"}}))
 
-  (is
-    (:nippy/unthawable
+    "Can freeze and thaw Serializable objects if approved by whitelist")
 
-     (let [ba (nippy/freeze (java.util.concurrent.Semaphore. 1)
-                {:serializable-whitelist #{"java.util.concurrent.Semaphore"}})]
-
-       (nippy/thaw ba {:serializable-whitelist #{}})))
-
-    "Can't thaw Serializable object unless approved by whitelist")
-
-  (is
-    (instance? java.util.concurrent.Semaphore
-      (nippy/thaw
-        (nippy/freeze (java.util.concurrent.Semaphore. 1)
-          {:serializable-whitelist #{"java.util.concurrent.Semaphore"}})
-        {:serializable-whitelist #{"java.util.concurrent.Semaphore"}}))
-
-    "Can freeze and thaw Serializable object if approved by whitelist")
-
-  (let [sem    (java.util.concurrent.Semaphore. 1)
-        ba     (nippy/freeze sem #_{:serializable-whitelist "*"})
-        thawed (nippy/thaw   ba    {:serializable-whitelist #{}})]
-
-    (is
-      (= :quarantined (get-in thawed [:nippy/unthawable :cause]))
-      "Serializable objects will be quarantined when approved for freezing but not thawing.")
-
-    (is
-      (instance? java.util.concurrent.Semaphore
-        (nippy/read-quarantined-serializable-object-unsafe! thawed))
-      "Quarantined Serializable objects may still be manually force-read.")
-
-    (is
-      (instance? java.util.concurrent.Semaphore
-        (nippy/read-quarantined-serializable-object-unsafe!
-          (nippy/thaw (nippy/freeze thawed))))
-      "Quarantined Serializable objects are themselves safely transportable."))
-
-  (is
-    (instance? java.util.concurrent.Semaphore
-      (nippy/thaw
-        (nippy/freeze (java.util.concurrent.Semaphore. 1)
-          {:serializable-whitelist #{"java.util.concurrent.*"}})
-        {:serializable-whitelist #{"java.util.concurrent.*"}}))
+  (is (sem?
+        (nippy/thaw
+          (nippy/freeze sem {:serializable-whitelist #{"java.util.concurrent.*"}})
+          {:serializable-whitelist #{"java.util.concurrent.*"}}))
 
     "Strings in whitelist sets may contain \"*\" wildcards")
 
-  (is (= nippy/*serializable-whitelist* #{"base.1" "base.2" "add.1" "add.2"})
-    "JVM properties override initial serializable-whitelist value"))
+  (let [ba     (nippy/freeze sem #_{:serializable-whitelist "*"})
+        thawed (nippy/thaw   ba    {:serializable-whitelist #{}})]
 
+    (is (= :quarantined (get-in thawed [:nippy/unthawable :cause]))
+      "Serializable objects will be quarantined when approved for freezing but not thawing.")
+
+    (is (sem? (nippy/read-quarantined-serializable-object-unsafe! thawed))
+      "Quarantined Serializable objects can still be manually force-read.")
+
+    (is (sem? (nippy/read-quarantined-serializable-object-unsafe!
+                (nippy/thaw (nippy/freeze thawed))))
+      "Quarantined Serializable objects are themselves safely transportable."))    )
 
 ;;;; Metadata
 
