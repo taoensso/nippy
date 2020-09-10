@@ -1196,21 +1196,28 @@
     - :encryptor  nil
     - :no-header? true"
   [x]
-  (let [baos (ByteArrayOutputStream. 64)
-        dos  (DataOutputStream. baos)]
-    (with-cache (-freeze-with-meta! x dos))
-    (.toByteArray baos)))
+  (binding [*serializable-whitelist* "*"]
+    (let [baos (ByteArrayOutputStream. 64)
+          dos  (DataOutputStream. baos)]
+      (with-cache (-freeze-with-meta! x dos))
+      (.toByteArray baos))))
 
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array. To freeze custom
-  types, extend the Clojure reader or see `extend-freeze`."
+  types, extend the Clojure reader or see `extend-freeze`.
+
+  Note: `serializable-whitelist` is \"*\" by default for freezing (not thawing!).
+  If you want to use the value of `*serializable-whitelist*` instead, include
+  `:serializable-whitelist :default` in opts."
+
   ([x] (freeze x nil))
   ([x {:as   opts
        :keys [compressor encryptor password serializable-whitelist incl-metadata?]
        :or   {compressor :auto
-              encryptor  aes128-gcm-encryptor}}]
+              encryptor  aes128-gcm-encryptor
+              serializable-whitelist "*"}}]
 
-   (call-with-bindings opts
+   (call-with-bindings (assoc opts :serializable-whitelist serializable-whitelist)
      (fn []
 
        (let [;; Intentionally undocumented:

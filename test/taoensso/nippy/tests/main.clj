@@ -252,26 +252,27 @@
 
   (is
     (thrown? Exception
-      (binding [nippy/*serializable-whitelist* #{}]
-        (nippy/freeze (java.util.concurrent.Semaphore. 1))))
+      (nippy/freeze (java.util.concurrent.Semaphore. 1)
+        {:serializable-whitelist #{}}))
 
     "Can't freeze Serializable object unless approved by whitelist")
 
   (is
     (:nippy/unthawable
 
-     (let [ba (binding [nippy/*serializable-whitelist* #{"java.util.concurrent.Semaphore"}]
-                (nippy/freeze (java.util.concurrent.Semaphore. 1)))]
+     (let [ba (nippy/freeze (java.util.concurrent.Semaphore. 1)
+                {:serializable-whitelist #{"java.util.concurrent.Semaphore"}})]
 
-       (binding [nippy/*serializable-whitelist* #{}]
-         (nippy/thaw ba))))
+       (nippy/thaw ba {:serializable-whitelist #{}})))
 
     "Can't thaw Serializable object unless approved by whitelist")
 
   (is
     (instance? java.util.concurrent.Semaphore
-      (binding [nippy/*serializable-whitelist* #{"java.util.concurrent.Semaphore"}]
-        (nippy/thaw (nippy/freeze (java.util.concurrent.Semaphore. 1)))))
+      (nippy/thaw
+        (nippy/freeze (java.util.concurrent.Semaphore. 1)
+          {:serializable-whitelist #{"java.util.concurrent.Semaphore"}})
+        {:serializable-whitelist #{"java.util.concurrent.Semaphore"}}))
 
     "Can freeze and thaw Serializable object if approved by whitelist")
 
@@ -280,7 +281,7 @@
       (get-in
         (nippy/thaw
           (nippy/freeze (java.util.concurrent.Semaphore. 1)
-            {:serializable-whitelist "*"})
+            #_{:serializable-whitelist "*"})
           {:serializable-whitelist #{}})
         [:nippy/unthawable :cause]))
 
@@ -288,8 +289,10 @@
 
   (is
     (instance? java.util.concurrent.Semaphore
-      (binding [nippy/*serializable-whitelist* #{"java.util.concurrent.*"}]
-        (nippy/thaw (nippy/freeze (java.util.concurrent.Semaphore. 1)))))
+      (nippy/thaw
+        (nippy/freeze (java.util.concurrent.Semaphore. 1)
+          {:serializable-whitelist #{"java.util.concurrent.*"}})
+        {:serializable-whitelist #{"java.util.concurrent.*"}}))
 
     "Strings in whitelist sets may contain \"*\" wildcards")
 
