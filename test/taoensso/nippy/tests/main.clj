@@ -276,16 +276,24 @@
 
     "Can freeze and thaw Serializable object if approved by whitelist")
 
-  (is
-    (= :quarantined
-      (get-in
-        (nippy/thaw
-          (nippy/freeze (java.util.concurrent.Semaphore. 1)
-            #_{:serializable-whitelist "*"})
-          {:serializable-whitelist #{}})
-        [:nippy/unthawable :cause]))
+  (let [sem    (java.util.concurrent.Semaphore. 1)
+        ba     (nippy/freeze sem #_{:serializable-whitelist "*"})
+        thawed (nippy/thaw   ba    {:serializable-whitelist #{}})]
 
-    "Thaw will quarantine Serializable objects approved when freezing.")
+    (is
+      (= :quarantined (get-in thawed [:nippy/unthawable :cause]))
+      "Serializable objects will be quarantined when approved for freezing but not thawing.")
+
+    (is
+      (instance? java.util.concurrent.Semaphore
+        (nippy/read-quarantined-serializable-object-unsafe! thawed))
+      "Quarantined Serializable objects may still be manually force-read.")
+
+    (is
+      (instance? java.util.concurrent.Semaphore
+        (nippy/read-quarantined-serializable-object-unsafe!
+          (nippy/thaw (nippy/freeze thawed))))
+      "Quarantined Serializable objects are themselves safely transportable."))
 
   (is
     (instance? java.util.concurrent.Semaphore

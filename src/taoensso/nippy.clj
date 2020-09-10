@@ -321,7 +321,9 @@
   If `thaw` encounters an unwhitelisted Serialized class:
     - `thaw` will throw if it's not possible to safely quarantine.
     - Otherwise the object will be thawed as:
-      `{:nippy/unthawable {:class-name _ :content <quarantined-ba> ...}}`.
+      `{:nippy/unthawable {:class-name <> :content <quarantined-ba> ...}}`.
+      - Objects thus quarantined may be manually unquarantined with
+        `read-quarantined-serializable-object-unsafe!`.
 
   This is a security measure to prevent Remote Code Execution (RCE).
 
@@ -1380,6 +1382,27 @@
         :class-name class-name
         :content    nil
         :exception  e}})))
+
+(defn read-quarantined-serializable-object-unsafe!
+  "Given a quarantined Serializable object like
+  {:nippy/unthawable {:class-name <> :content <quarantined-ba>}}, reads and
+  returns the object WITHOUT regard for `*serializable-whitelist*`.
+
+  **MAY BE UNSAFE!** Don't call this unless you absolutely trust the payload
+  to not contain any malicious code.
+
+  See `*serializable-whitelist*` for more info."
+  [m]
+  (when-let [m (get m :nippy/unthawable)]
+    (let [{:keys [class-name content]} m]
+      (when (and class-name content)
+        (read-object
+          (DataInputStream. (ByteArrayInputStream. content))
+          class-name)))))
+
+(comment
+  (read-quarantined-serializable-object-unsafe!
+    (thaw (freeze (java.util.concurrent.Semaphore. 1)))))
 
 (defn- read-serializable-q
   "Quarantined => object serialized to ba, then ba written to output stream.
