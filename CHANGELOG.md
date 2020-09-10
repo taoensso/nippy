@@ -1,5 +1,18 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v2.15.3 / 2020 Sep 10
+
+```clojure
+[com.taoensso/nippy "2.15.3"]
+```
+
+> Non-breaking release. See [here](https://github.com/ptaoussanis/encore#recommended-steps-after-any-significant-dependency-update) recommended steps when updating any Clojure/Script dependencies.
+
+#### Changes since `v2.15.2`
+
+* `*serializable-whitelist*`: added a number of common classes to default value. See `default-serializable-whitelist` for details.
+
+
 ## v2.15.2 / 2020 Aug 31
 
 ```clojure
