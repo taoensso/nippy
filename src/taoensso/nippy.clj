@@ -350,7 +350,7 @@
     - Does     implement Java's  Serializable interface.
 
   In this case, Java's Serializable interface will be permitted iff
-  (<allowlist> <class-name>) predicate call returns true.
+  `(<allowlist> <class-name>)` predicate call returns true.
 
   This is a security measure to prevent possible Remote Code Execution
   (RCE) when thawing malicious payloads. See [1] for details.
@@ -366,16 +366,18 @@
       - Quarantined objects may be manually unquarantined with
         `read-quarantined-serializable-object-unsafe!`.
 
-  There are 2x allowlists: *<freeze/thaw>-serializable-allowlist*.
+  There are 2x allowlists:
+    - `*freeze-serializable-allowlist*` ; Checked when freezing
+    -   `*thaw-serializable-allowlist*` ; Checked when thawing
 
   Example values:
-    - (fn allow-class? [class-name] true)            ; Arbitrary fn
-    - #{\"java.lang.Throwable\", \"clojure.lang.*\"} ; Set of class-names
+    - `(fn allow-class? [class-name] true)`            ; Arbitrary predicate fn
+    - `#{\"java.lang.Throwable\", \"clojure.lang.*\"}` ; Set of class-names
 
     Note that class-names in sets may contain \"*\" wildcards.
 
   Default allowlist values are:
-    - default-freeze-serializable-allowlist ; {\"*\"} => allow any class
+    - default-freeze-serializable-allowlist ; `{\"*\"}` => allow any class
     -   default-thaw-serializable-allowlist ; A set of common safe classes
 
   Allowlist values may be overridden with `binding`, `alter-var-root`, or:
@@ -421,6 +423,25 @@
 
   (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (init-allowlist :freeze default-freeze-serializable-allowlist))
   (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (init-allowlist :thaw     default-thaw-serializable-allowlist)))
+
+(comment
+  ;; Deref for set of all class names that made use of Nippy's Serializable support:
+  (defonce observed-serializables_ (atom #{}))
+
+  (let [f (fn allow-class? [class-name]
+            (swap! observed-serializables_ conj class-name) ; Record class name
+            true ; Allow any class
+            )]
+
+    (alter-var-root #'*freeze-serializable-allowlist* (fn [_] f))
+    (alter-var-root   #'*thaw-serializable-allowlist* (fn [_] f)))
+
+  (comment @observed-serializables_) ; Call/log after some time
+  (comment
+    ;; If you're satisfied that the recorded classes are safe, you can merge them
+    ;; into Nippy's default allowlist:
+    (alter-var-root #'thaw-serializable-allowlist*
+      (fn [_] (into default-thaw-serializable-allowlist observed-serializables_)))))
 
 (let [fn?       fn?
       compile   (enc/fmemoize (fn [x] (enc/compile-str-filter x)))
