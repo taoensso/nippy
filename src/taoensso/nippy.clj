@@ -509,6 +509,9 @@
 
 (defn- write-biginteger [out ^BigInteger n] (write-bytes-lg out (.toByteArray n)))
 
+(defn- write-str-sm [^DataOutput out ^String s] (write-bytes-sm out (.getBytes s charset)))
+(defn- write-str-md [^DataOutput out ^String s] (write-bytes-md out (.getBytes s charset)))
+(defn- write-str-lg [^DataOutput out ^String s] (write-bytes-lg out (.getBytes s charset)))
 (defn- write-str [^DataOutput out ^String s]
   (if (identical? s "")
     (write-id out id-str-0)
