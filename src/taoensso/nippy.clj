@@ -35,8 +35,6 @@
 
 ;;;; TODO
 ;; - Performance would benefit from ^:static support / direct linking / etc.
-;; - Auto cache keywords? When map keys? Configurable? Per-map
-;;   (`cache-keys`)? Just rely on compression?
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
@@ -281,10 +279,6 @@
   nil)
 
 (enc/defonce ^:dynamic *incl-metadata?* "Include metadata when freezing/thawing?" true)
-
-(defn set-freeze-fallback!        [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
-(defn set-auto-freeze-compressor! [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
-(defn swap-custom-readers!        [f] (alter-var-root #'*custom-readers* f))
 
 ;;;; Java Serializable config
 ;; Unfortunately quite a bit of complexity to do this safely
@@ -1829,7 +1823,7 @@
      (when (contains? *custom-readers* ~(coerce-custom-type-id custom-type-id))
        (println (str "Warning: resetting Nippy thaw for custom type with id: "
                   ~custom-type-id)))
-     (swap-custom-readers!
+     (alter-var-root #'*custom-readers*
        (fn [m#]
          (assoc m#
            ~(coerce-custom-type-id custom-type-id)
@@ -1846,9 +1840,9 @@
 ;;;; Stress data
 
 (defrecord StressRecord [data])
-(deftype StressType [data]
-  Object
-  (equals [a b] (= (.-data a) (.-data ^StressType b))))
+(deftype   StressType   [data]
+  Object (equals [a b] (= (.-data a) (.-data ^StressType b))))
+
 (def stress-data "Reference data used for tests & benchmarks"
   {:bytes     (byte-array [(byte 1) (byte 2) (byte 3)])
    :nil       nil
@@ -2010,4 +2004,8 @@
 
 ;;;; Deprecated
 
-(enc/deprecated (def freeze-fallback-as-str "DEPRECATED" write-unfreezable))
+(enc/deprecated
+  (def freeze-fallback-as-str       "DEPRECATED, use `write-unfreezable`"   write-unfreezable)
+  (defn set-freeze-fallback!        "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
+  (defn set-auto-freeze-compressor! "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
+  (defn swap-custom-readers!        "DEPRECATED, just use `alter-var-root`" [f] (alter-var-root #'*custom-readers* f)))

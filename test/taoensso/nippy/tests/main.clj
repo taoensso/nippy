@@ -92,7 +92,7 @@
 (deftest _types
   ;;; Extend to custom Type
   (is (thrown? Exception ; No thaw extension yet
-        (do (nippy/swap-custom-readers! (constantly {}))
+        (do (alter-var-root #'nippy/*custom-readers* (constantly {}))
             (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (.data x)))
             (thaw (freeze (MyType. "val"))))))
   (is (do (nippy/extend-thaw 1 [s] (MyType. (.readUTF s)))
