@@ -8,7 +8,7 @@
 [com.taoensso/nippy "2.15.3"]    ; BREAKING, see CHANGELOG for details
 ```
 
-> See [here](https://taoensso.com/clojure/backers) if you're interested in helping support my open-source work, thanks! - Peter
+> See [here](https://taoensso.com/clojure/backers) if you're interested in helping support my open-source work, thanks! - Peter Taoussanis
 
 ## _SECURITY ADVISORY_
 
