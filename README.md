@@ -4,22 +4,17 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "2.15.3"] ; BREAKING, see CHANGELOG for details
+[com.taoensso/nippy "3.0.0-RC1"] ; BREAKING, see CHANGELOG for details
+[com.taoensso/nippy "2.15.3"]    ; BREAKING, see CHANGELOG for details
 ```
 
-## ** SECURITY ADVISORY **
+> See [here](https://taoensso.com/clojure/backers) if you're interested in helping support my open-source work, thanks! - Peter
 
-Users of Nippy older than **v2.15.0 final** should **please upgrade ASAP** due to a **Remote Code Execution vulnerability** when deserializing data from an **untrusted source**.
+## _SECURITY ADVISORY_
+
+Users of Nippy older than **v2.15.0 final** should **please upgrade ASAP** due to a **Remote Code Execution (RCE) vulnerability** when deserializing data from an **untrusted source**.
 
 Please see [here](https://github.com/ptaoussanis/nippy/issues/130) for details, including upgrade instructions.
-
---
-
-> Please consider helping to [support my continued open-source Clojure/Script work]? 
-> 
-> Even small contributions can add up + make a big difference to help sustain my time writing, maintaining, and supporting Nippy and other Clojure/Script libraries. **Thank you!**
->
-> \- Peter Taoussanis
 
 # Nippy
 
@@ -195,7 +190,6 @@ Copyright &copy; 2012-2020 [Peter Taoussanis].
 [@ptaoussanis]: https://www.taoensso.com
 [More by @ptaoussanis]: https://www.taoensso.com
 [Break Version]: https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md
-[support my continued open-source Clojure/Script work]: http://taoensso.com/clojure/backers
 
 <!--- Standard links (repo specific) -->
 [CHANGELOG]: https://github.com/ptaoussanis/nippy/releases

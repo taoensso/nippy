@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "2.15.3"
+(defproject com.taoensso/nippy "3.0.0-RC1"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "High-performance serialization library for Clojure"
   :url "https://github.com/ptaoussanis/nippy"
