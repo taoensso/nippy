@@ -416,7 +416,7 @@
   (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (init-allowlist :thaw     default-thaw-serializable-allowlist)))
 
 (let [nmax    1000
-      gc-rate (/ 1.0 16000)
+      ngc     16000
       state_  (atom {})  ; {<class-name> <frequency>}
       lock_   (atom nil) ; ?promise
       trim    (fn [nmax state]
@@ -472,13 +472,12 @@
 
       ;; Garbage collection (GC): may be serializing anonymous classes, etc.
       ;; so input domain could be infinite
-      (when (> n nmax) ; Too many classes recorded, uncommon
-        (when (< (java.lang.Math/random) gc-rate) ; Amortize GC cost
-          (let [p (promise)]
-            (when (compare-and-set! lock_ nil p) ; Acquired gc lock
-              (try
-                (do      (reset! state_ (trim nmax @state_))) ; GC state
-                (finally (reset! lock_  nil) (deliver p nil)))))))
+      (when (> n ngc) ; Too many classes recorded, uncommon
+        (let [p (promise)]
+          (when (compare-and-set! lock_ nil p) ; Acquired GC lock
+            (try
+              (do      (reset! state_ (trim nmax @state_))) ; GC state
+              (finally (reset! lock_  nil) (deliver p nil))))))
 
       n))
 
