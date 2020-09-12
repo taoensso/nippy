@@ -248,8 +248,10 @@
 
 ;;;; Serializable
 
-(def ^:private sem                (java.util.concurrent.Semaphore. 1))
-(defn-         sem? [x] (instance? java.util.concurrent.Semaphore x))
+(do
+  (def ^:private semcn              "java.util.concurrent.Semaphore")
+  (def ^:private sem                (java.util.concurrent.Semaphore. 1))
+  (defn-         sem? [x] (instance? java.util.concurrent.Semaphore x)))
 
 (deftest _serializable
   (is (= nippy/*thaw-serializable-allowlist* #{"base.1" "base.2" "add.1" "add.2"})
@@ -260,8 +262,8 @@
 
   (is (sem?
         (nippy/thaw
-          (nippy/freeze sem {:serializable-allowlist #{"java.util.concurrent.Semaphore"}})
-          {:serializable-allowlist #{"java.util.concurrent.Semaphore"}}))
+          (nippy/freeze sem {:serializable-allowlist #{semcn}})
+          {:serializable-allowlist #{semcn}}))
 
     "Can freeze and thaw Serializable objects if approved by allowlist")
 
@@ -283,7 +285,19 @@
 
     (is (sem? (nippy/read-quarantined-serializable-object-unsafe!
                 (nippy/thaw (nippy/freeze thawed))))
-      "Quarantined Serializable objects are themselves safely transportable."))    )
+      "Quarantined Serializable objects are themselves safely transportable."))
+
+  (let [obj
+        (nippy/thaw
+          (nippy/freeze sem)
+          {:serializable-allowlist "allow-and-record"})]
+
+    (is (sem? obj)
+      "Special \"allow-and-record\" allowlist permits any class")
+
+    (is
+      (contains? (nippy/get-recorded-serializable-classes) semcn)
+      "Special \"allow-and-record\" allowlist records classes")))
 
 ;;;; Metadata
 

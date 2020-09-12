@@ -310,6 +310,7 @@
     "clojure.lang.ExceptionInfo"
     "clojure.lang.ArityException"})
 
+(defn- allow-and-record?     [s] (= s "allow-and-record"))
 (defn- split-class-names>set [s] (when (string? s) (if (= s "") #{} (set (mapv str/trim (str/split s #"[,:]"))))))
 (comment
   (split-class-names>set "")
@@ -331,14 +332,14 @@
             (when-let [s (or
                            (enc/get-sys-val (get-in ids [action  :base :prop]) (get-in ids [action  :base :env]))
                            (enc/get-sys-val (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env])))]
-              (split-class-names>set s))
+              (if (allow-and-record? s) s (split-class-names>set s)))
             default)
 
           allowlist-add
           (when-let [s (or
                          (enc/get-sys-val (get-in ids [action  :add :prop]) (get-in ids [action  :add :env]))
                          (enc/get-sys-val (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env])))]
-            (split-class-names>set s))]
+            (if (allow-and-record? s) s (split-class-names>set s)))]
 
       (if (and allowlist-base allowlist-add)
         (into (enc/have set? allowlist-base) allowlist-add)
@@ -346,11 +347,11 @@
 
 (let [doc
       "Used when attempting to <freeze/thaw> an object that:
-    - Does not implement Nippy's Freezable    protocol.
-    - Does     implement Java's  Serializable interface.
+    - Does NOT implement Nippy's Freezable    protocol.
+    - DOES     implement Java's  Serializable interface.
 
-  In this case, Java's Serializable interface will be permitted iff
-  `(<allowlist> <class-name>)` predicate call returns true.
+  In this case, the allowlist will be checked to see if Java's
+  Serializable interface may be used.
 
   This is a security measure to prevent possible Remote Code Execution
   (RCE) when thawing malicious payloads. See [1] for details.
@@ -370,9 +371,10 @@
     - `*freeze-serializable-allowlist*` ; Checked when freezing
     -   `*thaw-serializable-allowlist*` ; Checked when thawing
 
-  Example values:
+  Example allowlist values:
     - `(fn allow-class? [class-name] true)`            ; Arbitrary predicate fn
     - `#{\"java.lang.Throwable\", \"clojure.lang.*\"}` ; Set of class-names
+    - `\"allow-and-record\"`                           ; Special value, see [2]
 
     Note that class-names in sets may contain \"*\" wildcards.
 
@@ -396,55 +398,112 @@
       - The \"base\" property/var to replace Nippy's default allowlists.
       - The \"add\"  property/var to add to  Nippy's default allowlists.
 
-  See also `taoensso.encore/compile-str-filter`, a util to help
-  easily build more advanced predicate functions.
-
+  The special `\"allow-and-record\"` value is also possible, see [2].
 
   Upgrading from an older version of Nippy and unsure whether you've been
-  using Nippy's Serializable support? Here's a snippet to ALLOW and RECORD
-  any class requesting Nippy's Serializable fallback:
+  using Nippy's Serializable support, or which classes to allow? See [2].
 
-    ;; Deref for set of all class names that made use of Nippy's Serializable support:
-    (defonce observed-serializables_ (atom #{}))
-
-    (let [f (fn allow-class? [class-name]
-              (swap! observed-serializables_ conj class-name) ; Record class name
-              true ; Allow any class
-              )]
-
-      (alter-var-root #'*freeze-serializable-allowlist* (fn [_] f))
-      (alter-var-root   #'*thaw-serializable-allowlist* (fn [_] f)))
-
+  See also `taoensso.encore/compile-str-filter` for a util to help easily
+  build more advanced predicate functions.
 
   Thanks to Timo Mihaljov (@solita-timo-mihaljov) for an excellent report
   identifying this vulnerability.
 
-  [1] https://github.com/ptaoussanis/nippy/issues/130"]
+  [1] https://github.com/ptaoussanis/nippy/issues/130
+  [2] See `allow-and-record-any-serializable-class-unsafe`."]
 
   (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (init-allowlist :freeze default-freeze-serializable-allowlist))
   (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (init-allowlist :thaw     default-thaw-serializable-allowlist)))
 
-(comment
-  ;; Deref for set of all class names that made use of Nippy's Serializable support:
-  (defonce observed-serializables_ (atom #{}))
+(let [nmax    1000
+      gc-rate (/ 1.0 16000)
+      state_  (atom {})  ; {<class-name> <frequency>}
+      lock_   (atom nil) ; ?promise
+      trim    (fn [nmax state]
+                (persistent!
+                  (enc/reduce-top nmax val enc/rcompare conj!
+                    (transient {}) state)))]
 
-  (let [f (fn allow-class? [class-name]
-            (swap! observed-serializables_ conj class-name) ; Record class name
-            true ; Allow any class
-            )]
+  ;; Note: trim strategy isn't perfect: it can be tough for new
+  ;; classes to break into the top set since frequencies are being
+  ;; reset only for classes outside the top set.
+  ;;
+  ;; In practice this is probably good enough since the main objective
+  ;; is to discard one-off anonymous classes to protect state from
+  ;; endlessly growing. Also `gc-rate` allows state to temporarily grow
+  ;; significantly beyond `nmax` size, which helps to give new classes
+  ;; some chance to accumulate a competitive frequency before next GC.
 
-    (alter-var-root #'*freeze-serializable-allowlist* (fn [_] f))
-    (alter-var-root   #'*thaw-serializable-allowlist* (fn [_] f)))
+  (defn- ^{:-state_ state_} ; Undocumented
+    allow-and-record-any-serializable-class-unsafe
+    "A predicate (fn allow-class? [class-name]) fn that can be assigned
+    to `*freeze-serializable-allowlist*` and/or
+         `*thaw-serializable-allowlist*` that:
 
-  (comment @observed-serializables_) ; Call/log after some time
-  (comment
-    ;; If you're satisfied that the recorded classes are safe, you can merge them
-    ;; into Nippy's default allowlist:
+      - Will allow ANY class to use Nippy's Serializable support (unsafe).
+      - And will record {<class-name> <frequency-allowed>} for the <=1000
+        classes that ~most frequently made use of this support.
+
+    `get-recorded-serializable-classes` returns the recorded state.
+
+    This predicate is provided as a convenience for users upgrading from
+    previous versions of Nippy that allowed the use of Serializable for all
+    classes by default.
+
+    While transitioning from an unsafe->safe configuration, you can use
+    this predicate (unsafe) to record information about which classes have
+    been using Nippy's Serializable support in your environment.
+
+    Once some time has passed, you can check the recorded state. If you're
+    satisfied that all recorded classes are safely Serializable, you can
+    then merge the recorded classes into Nippy's default allowlist/s, e.g.:
+
     (alter-var-root #'thaw-serializable-allowlist*
-      (fn [_] (into default-thaw-serializable-allowlist observed-serializables_)))))
+      (fn [_] (into default-thaw-serializable-allowlist
+                (keys (get-recorded-serializable-classes)))))"
 
-(let [fn?       fn?
-      compile   (enc/fmemoize (fn [x] (enc/compile-str-filter x)))
+    [class-name]
+    (when-let [p @lock_] @p)
+
+    (let [n (count
+              (swap! state_
+                (fn [m] (assoc m class-name
+                          (inc (long (or (get m class-name) 0)))))))]
+
+      ;; Garbage collection (GC): may be serializing anonymous classes, etc.
+      ;; so input domain could be infinite
+      (when (> n nmax) ; Too many classes recorded, uncommon
+        (when (< (java.lang.Math/random) gc-rate) ; Amortize GC cost
+          (let [p (promise)]
+            (when (compare-and-set! lock_ nil p) ; Acquired gc lock
+              (try
+                (do      (reset! state_ (trim nmax @state_))) ; GC state
+                (finally (reset! lock_  nil) (deliver p nil)))))))
+
+      n))
+
+  (defn get-recorded-serializable-classes
+    "Returns {<class-name> <frequency>} of the <=1000 classes that ~most
+    frequently made use of Nippy's Serializable support via
+    `allow-and-record-any-serializable-class-unsafe`.
+
+    See that function's docstring for more info."
+    [] (trim nmax @state_)))
+
+(comment
+  (count (get-recorded-serializable-classes))
+  (enc/reduce-n
+    (fn [_ n] (allow-and-record-any-serializable-class-unsafe (str n)))
+    nil 0 1e5))
+
+(let [fn? fn?
+      compile
+      (enc/fmemoize
+        (fn [x]
+          (if (allow-and-record? x)
+            allow-and-record-any-serializable-class-unsafe
+            (enc/compile-str-filter x))))
+
       conform?* (fn [x cn] ((compile x) cn)) ; Uncached because input domain possibly infinite
       conform?
       (fn [x cn]
