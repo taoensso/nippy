@@ -4,7 +4,7 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "3.0.0-RC1"] ; BREAKING, see CHANGELOG for details
+[com.taoensso/nippy "3.0.0-RC2"] ; BREAKING, see CHANGELOG for details
 [com.taoensso/nippy "2.15.3"]    ; BREAKING, see CHANGELOG for details
 ```
 
