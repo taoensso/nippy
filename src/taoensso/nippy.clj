@@ -434,7 +434,7 @@
   ;; significantly beyond `nmax` size, which helps to give new classes
   ;; some chance to accumulate a competitive frequency before next GC.
 
-  (defn- ^{:-state_ state_} ; Undocumented
+  (defn ^{:-state_ state_} ; Undocumented
     allow-and-record-any-serializable-class-unsafe
     "A predicate (fn allow-class? [class-name]) fn that can be assigned
     to `*freeze-serializable-allowlist*` and/or
