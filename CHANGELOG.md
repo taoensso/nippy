@@ -1,9 +1,9 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
-## v3.0.0-RC2 / 2020 Sep 12
+## v3.0.0-RC3 / 2020 Sep 12
 
 ```clojure
-[com.taoensso/nippy "3.0.0-RC2"]
+[com.taoensso/nippy "3.0.0-RC3"]
 ```
 
 #### New since `v3.0.0-RC1`
