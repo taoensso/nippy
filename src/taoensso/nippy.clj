@@ -326,19 +326,21 @@
        :thaw   {:base {:prop   "taoensso.nippy.thaw-serializable-allowlist-base" :env   "TAOENSSO_NIPPY_THAW_SERIALIZABLE_ALLOWLIST_BASE"}
                 :add  {:prop   "taoensso.nippy.thaw-serializable-allowlist-add"  :env   "TAOENSSO_NIPPY_THAW_SERIALIZABLE_ALLOWLIST_ADD"}}}]
 
-  (defn- init-allowlist [action default]
+  (defn- init-allowlist [action default incl-legacy?]
     (let [allowlist-base
           (or
             (when-let [s (or
                            (enc/get-sys-val (get-in ids [action  :base :prop]) (get-in ids [action  :base :env]))
-                           (enc/get-sys-val (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env])))]
+                           (when incl-legacy?
+                             (enc/get-sys-val (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env]))))]
               (if (allow-and-record? s) s (split-class-names>set s)))
             default)
 
           allowlist-add
           (when-let [s (or
                          (enc/get-sys-val (get-in ids [action  :add :prop]) (get-in ids [action  :add :env]))
-                         (enc/get-sys-val (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env])))]
+                         (when incl-legacy?
+                           (enc/get-sys-val (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env]))))]
             (if (allow-and-record? s) s (split-class-names>set s)))]
 
       (if (and allowlist-base allowlist-add)
@@ -412,8 +414,12 @@
   [1] https://github.com/ptaoussanis/nippy/issues/130
   [2] See `allow-and-record-any-serializable-class-unsafe`."]
 
-  (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (init-allowlist :freeze default-freeze-serializable-allowlist))
-  (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (init-allowlist :thaw     default-thaw-serializable-allowlist)))
+  (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (init-allowlist :freeze default-freeze-serializable-allowlist false))
+  (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (init-allowlist :thaw     default-thaw-serializable-allowlist true)))
+
+(enc/defonce ^:dynamic *serializable-whitelist*
+  ;; Mostly retained for https://github.com/juxt/crux/releases/tag/20.09-1.11.0
+  "DEPRECATED, now called `*thaw-serializable-allowlist*`" nil)
 
 (let [nmax    1000
       ngc     16000
@@ -511,7 +517,9 @@
           (conform?* x cn)))]
 
   (defn- freeze-serializable-allowed? [class-name] (conform? *freeze-serializable-allowlist* class-name))
-  (defn-   thaw-serializable-allowed? [class-name] (conform?   *thaw-serializable-allowlist* class-name)))
+  (defn-   thaw-serializable-allowed? [class-name]
+    (conform? (or *serializable-whitelist* *thaw-serializable-allowlist*)
+      class-name)))
 
 (comment
   (enc/qb 1e6 (freeze-serializable-allowed? "foo")) ; 119.92
