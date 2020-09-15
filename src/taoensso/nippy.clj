@@ -1487,7 +1487,7 @@
   (if (thaw-serializable-allowed? class-name)
     (read-object in class-name)
     (throw ; No way to skip bytes, so best we can do is throw
-      (ex-info "Cannot thaw object: `*thaw-serializable-allowlist*` check failed. See docstring for details."
+      (ex-info "Cannot thaw object: `taoensso.nippy/*thaw-serializable-allowlist*` check failed. This is a security feature. See `*thaw-serializable-allowlist*` docstring or https://github.com/ptaoussanis/nippy/issues/130 for details!"
         {:class-name class-name}))))
 
 (defn- read-record [in class-name]
