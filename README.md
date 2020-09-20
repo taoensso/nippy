@@ -8,6 +8,8 @@
 [com.taoensso/nippy "2.15.3"]    ; BREAKING, see CHANGELOG for details
 ```
 
+<!-- ![build status](https://github.com/ptaoussanis/nippy/workflows/build/badge.svg?branch=master) -->
+
 > See [here](https://taoensso.com/clojure/backers) if you're interested in helping support my open-source work, thanks! - Peter Taoussanis
 
 ## _SECURITY ADVISORY_
