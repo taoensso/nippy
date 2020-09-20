@@ -1,5 +1,60 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v3.0.0 / 2020 Sep 20
+
+```clojure
+[com.taoensso/nippy "3.0.0"]
+```
+
+> This release is focused on smoothing out rough edges left by `CVE-2020-24164` [#130], and to **ease transition** from versions of Nippy < `v2.15.0 final`.
+
+> See [here](https://github.com/ptaoussanis/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
+
+Note that there's **separate details** below for upgrading from `v2.15` vs `v2.14`:
+
+### Upgrading from `v2.15.0` (usually non-breaking)
+
+Usually a non-breaking drop-in replacement, but there's some changes you might like to take advantage of. See [#130] for **detailed upgrade instructions**.
+
+#### Changes
+
+  - **[BREAKING]** Bumped minimum Clojure version from `v1.5` to `v1.7`.
+  - **[BREAKING]** `:nippy/unthawable` responses now have a standardized form: `{:nippy/unthawable {:type _ :cause _ ...}`. Most folks won't care about this change unless they have code specifically to deal with `:nippy/unthawable` responses.
+  - [Deprecated] `*serializable-whitelist*` has been split into two separate vars: `*freeze-serializable-allowlist*`, `*thaw-serializable-allowlist`*. See [#130] for details.
+  - By default, `freeze` now **allows** the use of Java's Serializable for **any** class. `thaw` continues to be restrictive by default, and will quarantine any objects not on the class allowlist. See [#130] for details.
+
+#### New
+
+  - [#122] Option to disable freezing and/or thawing of metadata.
+  - `freeze` and `thaw` now support opts: `:serializable-allowlist`, `:incl-metadata?`.
+  - New `read-quarantined-serializable-object-unsafe!` util to read quarantined Serializable objects. See [API docs](http://ptaoussanis.github.io/nippy/taoensso.nippy.html#var-read-quarantined-serializable-object-unsafe.21) and/or [#130] for details.
+  - Add `allow-and-record-any-serializable-class-unsafe` util. See [API docs](http://ptaoussanis.github.io/nippy/taoensso.nippy.html#var-allow-and-record-any-serializable-class-unsafe) and/or [#130] for details.
+
+
+### Upgrading from `v2.14.0` (may be BREAKING)
+
+Likely breaking. Please see [#130] for **detailed upgrade instructions**.
+
+#### Changes
+
+  - **[BREAKING]** Bumped minimum Clojure version from `v1.5` to `v1.7`.
+  - **[BREAKING]** [#130] `thaw` will now quarantine Serializable objects whose class is not allowed by `*thaw-serializable-allowlist*`. See [#130] for details.
+  - **[BREAKING]** `:nippy/unthawable` responses now have a standardized form: `{:nippy/unthawable {:type _ :cause _ ...}`. Most folks won't care about this change unless you have code specifically to deal with `:nippy/unthawable` responses.
+  - [#101] Switch default encryptor from `AES-CBC` to `AES-GCM` (faster, includes integrity check)
+
+#### New
+
+  - [#127] Add utils: `freeze-to-string`, `thaw-from-string` (@piotr-yuxuan)
+  - [#113 #114] Add support for object arrays (@isaksky)
+  - [#83 #112] Add support for deftype (@isaksky)
+  - [#83 #113] Add support for URIs (@isaksky)
+  - [#126] `extend-freeze`: include id collision odds in docstring
+
+#### Fixes
+
+  - [#120] Update `freezable?` to cover `nil`
+
+
 ## v3.0.0-RC3 / 2020 Sep 12
 
 ```clojure

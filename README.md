@@ -4,8 +4,7 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "3.0.0-RC3"] ; BREAKING, see CHANGELOG for details
-[com.taoensso/nippy "2.15.3"]    ; BREAKING, see CHANGELOG for details
+[com.taoensso/nippy "3.0.0"] ; See CHANGELOG for details
 ```
 
 <!-- ![build status](https://github.com/ptaoussanis/nippy/workflows/build/badge.svg?branch=master) -->
@@ -14,9 +13,9 @@
 
 ## _SECURITY ADVISORY_
 
-Users of Nippy older than **v2.15.0 final** should **please upgrade ASAP** due to a **Remote Code Execution (RCE) vulnerability** when deserializing data from an **untrusted source**.
+Users of Nippy <= `v2.15.0-RC1` should **please upgrade ASAP** due to a **Remote Code Execution (RCE) vulnerability** when deserializing data from an **untrusted source**.
 
-Please see [here](https://github.com/ptaoussanis/nippy/issues/130) for details, including upgrade instructions.
+See [here](https://github.com/ptaoussanis/nippy/issues/130) for details, including upgrade instructions.
 
 # Nippy
 
@@ -43,7 +42,7 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your project:
 
 ```clojure
-[com.taoensso/nippy "2.15.3"]
+[com.taoensso/nippy "3.0.0"]
 ```
 
 And setup your namespace imports:
