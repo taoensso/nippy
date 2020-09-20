@@ -12,7 +12,7 @@
 
 Note that there's **separate details** below for upgrading from `v2.15` vs `v2.14`:
 
-### Upgrading from `v2.15.0` (usually non-breaking)
+### Upgrading from `v2.15` (usually non-breaking)
 
 Usually a non-breaking drop-in replacement, but there's some changes you might like to take advantage of. See [#130] for **detailed upgrade instructions**.
 
@@ -31,7 +31,7 @@ Usually a non-breaking drop-in replacement, but there's some changes you might l
   - Add `allow-and-record-any-serializable-class-unsafe` util. See [API docs](http://ptaoussanis.github.io/nippy/taoensso.nippy.html#var-allow-and-record-any-serializable-class-unsafe) and/or [#130] for details.
 
 
-### Upgrading from `v2.14.0` (may be BREAKING)
+### Upgrading from `v2.14` (may be BREAKING)
 
 Likely breaking. Please see [#130] for **detailed upgrade instructions**.
 
