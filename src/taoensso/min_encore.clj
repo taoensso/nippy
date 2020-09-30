@@ -306,6 +306,7 @@
   [f]
   ;; Non-racey just as fast as racey, and protects against nils in maps
   (let [cache0_ (java.util.concurrent.atomic.AtomicReference. nil)
+        ;;Concurrent hash maps have per-bucket locking if you use the compute* operators.
         cache1_ (java.util.concurrent.ConcurrentHashMap.)
         cachen_ (java.util.concurrent.ConcurrentHashMap.)]
 
