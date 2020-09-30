@@ -294,7 +294,7 @@
 
            :else
            (.computeIfAbsent
-            cache_ nil-sentinel
+            cache_ xs
             (reify Function
               (apply [this k]
                 (apply f xs))))))))))
@@ -364,7 +364,13 @@
 (defmacro thread-local-proxy
   [& body] `(proxy [ThreadLocal] [] (initialValue [] (do ~@body))))
 
-(def ^:private srng* (thread-local-proxy (java.security.SecureRandom/getInstanceStrong)))
+(def ^:private srng* (thread-local-proxy
+                      (or
+                       ;; Very strong and blocking.  See
+                       ;; https://stackoverflow.com/questions/137212/how-to-deal-with-a-slow-securerandom-generator
+                       (java.security.SecureRandom/getInstanceStrong)
+                       ;;Weaker and much faster
+                       #_(java.security.SecureRandom/getInstance "SHA1PRNG"))))
 
 (defn secure-rng
    "Returns a thread-local `java.security.SecureRandom`.
@@ -571,4 +577,40 @@
           :else
           (throw
             (ex-info "compile-str-filter: `allow-spec` and `deny-spec` cannot both be nil"
-              {:allow-spec allow-spec :deny-spec deny-spec})))))))
+                     {:allow-spec allow-spec :deny-spec deny-spec})))))))
+
+
+(defn round0   ^long [n]            (Math/round    (double n)))
+(defn round1 ^double [n] (/ (double (Math/round (* (double n)  10.0)))  10.0))
+(defn round2 ^double [n] (/ (double (Math/round (* (double n) 100.0))) 100.0))
+(defn perc     ^long [n divisor] (Math/round (* (/ (double n) (double divisor)) 100.0)))
+
+
+(defmacro now-nano* [] `(System/nanoTime))
+
+
+(defmacro time-ns "Returns number of nanoseconds it took to execute body."
+  [& body] `(let [t0# (now-nano*)] ~@body (- (now-nano*) t0#)))
+
+
+(defn bench*
+   "Repeatedly executes fn and returns time taken to complete execution."
+   [nlaps {:keys [nlaps-warmup nthreads as-ns?]
+           :or   {nlaps-warmup 0
+                  nthreads     1}} f]
+  (try
+    (dotimes [_ nlaps-warmup] (f))
+    (let [nanosecs
+          (if (= nthreads 1)
+            (time-ns (dotimes [_ nlaps] (f)))
+            (let [nlaps-per-thread (/ nlaps nthreads)]
+              (time-ns
+               (let [futures (repeatedly-into [] nthreads
+                                              (fn [] (future (dotimes [_ nlaps-per-thread] (f)))))]
+                 (mapv deref futures)))))]
+      (if as-ns? nanosecs (round0 (/ nanosecs 1e6))))
+     (catch Throwable t
+       (println (str "Bench failure: " (.getMessage t)))
+       -1)))
+
+(defmacro bench [nlaps opts & body] `(bench* ~nlaps ~opts (fn [] ~@body)))

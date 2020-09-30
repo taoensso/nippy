@@ -1325,15 +1325,14 @@
 
                    ba (if compressor (compress compressor         ba) ba)
                    ba (if encryptor  (encrypt  encryptor password ba) ba)]
-
                (if no-header?
                  ba
                  (wrap-header ba
                    {:compressor-id
                     (when-let [c compressor]
                       (or (compression/standard-header-ids
-                            (compression/header-id c))
-                        :else))
+                           (compression/header-id c))
+                          :else))
 
                     :encryptor-id
                     (when-let [e encryptor]
@@ -1794,7 +1793,6 @@
                          ba (if encryptor  (decrypt    encryptor password ba) ba)
                          ba (if compressor (decompress compressor         ba) ba)
                          dis (DataInputStream. (ByteArrayInputStream. ba))]
-
                      (with-cache (thaw-from-in! dis)))
 
                    (catch Exception e (ex-fn e)))))
@@ -1992,10 +1990,11 @@
    :stress-record (StressRecord. "data")
    :stress-type   (StressType. "data")
 
-   ;; Serializable
+   ;; ;; Serializable
    :throwable    (Throwable. "Yolo")
    :exception    (try (/ 1 0) (catch Exception e e))
-   :ex-info      (ex-info "ExInfo" {:data "data"})})
+   :ex-info      (ex-info "ExInfo" {:data "data"})
+   })
 
 (def stress-data-comparable
   "Reference data with stuff removed that breaks roundtrip equality"

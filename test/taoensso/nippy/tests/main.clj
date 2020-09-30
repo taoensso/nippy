@@ -4,9 +4,17 @@
    [clojure.test.check            :as tc]
    [clojure.test.check.generators :as tc-gens]
    [clojure.test.check.properties :as tc-props]
-   [taoensso.encore :as enc   :refer ()]
    [taoensso.nippy  :as nippy :refer (freeze thaw)]
    [taoensso.nippy.benchmarks :as benchmarks]))
+
+(comment
+  (78 80 89 0 0 0 67 -122 -15 20)
+  (def ignored (thaw ba))
+  16302 nil nil
+
+  (def ba (freeze stress-data-comparable))
+  (78 80 89 8 0 0 67 -122 -15 20)
+  )
 
 (comment (test/run-tests))
 
