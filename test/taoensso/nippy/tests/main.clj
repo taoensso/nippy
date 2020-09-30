@@ -6,6 +6,8 @@
    [clojure.test.check.properties :as tc-props]
    [taoensso.encore :as enc   :refer ()]
    [taoensso.nippy  :as nippy :refer (freeze thaw)]
+   ;;java-time support for nippy
+   [taoensso.nippy.java-time]
    [taoensso.nippy.benchmarks :as benchmarks]))
 
 (comment (test/run-tests))
@@ -332,6 +334,11 @@
           )))
 
     "Metadata successfully excluded by freeze"))
+
+
+(deftest java-time-extension-test
+  (let [inst (java.time.Instant/now)]
+    (is (= inst (nippy/thaw (nippy/freeze inst))))))
 
 ;;;; Benchmarks
 
