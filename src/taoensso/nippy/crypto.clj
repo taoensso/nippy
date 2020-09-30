@@ -2,7 +2,8 @@
   "Low-level crypto utils.
   Private & alpha, very likely to change!"
   (:refer-clojure :exclude [rand-nth])
-  (:require [taoensso.encore :as enc]))
+  (:require [taoensso.min-encore :as enc]
+            [taoensso.truss :as truss]))
 
 ;; Note that AES128 may be preferable to AES256 due to known attack
 ;; vectors specific to AES256, Ref. https://goo.gl/qU4CCV
@@ -33,10 +34,7 @@
 (defn  sha512-md ^java.security.MessageDigest [] (.get ^ThreadLocal sha512-md*))
 (defn  sha256-ba ^bytes [ba] (.digest (sha256-md) ba))
 (defn  sha512-ba ^bytes [ba] (.digest (sha512-md) ba))
-
-(enc/compile-if clojure.lang.Murmur3
-  (defn murmur3 [^String s] (clojure.lang.Murmur3/hashUnencodedChars s))
-  nil)
+(defn murmur3 [^String s] (clojure.lang.Murmur3/hashUnencodedChars s))
 
 ;;;; Key derivation (salt+password -> key / hash)
 ;; (fn [salt-ba utf8]) -> bytes
@@ -45,7 +43,7 @@
 (defn   take-ba ^bytes [n ^bytes ba] (java.util.Arrays/copyOf ba ^int n)) ; Pads if ba too small
 (defn  utf8->ba ^bytes [^String s] (.getBytes s "UTF-8"))
 (defn- add-salt ^bytes [?salt-ba ba] (if ?salt-ba (enc/ba-concat ?salt-ba ba) ba))
-(defn pwd-as-ba ^bytes [utf8-or-ba] (if (string? utf8-or-ba) (utf8->ba utf8-or-ba) (enc/have enc/bytes? utf8-or-ba)))
+(defn pwd-as-ba ^bytes [utf8-or-ba] (if (string? utf8-or-ba) (utf8->ba utf8-or-ba) (truss/have bytes? utf8-or-ba)))
 
 (comment (seq (pwd-as-ba "foo")))
 

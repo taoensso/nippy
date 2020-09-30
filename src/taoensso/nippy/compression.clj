@@ -1,5 +1,4 @@
 (ns taoensso.nippy.compression
-  (:require [taoensso.encore :as enc])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
              DataOutputStream]))
 

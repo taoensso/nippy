@@ -4,11 +4,12 @@
   (:require
    [clojure.string  :as str]
    [clojure.java.io :as jio]
-   [taoensso.encore :as enc]
+   [taoensso.min-encore :as enc]
    [taoensso.nippy
     [utils       :as utils]
     [compression :as compression]
-    [encryption  :as encryption]])
+    [encryption  :as encryption]]
+   [taoensso.truss :as truss])
 
   (:import
    [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
@@ -23,10 +24,6 @@
     IPersistentMap ; IPersistentVector IPersistentSet IPersistentList
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
     LazySeq IRecord ISeq IType]))
-
-(if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [2 126 2])
-  (enc/assert-min-encore-version  2.126))
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
@@ -344,7 +341,7 @@
             (if (allow-and-record? s) s (split-class-names>set s)))]
 
       (if (and allowlist-base allowlist-add)
-        (into (enc/have set? allowlist-base) allowlist-add)
+        (into (truss/have set? allowlist-base) allowlist-add)
         (do                  allowlist-base)))))
 
 (let [doc
@@ -2016,7 +2013,7 @@
 (defn inspect-ba "Alpha - subject to change"
   ([ba          ] (inspect-ba ba nil))
   ([ba thaw-opts]
-   (when (enc/bytes? ba)
+   (when (bytes? ba)
      (let [[first2bytes nextbytes] (enc/ba-split ba 2)
            ?known-wrapper
            (enc/cond
@@ -2090,12 +2087,5 @@
 (comment
   (freeze-to-file "foo.npy" "hello, world!")
   (thaw-from-file "foo.npy")
-  (thaw-from-file (jio/resource "foo.npy")))
-
-;;;; Deprecated
-
-(enc/deprecated
-  (def freeze-fallback-as-str       "DEPRECATED, use `write-unfreezable`"   write-unfreezable)
-  (defn set-freeze-fallback!        "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
-  (defn set-auto-freeze-compressor! "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
-  (defn swap-custom-readers!        "DEPRECATED, just use `alter-var-root`" [f] (alter-var-root #'*custom-readers* f)))
+  (thaw-from-file (jio/resource "foo.npy"))
+  )

@@ -1,7 +1,7 @@
 (ns taoensso.nippy.encryption
   "Simple no-nonsense crypto with reasonable defaults"
   (:require
-   [taoensso.encore       :as enc]
+   [taoensso.min-encore       :as enc]
    [taoensso.nippy.crypto :as crypto]))
 
 (def standard-header-ids
