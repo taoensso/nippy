@@ -17,9 +17,7 @@ Users of Nippy <= `v2.15.0-RC1` should **please upgrade ASAP** due to a **Remote
 
 See [here](https://github.com/ptaoussanis/nippy/issues/130) for details, including upgrade instructions.
 
-# Nippy
-
-## The fastest serialization library for Clojure
+# Nippy: the fastest serialization library for Clojure
 
 Clojure's [rich data types] are *awesome*. And its [reader] allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
@@ -42,7 +40,8 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your project:
 
 ```clojure
-[com.taoensso/nippy "3.0.0"]
+Leiningen: [com.taoensso/nippy "3.0.0"] ; or
+deps.edn:   com.taoensso/nippy {:mvn/version "3.0.0"}
 ```
 
 And setup your namespace imports:
