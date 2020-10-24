@@ -1678,8 +1678,9 @@
         (enc/compile-if java.time.Instant
           (java.time.Instant/ofEpochSecond (.readLong in) (.readInt in))
           {:nippy/unthawable
-           {:type  :time-instant
-            :cause :needs-jvm8+
+           {:type  :class
+            :cause :class-not-found
+
             :class-name "java.time.Instant"
             :content    {:epoch-second (.readLong in) :nano (.readInt in)}}})
 

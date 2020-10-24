@@ -10,7 +10,7 @@
 
 #### New since `v3.0.0`
 
-* [#128 #135] Added native `freeze/thaw` support for `java.time.Instant` on JVM 8+ (@cnuernber).
+* [#135 #128] Added native `freeze/thaw` support for `java.time.Instant` on JVM 8+ (@cnuernber).
 
 
 ## v3.0.0 / 2020 Sep 20
