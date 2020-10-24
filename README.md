@@ -4,7 +4,8 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "3.0.0"] ; See CHANGELOG for details
+[com.taoensso/nippy "3.1.0-RC1"] ; Dev, see CHANGELOG for details
+[com.taoensso/nippy "3.0.0"]     ; Stable
 ```
 
 <!-- ![build status](https://github.com/ptaoussanis/nippy/workflows/build/badge.svg?branch=master) -->

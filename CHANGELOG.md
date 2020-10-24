@@ -1,5 +1,18 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v3.1.0-RC1 / 2020 Oct 24
+
+```clojure
+[com.taoensso/nippy "3.1.0-RC1"]
+```
+
+> This is a non-breaking, minor feature release.
+
+#### New since `v3.0.0`
+
+* [#128 #135] Added native `freeze/thaw` support for `java.time.Instant` on JVM 8+ (@cnuernber).
+
+
 ## v3.0.0 / 2020 Sep 20
 
 ```clojure
