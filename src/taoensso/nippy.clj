@@ -1976,13 +1976,13 @@
    :lazy-seq       (repeatedly 1000 rand)
    :lazy-seq-empty (map identity '())
 
-   :byte         (byte 16)
-   :short        (short 42)
-   :integer      (int 3)
-   :long         (long 3)
+   :byte         (byte   16)
+   :short        (short  42)
+   :integer      (int    3)
+   :long         (long   3)
    :bigint       (bigint 31415926535897932384626433832795)
 
-   :float        (float 3.14)
+   :float        (float  3.14)
    :double       (double 3.14)
    :bigdec       (bigdec 3.1415926535897932384626433832795)
 
@@ -1993,7 +1993,7 @@
    :objects      (object-array [1 "two" {:data "data"}])
 
    :stress-record (StressRecord. "data")
-   :stress-type   (StressType. "data")
+   :stress-type   (StressType.   "data")
 
    ;; Serializable
    :throwable    (Throwable. "Yolo")
