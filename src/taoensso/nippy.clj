@@ -210,6 +210,8 @@
    67  :cached-sm
    68  :cached-md
 
+   79  :time-instant ; JVM 8+
+
    ;;; DEPRECATED (only support thawing)
    5   :reader-lg2 ; == :reader-lg, used only for back-compatible thawing
    1   :reader-depr1          ; v0.9.2 for +64k support
@@ -1190,6 +1192,12 @@
                (-freeze-without-meta! fvalue out))))
          basis))))
 
+(enc/compile-if java.time.Instant
+  (id-freezer java.time.Instant id-time-instant
+    (.writeLong out (.getEpochSecond x))
+    (.writeInt  out (.getNano        x)))
+  nil)
+
 (freezer Object
   (when-debug (println (str "freeze-fallback: " (type x))))
   (if-let [ff *freeze-fallback*]
@@ -1666,6 +1674,15 @@
         id-uri         (URI. (thaw-from-in! in))
         id-uuid        (UUID. (.readLong in) (.readLong in))
 
+        id-time-instant
+        (enc/compile-if java.time.Instant
+          (java.time.Instant/ofEpochSecond (.readLong in) (.readInt in))
+          {:nippy/unthawable
+           {:type  :time-instant
+            :cause :needs-jvm8+
+            :class-name "java.time.Instant"
+            :content    {:epoch-second (.readLong in) :nano (.readInt in)}}})
+
         ;; Deprecated ------------------------------------------------------
         id-boolean-depr1    (.readBoolean in)
         id-sorted-map-depr1 (read-kvs-depr1 (sorted-map) in)
@@ -1990,7 +2007,12 @@
    :uri          (URI. "https://clojure.org/reference/data_structures")
    :uuid         (java.util.UUID/randomUUID)
    :date         (java.util.Date.)
-   :objects      (object-array [1 "two" {:data "data"}])
+   :time-instant ; JVM 8+
+   (enc/compile-if java.time.Instant
+     (java.time.Instant/now)
+     nil)
+
+   :objects       (object-array [1 "two" {:data "data"}])
 
    :stress-record (StressRecord. "data")
    :stress-type   (StressType.   "data")
