@@ -2129,4 +2129,11 @@
   (def freeze-fallback-as-str       "DEPRECATED, use `write-unfreezable`"   write-unfreezable)
   (defn set-freeze-fallback!        "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
   (defn set-auto-freeze-compressor! "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
-  (defn swap-custom-readers!        "DEPRECATED, just use `alter-var-root`" [f] (alter-var-root #'*custom-readers* f)))
+  (defn swap-custom-readers!        "DEPRECATED, just use `alter-var-root`" [f] (alter-var-root #'*custom-readers* f))
+  (defn swap-serializable-whitelist!
+    "DEPRECATED, just use
+    (alter-var-root *thaw-serializable-allowlist*    f) and/or
+    (alter-var-root *freeze-serializable-allow-list* f) instead."
+    [f]
+    (alter-var-root *freeze-serializable-allowlist* (fn [old] (f (enc/have set? old))))
+    (alter-var-root *thaw-serializable-allowlist*   (fn [old] (f (enc/have set? old))))))
