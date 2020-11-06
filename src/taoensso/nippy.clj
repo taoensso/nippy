@@ -310,7 +310,22 @@
     "java.net.URI"
     "java.util.UUID"
     "java.util.Date"
+
     #_"java.time.*" ; Safe?
+    "java.time.Clock"
+    "java.time.LocalDate"
+    "java.time.LocalDateTime"
+    "java.time.LocalTime"
+    "java.time.MonthDay"
+    "java.time.OffsetDateTime"
+    "java.time.OffsetTime"
+    "java.time.Year"
+    "java.time.YearMonth"
+    "java.time.ZonedDateTime"
+    "java.time.ZoneId"
+    "java.time.ZoneOffset"
+    "java.time.DateTimeException"
+
     "clojure.lang.ExceptionInfo"
     "clojure.lang.ArityException"})
 
