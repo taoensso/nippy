@@ -2084,9 +2084,7 @@
 (comment (thaw-from-string (freeze-to-string {:a :A :b [:B1 :B2]})))
 
 (defn freeze-to-file
-  "Convenience util: like `freeze`, but writes to `(clojure.java.io/file <file>)`
-  and returns the byte array written.
-  See also `thaw-from-file`."
+  "Convenience util: like `freeze`, but writes to `(clojure.java.io/file <file>)`."
   ([file x            ] (freeze-to-file file x nil))
   ([file x freeze-opts]
    (let [^bytes ba (freeze x freeze-opts)]
@@ -2095,25 +2093,35 @@
      ba)))
 
 (defn thaw-from-file
-  "Convenience util: like `thaw`, but reads from `(clojure.java.io/file <file>)`.
-
-  To thaw from a resource on classpath (e.g in Leiningen `resources` dir):
-    (thaw-from-file (clojure.java.io/resource \"my-resource-name.npy\"))
-
-  See also `freeze-to-file`."
+  "Convenience util: like `thaw`, but reads from `(clojure.java.io/file <file>)`."
   ([file          ] (thaw-from-file file nil))
   ([file thaw-opts]
-   (let [file (jio/file file),
-         ba (byte-array (.length file))]
-     (with-open [in (DataInputStream. (jio/input-stream file))]
-       (.readFully in ba))
+   (let [file (jio/file file)
+         frozen-ba
+         (let [ba (byte-array (.length file))]
+           (with-open [in (DataInputStream. (jio/input-stream file))]
+             (.readFully in ba)
+             (do            ba)))]
 
-     (thaw ba thaw-opts))))
+     (thaw frozen-ba thaw-opts))))
+
+(defn thaw-from-resource
+  "Convenience util: like `thaw`, but reads from `(clojure.java.io/resource <res>)`."
+  ([res          ] (thaw-from-resource res nil))
+  ([res thaw-opts]
+   (let [res (jio/resource res)
+         frozen-ba
+         (with-open [in  (jio/input-stream res)
+                     out (ByteArrayOutputStream.)]
+           (jio/copy in  out)
+           (.toByteArray out))]
+
+     (thaw frozen-ba thaw-opts))))
 
 (comment
-  (freeze-to-file "foo.npy" "hello, world!")
-  (thaw-from-file "foo.npy")
-  (thaw-from-file (jio/resource "foo.npy")))
+  (freeze-to-file "resources/foo.npy" "hello, world!")
+  (thaw-from-file "resources/foo.npy")
+  (thaw-from-resource       "foo.npy"))
 
 ;;;; Deprecated
 
