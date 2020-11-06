@@ -107,8 +107,10 @@ nippy/stress-data
  :ratio        22/7
  :uuid         (java.util.UUID/randomUUID)
  :date         (java.util.Date.)
- :time-instant (java.time.Instant/now) ; JVM 8+
- 
+
+ :time-instant  (java.time.Instant/now)            ; JVM 8+
+ :time-duration (java.time.Duration/ofSeconds 100) ; ''
+
  :objects       (object-array [1 "two" {:data "data"}])
 
  :stress-record (StressRecord. "data")
@@ -117,7 +119,7 @@ nippy/stress-data
  ;; Serializable
  :throwable    (Throwable. "Yolo")
  :exception    (try (/ 1 0) (catch Exception e e))
- :ex-info      (ex-info "ExInfo" {:data "data"})} 
+ :ex-info      (ex-info "ExInfo" {:data "data"})}
 ```
 
 Serialize it:

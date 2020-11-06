@@ -210,7 +210,8 @@
    67  :cached-sm
    68  :cached-md
 
-   79  :time-instant ; JVM 8+
+   79  :time-instant  ; JVM 8+
+   83  :time-duration ; ''
 
    ;;; DEPRECATED (only support thawing)
    5   :reader-lg2 ; == :reader-lg, used only for back-compatible thawing
@@ -1198,6 +1199,12 @@
     (.writeInt  out (.getNano        x)))
   nil)
 
+(enc/compile-if java.time.Duration
+  (id-freezer java.time.Duration id-time-duration
+    (.writeLong out (.getSeconds x))
+    (.writeInt  out (.getNano    x)))
+  nil)
+
 (freezer Object
   (when-debug (println (str "freeze-fallback: " (type x))))
   (if-let [ff *freeze-fallback*]
@@ -1675,14 +1682,30 @@
         id-uuid        (UUID. (.readLong in) (.readLong in))
 
         id-time-instant
-        (enc/compile-if java.time.Instant
-          (java.time.Instant/ofEpochSecond (.readLong in) (.readInt in))
-          {:nippy/unthawable
-           {:type  :class
-            :cause :class-not-found
+        (let [secs  (.readLong in)
+              nanos (.readInt  in)]
 
-            :class-name "java.time.Instant"
-            :content    {:epoch-second (.readLong in) :nano (.readInt in)}}})
+          (enc/compile-if java.time.Instant
+            (java.time.Instant/ofEpochSecond secs nanos)
+            {:nippy/unthawable
+             {:type  :class
+              :cause :class-not-found
+
+              :class-name "java.time.Instant"
+              :content    {:epoch-second secs :nano nanos}}}))
+
+        id-time-duration
+        (let [secs  (.readLong in)
+              nanos (.readInt  in)]
+
+          (enc/compile-if java.time.Duration
+            (java.time.Duration/ofSeconds secs nanos)
+            {:nippy/unthawable
+             {:type  :class
+              :cause :class-not-found
+
+              :class-name "java.time.Duration"
+              :content    {:seconds secs :nanos nanos}}}))
 
         ;; Deprecated ------------------------------------------------------
         id-boolean-depr1    (.readBoolean in)
@@ -2008,9 +2031,15 @@
    :uri          (URI. "https://clojure.org/reference/data_structures")
    :uuid         (java.util.UUID/randomUUID)
    :date         (java.util.Date.)
+
    :time-instant ; JVM 8+
    (enc/compile-if java.time.Instant
      (java.time.Instant/now)
+     nil)
+
+   :time-duration ; JVM 8+
+   (enc/compile-if java.time.Duration
+     (java.time.Duration/ofSeconds 100 100)
      nil)
 
    :objects       (object-array [1 "two" {:data "data"}])
