@@ -41,7 +41,7 @@
     :dependencies
     [[org.clojure/test.check        "1.1.0"]
      [org.clojure/data.fressian     "1.0.0"]
-     [org.xerial.snappy/snappy-java "1.1.7.7"]]}
+     [org.xerial.snappy/snappy-java "1.1.8"]]}
 
    :dev [:1.10 :test :server-jvm :depr]}
 
