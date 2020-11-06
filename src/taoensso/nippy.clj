@@ -212,6 +212,7 @@
 
    79  :time-instant  ; JVM 8+
    83  :time-duration ; ''
+   84  :time-period   ; ''
 
    ;;; DEPRECATED (only support thawing)
    5   :reader-lg2 ; == :reader-lg, used only for back-compatible thawing
@@ -1205,6 +1206,13 @@
     (.writeInt  out (.getNano    x)))
   nil)
 
+(enc/compile-if java.time.Period
+  (id-freezer java.time.Period id-time-period
+    (.writeInt  out (.getYears  x))
+    (.writeInt  out (.getMonths x))
+    (.writeInt  out (.getDays   x)))
+  nil)
+
 (freezer Object
   (when-debug (println (str "freeze-fallback: " (type x))))
   (if-let [ff *freeze-fallback*]
@@ -1707,6 +1715,20 @@
               :class-name "java.time.Duration"
               :content    {:seconds secs :nanos nanos}}}))
 
+        id-time-period
+        (let [years  (.readInt in)
+              months (.readInt in)
+              days   (.readInt in)]
+
+          (enc/compile-if java.time.Period
+            (java.time.Period/of years months days)
+            {:nippy/unthawable
+             {:type  :class
+              :cause :class-not-found
+
+              :class-name "java.time.Period"
+              :content    {:years years :months months :days days}}}))
+
         ;; Deprecated ------------------------------------------------------
         id-boolean-depr1    (.readBoolean in)
         id-sorted-map-depr1 (read-kvs-depr1 (sorted-map) in)
@@ -2032,15 +2054,10 @@
    :uuid         (java.util.UUID/randomUUID)
    :date         (java.util.Date.)
 
-   :time-instant ; JVM 8+
-   (enc/compile-if java.time.Instant
-     (java.time.Instant/now)
-     nil)
-
-   :time-duration ; JVM 8+
-   (enc/compile-if java.time.Duration
-     (java.time.Duration/ofSeconds 100 100)
-     nil)
+   ;;; JVM 8+
+   :time-instant  (enc/compile-if java.time.Instant  (java.time.Instant/now)                nil)
+   :time-duration (enc/compile-if java.time.Duration (java.time.Duration/ofSeconds 100 100) nil)
+   :time-period   (enc/compile-if java.time.Period   (java.time.Period/of 1 1 1)            nil)
 
    :objects       (object-array [1 "two" {:data "data"}])
 
