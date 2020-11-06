@@ -107,8 +107,10 @@ nippy/stress-data
  :uuid         (java.util.UUID/randomUUID)
  :date         (java.util.Date.)
 
- :time-instant  (java.time.Instant/now)            ; JVM 8+
- :time-duration (java.time.Duration/ofSeconds 100) ; ''
+ ;;; JVM 8+
+ :time-instant  (java.time.Instant/now)
+ :time-duration (java.time.Duration/ofSeconds 100 100)
+ :time-period   (java.time.Period/of 1 1 1)
 
  :objects       (object-array [1 "two" {:data "data"}])
 
