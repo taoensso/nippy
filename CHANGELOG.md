@@ -1,5 +1,24 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v3.1.0 / 2020 Nov 6
+
+```clojure
+[com.taoensso/nippy "3.1.0"]
+```
+
+> This is a non-breaking, minor feature release.
+
+#### New since `v3.0.0`
+
+* [#135 #128] Added native `freeze/thaw` support for `java.time` classes on JVM 8+: `Instant`, `Duration`, `Period`.
+* [#137] Add `thaw-from-resource` convenience util.
+* Add (DEPRECATED) `swap-serializable-whitelist!` for backwards compatibility.
+
+#### Changes since `v3.0.0`
+
+* Add several standard `java.time` classes to default `*thaw-serializable-whitelist*`.
+
+
 ## v3.1.0-RC1 / 2020 Oct 24
 
 ```clojure
