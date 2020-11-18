@@ -1,5 +1,20 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v3.1.1 / 2020 Nov 18
+
+```clojure
+[com.taoensso/nippy "3.1.1"]
+```
+
+> This is a non-breaking, bugfix release. But please note that large keywords or symbols (with >127 characters) frozen with >=`v3.1.1` will need >=`v3.1.1` to thaw.
+
+#### Fixes since `v3.1.0`
+
+* Large keywords and symbols (with >127 characters) can now thaw without throwing (@danmason).
+
+
+[1] Keywords or symbols with >127 characters in their name
+
 ## v3.1.0 / 2020 Nov 6
 
 ```clojure
