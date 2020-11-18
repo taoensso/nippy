@@ -649,7 +649,7 @@
 
       (md-count? len)
       (do (write-id       out id-kw-md)
-          (write-lg-count out len))
+          (write-md-count out len))
 
       ;; :else ; Unrealistic
       ;; (do (write-id       out id-kw-lg)
