@@ -13,8 +13,8 @@
                 }
 
   :dependencies
-  [[org.clojure/tools.reader "1.3.3"]
-   [com.taoensso/encore      "3.9.1"]
+  [[org.clojure/tools.reader "1.3.4"]
+   [com.taoensso/encore      "3.9.2"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.8"]
    [org.lz4/lz4-java         "1.7.1"]]
@@ -41,7 +41,7 @@
     :dependencies
     [[org.clojure/test.check        "1.1.0"]
      [org.clojure/data.fressian     "1.0.0"]
-     [org.xerial.snappy/snappy-java "1.1.8"]]}
+     [org.xerial.snappy/snappy-java "1.1.8.1"]]}
 
    :dev [:1.10 :test :server-jvm :depr]}
 
