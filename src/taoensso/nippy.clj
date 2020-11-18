@@ -128,11 +128,11 @@
    13  :str-lg
 
    106 :kw-sm
-   77  :kw-md
+   85  :kw-md
    14  :kw-lg ; Unrealistic, future removal candidate
 
    56  :sym-sm
-   78  :sym-md
+   86  :sym-md
    57  :sym-lg ; Unrealistic, future removal candidate
 
    58  :regex
@@ -223,6 +223,8 @@
    27  :map-depr2             ; v2.11 for count/2
    29  :sorted-map-depr1      ; ''
    4   :boolean-depr1         ; v2.12 for switch to true/false ids
+   77  :kw-md-depr1           ; Buggy size field, Ref. #138 2020-11-18
+   78  :sym-md-depr1          ; Buggy size field, Ref. #138 2020-11-18
 
    46  :serializable-uq-sm ; Unquarantined
    50  :serializable-uq-md ; ''
@@ -649,7 +651,7 @@
 
       (md-count? len)
       (do (write-id       out id-kw-md)
-          (write-lg-count out len))
+          (write-md-count out len))
 
       ;; :else ; Unrealistic
       ;; (do (write-id       out id-kw-lg)
@@ -670,7 +672,7 @@
 
       (md-count? len)
       (do (write-id       out id-sym-md)
-          (write-lg-count out len))
+          (write-md-count out len))
 
       ;; :else ; Unrealistic
       ;; (do (write-id       out id-sym-lg)
@@ -1641,12 +1643,14 @@
 
         id-kw-sm       (keyword (read-str in (read-sm-count in)))
         id-kw-md       (keyword (read-str in (read-md-count in)))
+        id-kw-md-depr1 (keyword (read-str in (read-lg-count in)))
         id-kw-lg       (keyword (read-str in (read-lg-count in)))
 
-        id-sym-sm      (symbol  (read-str in (read-sm-count in)))
-        id-sym-md      (symbol  (read-str in (read-md-count in)))
-        id-sym-lg      (symbol  (read-str in (read-lg-count in)))
-        id-regex       (re-pattern (thaw-from-in! in))
+        id-sym-sm       (symbol  (read-str in (read-sm-count in)))
+        id-sym-md       (symbol  (read-str in (read-md-count in)))
+        id-sym-md-depr1 (symbol  (read-str in (read-lg-count in)))
+        id-sym-lg       (symbol  (read-str in (read-lg-count in)))
+        id-regex        (re-pattern (thaw-from-in! in))
 
         id-vec-0       []
         id-vec-2       [(thaw-from-in! in) (thaw-from-in! in)]
@@ -2021,8 +2025,16 @@
    :str-long  (apply str (range 1000))
    :kw        :keyword
    :kw-ns     ::keyword
+   :kw-long   (keyword
+                (apply str "kw" (range 1000))
+                (apply str "kw" (range 1000)))
+
    :sym       'foo
    :sym-ns    'foo/bar
+   :sym-long   (symbol
+                 (apply str "sym" (range 1000))
+                 (apply str "sym" (range 1000)))
+
    :regex     #"^(https?:)?//(www\?|\?)?"
 
    ;;; Try reflect real-world data:

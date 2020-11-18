@@ -66,9 +66,17 @@ nippy/stress-data
  :str-long  (apply str (range 1000))
  :kw        :keyword
  :kw-ns     ::keyword
+ :kw-long   (keyword
+              (apply str "kw" (range 1000))
+              (apply str "kw" (range 1000)))
+
  :sym       'foo
  :sym-ns    'foo/bar
- :regex     #"^(https?:)?//(www\?|\?)?"
+ :sym-long   (symbol
+               (apply str "sym" (range 1000))
+               (apply str "sym" (range 1000)))
+
+:regex     #"^(https?:)?//(www\?|\?)?"
 
  :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
  :queue-empty  (PersistentQueue/EMPTY)
