@@ -329,7 +329,11 @@
     "java.time.DateTimeException"
 
     "clojure.lang.ExceptionInfo"
-    "clojure.lang.ArityException"})
+    "clojure.lang.ArityException"
+    
+    ;; mikera/vectorz and mikera/vectorz-clj  libraries
+    "mikera.vectorz.*"
+    })
 
 (defn- allow-and-record?     [s] (= s "allow-and-record"))
 (defn- split-class-names>set [s] (when (string? s) (if (= s "") #{} (set (mapv str/trim (str/split s #"[,:]"))))))
