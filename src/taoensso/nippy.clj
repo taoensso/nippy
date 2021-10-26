@@ -327,6 +327,8 @@
     "java.time.ZoneId"
     "java.time.ZoneOffset"
     "java.time.DateTimeException"
+    
+    "org.joda.time.DateTime"
 
     "clojure.lang.ExceptionInfo"
     "clojure.lang.ArityException"})
