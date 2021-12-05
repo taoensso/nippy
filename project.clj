@@ -19,6 +19,9 @@
    [org.tukaani/xz           "1.8"]
    [org.lz4/lz4-java         "1.7.1"]]
 
+  :resources
+  ["resources"]
+
   :plugins
   [[lein-pprint  "1.3.2"]
    [lein-ancient "0.6.15"]
