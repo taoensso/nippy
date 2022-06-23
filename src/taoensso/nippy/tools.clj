@@ -22,25 +22,26 @@
        (if (= (.-opts x) opts)
          x
          (WrappedForFreezing. (.-val x) opts)))
-     (WrappedForFreezing. x opts))))
+     (WrappedForFreezing.            x  opts))))
 
 (defn freeze
   "Like `nippy/freeze` but merges opts from *freeze-opts*, `wrap-for-freezing`."
   ([x             ] (freeze x nil))
   ([x default-opts]
-   (let [;; For back compatibility:
-         default-opts (get default-opts :default-opts default-opts)]
+   (let [default-opts (get default-opts :default-opts default-opts) ; For back compatibility
+         merged-opts  (conj (or default-opts {}) *freeze-opts*)]
+
      (if (instance? WrappedForFreezing x)
        (let [^WrappedForFreezing x x]
-         (nippy/freeze (.-val x) (merge default-opts *freeze-opts* (.-opts x))))
-       (nippy/freeze x default-opts)))))
+         (nippy/freeze (.-val x) (conj merged-opts (.-opts x))))
+       (nippy/freeze          x        merged-opts)))))
 
 (defn thaw
   "Like `nippy/thaw` but merges opts  from `*thaw-opts*`."
   ([ba             ] (thaw ba nil))
   ([ba default-opts]
-   (let [;; For back compatibility:
-         default-opts (get default-opts :default-opts default-opts)]
-     (nippy/thaw ba (merge default-opts *thaw-opts*)))))
+   (let [default-opts (get default-opts :default-opts default-opts) ; For back compatibility
+         merged-opts  (conj (or default-opts {}) *thaw-opts*)]
+     (nippy/thaw ba merged-opts))))
 
 (comment (thaw (freeze (wrap-for-freezing "wrapped"))))
