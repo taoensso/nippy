@@ -4,8 +4,8 @@
 **[CHANGELOG]** | [API] | current [Break Version]:
 
 ```clojure
-[com.taoensso/nippy "3.1.2"]     ; Stable
-[com.taoensso/nippy "3.2.0-RC1"] ; Dev, see CHANGELOG for details
+[com.taoensso/nippy "3.1.3"]     ; Stable
+[com.taoensso/nippy "3.2.0-RC2"] ; Dev, see CHANGELOG for details
 ```
 
 <!-- ![build status](https://github.com/ptaoussanis/nippy/workflows/build/badge.svg?branch=master) -->
@@ -41,8 +41,8 @@ Nippy is an attempt to provide a reliable, high-performance **drop-in alternativ
 Add the necessary dependency to your project:
 
 ```clojure
-Leiningen: [com.taoensso/nippy "3.1.2"] ; or
-deps.edn:   com.taoensso/nippy {:mvn/version "3.1.2"}
+Leiningen: [com.taoensso/nippy "3.1.3"] ; or
+deps.edn:   com.taoensso/nippy {:mvn/version "3.1.3"}
 ```
 
 And setup your namespace imports:
