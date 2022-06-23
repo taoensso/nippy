@@ -61,6 +61,7 @@ nippy/stress-data
  :nil       nil
  :true      true
  :false     false
+ :False     (Boolean. false)
  :char      \ಬ
  :str-short "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
  :str-long  (apply str (range 1000))

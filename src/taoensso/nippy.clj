@@ -1151,7 +1151,7 @@
   (.writeLong out (.getMostSignificantBits  x))
   (.writeLong out (.getLeastSignificantBits x)))
 
-(freezer Boolean              (if x (write-id out id-true) (write-id out id-false)))
+(freezer Boolean              (if (boolean x) (write-id out id-true) (write-id out id-false)))
 (freezer (Class/forName "[B")                  (write-bytes   out x))
 (freezer (Class/forName "[Ljava.lang.Object;") (write-objects out x))
 (freezer String               (write-str   out x))
@@ -2020,6 +2020,7 @@
    :nil       nil
    :true      true
    :false     false
+   :False     (Boolean. false)
    :char      \ಬ
    :str-short "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
    :str-long  (apply str (range 1000))
