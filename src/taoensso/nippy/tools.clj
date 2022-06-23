@@ -14,7 +14,9 @@
 (defn    wrap-for-freezing
   "Ensures that given arg (any freezable data type) is wrapped so that
   (tools/freeze <wrapped-arg>) will serialize as
-  (nippy/freeze <unwrapped-arg> <opts>)."
+  (nippy/freeze <unwrapped-arg> <opts>).
+
+  See also `nippy.tools/freeze`, `nippy.tools/thaw`."
   ([x     ] (wrap-for-freezing x nil))
   ([x opts]
    (if (instance? WrappedForFreezing x)
@@ -25,7 +27,13 @@
      (WrappedForFreezing.            x  opts))))
 
 (defn freeze
-  "Like `nippy/freeze` but merges opts from *freeze-opts*, `wrap-for-freezing`."
+  "Like `nippy/freeze` but uses as opts the following merged in order of
+  ascending preference:
+
+    - Optional `default-opts` arg given to this fn  (default nil).
+    - Optional `*freeze-opts*` dynamic value        (default nil).
+    - Optional opts provided to `wrap-for-freezing` (default nil)."
+
   ([x             ] (freeze x nil))
   ([x default-opts]
    (let [default-opts (get default-opts :default-opts default-opts) ; For back compatibility
@@ -37,7 +45,12 @@
        (nippy/freeze          x        merged-opts)))))
 
 (defn thaw
-  "Like `nippy/thaw` but merges opts  from `*thaw-opts*`."
+  "Like `nippy/thaw` but uses as opts the following merged in order of
+  ascending preference:
+
+    - Optional `default-opts` arg given to this fn  (default nil).
+    - Optional `*thaw-opts*` dynamic value          (default nil)."
+
   ([ba             ] (thaw ba nil))
   ([ba default-opts]
    (let [default-opts (get default-opts :default-opts default-opts) ; For back compatibility
