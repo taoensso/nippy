@@ -13,16 +13,16 @@
                 }
 
   :dependencies
-  [[org.clojure/tools.reader "1.3.4"]
-   [com.taoensso/encore      "3.9.2"]
+  [[org.clojure/tools.reader "1.3.6"]
+   [com.taoensso/encore      "3.23.0"]
    [org.iq80.snappy/snappy   "0.4"]
-   [org.tukaani/xz           "1.8"]
-   [org.lz4/lz4-java         "1.7.1"]]
+   [org.tukaani/xz           "1.9"]
+   [org.lz4/lz4-java         "1.8.0"]]
 
   :plugins
   [[lein-pprint  "1.3.2"]
-   [lein-ancient "0.6.15"]
-   [lein-codox   "0.10.7"]]
+   [lein-ancient "0.7.0"]
+   [lein-codox   "0.10.8"]]
 
   :profiles
   {;; :default [:base :system :user :provided :dev]
@@ -32,6 +32,7 @@
    :1.8      {:dependencies [[org.clojure/clojure "1.8.0"]]}
    :1.9      {:dependencies [[org.clojure/clojure "1.9.0"]]}
    :1.10     {:dependencies [[org.clojure/clojure "1.10.1"]]}
+   :1.11     {:dependencies [[org.clojure/clojure "1.11.1"]]}
    :depr     {:jvm-opts ["-Dtaoensso.elide-deprecated=true"]}
    :test
    {:jvm-opts
@@ -39,11 +40,11 @@
      "-Dtaoensso.nippy.thaw-serializable-allowlist-base=base.1, base.2"
      "-Dtaoensso.nippy.thaw-serializable-allowlist-add=add.1 , add.2"]
     :dependencies
-    [[org.clojure/test.check        "1.1.0"]
+    [[org.clojure/test.check        "1.1.1"]
      [org.clojure/data.fressian     "1.0.0"]
-     [org.xerial.snappy/snappy-java "1.1.8.1"]]}
+     [org.xerial.snappy/snappy-java "1.1.8.4"]]}
 
-   :dev [:1.10 :test :server-jvm :depr]}
+   :dev [:1.11 :test :server-jvm :depr]}
 
   :aliases
   {"start-dev"  ["with-profile" "+dev" "repl" ":headless"]
