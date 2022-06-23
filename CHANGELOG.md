@@ -1,5 +1,19 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v3.1.2 / 2022 Jun 23
+
+```clojure
+[com.taoensso/nippy "3.1.2"]
+```
+
+> This is a non-breaking, bugfix release.
+
+* [#89 #150] [Fix] Boxed Booleans incorrectly freezing to primitive `true` (@RolT)
+
+The bug fixed with this release has been around since the first version of Nippy and
+is mostly relevant to users doing Java interop. For more info see:
+https://github.com/ptaoussanis/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
+
 ## v3.1.1 / 2020 Nov 18
 
 ```clojure
