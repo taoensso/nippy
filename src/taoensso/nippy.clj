@@ -1253,7 +1253,7 @@
 
 (def ^:private head-meta-id (reduce-kv #(assoc %1 %3 %2) {} head-meta))
 (def ^:private get-head-ba
-  (enc/memoize_
+  (enc/fmemoize
     (fn [head-meta]
       (when-let [meta-id (get head-meta-id (assoc head-meta :version head-version))]
         (enc/ba-concat head-sig (byte-array [meta-id]))))))

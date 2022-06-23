@@ -103,7 +103,7 @@
   (AES128Encryptor. :aes128-gcm-sha512
     crypto/cipher-kit-aes-gcm
     (do           (fn [ salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba salt-ba pwd (* Short/MAX_VALUE 5)))))
-    (enc/memoize_ (fn [_salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba nil     pwd (* Short/MAX_VALUE 64)))))))
+    (enc/fmemoize (fn [_salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba nil     pwd (* Short/MAX_VALUE 64)))))))
 
 (def aes128-cbc-encryptor
   "Default 128bit AES-CBC encryptor with many-round SHA-512 key-gen.
@@ -111,7 +111,7 @@
   (AES128Encryptor. :aes128-cbc-sha512
     crypto/cipher-kit-aes-cbc
     (do           (fn [ salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba salt-ba pwd (* Short/MAX_VALUE 5)))))
-    (enc/memoize_ (fn [_salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba nil     pwd (* Short/MAX_VALUE 64)))))))
+    (enc/fmemoize (fn [_salt-ba pwd] (crypto/take-ba 16 (crypto/sha512-key-ba nil     pwd (* Short/MAX_VALUE 64)))))))
 
 ;;;; Default implementation
 
