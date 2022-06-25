@@ -2018,11 +2018,11 @@
   Object (equals [a b] (= (.-data a) (.-data ^StressType b))))
 
 (def stress-data "Reference data used for tests & benchmarks"
-  {:bytes     (byte-array [(byte 1) (byte 2) (byte 3)])
-   :nil       nil
-   :true      true
-   :false     false
-   :False     (Boolean. false)
+  {:nil                   nil
+   :true                  true
+   :false                 false
+   :boxed-false (Boolean. false)
+
    :char      \ಬ
    :str-short "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
    :str-long  (apply str (range 1000))
@@ -2089,6 +2089,7 @@
    :time-duration (enc/compile-if java.time.Duration (java.time.Duration/ofSeconds 100 100) nil)
    :time-period   (enc/compile-if java.time.Period   (java.time.Period/of 1 1 1)            nil)
 
+   :bytes         (byte-array [(byte 1) (byte 2) (byte 3)])
    :objects       (object-array [1 "two" {:data "data"}])
 
    :stress-record (StressRecord. "data")

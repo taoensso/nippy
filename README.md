@@ -58,11 +58,11 @@ As an example of what it can do, let's take a look at Nippy's own reference stre
 ```clojure
 nippy/stress-data
 =>
-{:bytes     (byte-array [(byte 1) (byte 2) (byte 3)])
- :nil       nil
- :true      true
- :false     false
- :False     (Boolean. false)
+{:nil                   nil
+ :true                  true
+ :false                 false
+ :boxed-false (Boolean. false)
+
  :char      \ಬ
  :str-short "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
  :str-long  (apply str (range 1000))
@@ -78,7 +78,7 @@ nippy/stress-data
                (apply str "sym" (range 1000))
                (apply str "sym" (range 1000)))
 
-:regex     #"^(https?:)?//(www\?|\?)?"
+ :regex     #"^(https?:)?//(www\?|\?)?"
 
  :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
  :queue-empty  (PersistentQueue/EMPTY)
@@ -122,6 +122,7 @@ nippy/stress-data
  :time-duration (java.time.Duration/ofSeconds 100 100)
  :time-period   (java.time.Period/of 1 1 1)
 
+ :bytes         (byte-array [(byte 1) (byte 2) (byte 3)])
  :objects       (object-array [1 "two" {:data "data"}])
 
  :stress-record (StressRecord. "data")
