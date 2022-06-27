@@ -1,5 +1,33 @@
 > This project uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md) as of **Aug 16, 2014**.
 
+## v3.2.0-RC3 / 2022 Jun 27
+
+```clojure
+[com.taoensso/nippy "3.2.0-RC3"]
+```
+
+> This is a non-breaking maintenance release.  
+> See [here](https://github.com/ptaoussanis/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
+
+#### New since `v3.1.3`
+
+* [#144] [New] Add `org.joda.time.DateTime` to `default-thaw-serializable-allowlist` (@slipset)
+* [#146] [New] Add Graal native configurations (@FieryCod)
+
+#### Changes since `v3.1.3`
+
+* Bump dependencies, incl. minimum Encore version
+
+#### Fixes since `v3.1.1`
+
+* [#89 #150] [Fix] Boxed Booleans incorrectly freezing to primitive `true` (@RolT)
+* [#148] [Fix] `tools/freeze` should use `*freeze-opts*` even for unwrapped vals
+* [#145] [Fix] Freezing custom types with munged field names
+
+The boxed Boolean bug has been around since the first version of Nippy and is mostly
+relevant to users doing Java interop. For more info see: https://github.com/ptaoussanis/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
+
+
 ## v3.2.0-RC2 / 2022 Jun 23
 
 ```clojure

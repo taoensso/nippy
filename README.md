@@ -5,7 +5,7 @@
 
 ```clojure
 [com.taoensso/nippy "3.1.3"]     ; Stable
-[com.taoensso/nippy "3.2.0-RC2"] ; Dev, see CHANGELOG for details
+[com.taoensso/nippy "3.2.0-RC3"] ; Forthcoming, see CHANGELOG for details
 ```
 
 <!-- ![build status](https://github.com/ptaoussanis/nippy/workflows/build/badge.svg?branch=master) -->
