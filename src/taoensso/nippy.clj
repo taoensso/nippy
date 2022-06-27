@@ -1199,19 +1199,22 @@
 
     (-freeze-without-meta! (into {} x) out)))
 
-(freezer IType
-   (let [aclass     (class x)
-         class-name (.getName aclass)]
-     (write-id  out id-type)
-     (write-str out class-name)
-     (let [basis-method (.getMethod aclass "getBasis" nil)
-           basis        (.invoke basis-method nil nil)]
-       (-run!
-         (fn [b]
-           (let [^Field cfield (.getField aclass (name b))]
-             (let [fvalue (.get cfield x)]
-               (-freeze-without-meta! fvalue out))))
-         basis))))
+(let [munge-cached (enc/fmemoize munge)]
+  (freezer IType
+    (let [aclass     (class x)
+          class-name (.getName aclass)]
+      (write-id  out id-type)
+      (write-str out class-name)
+      ;; Could cache basis generation for given class-name with generalized
+      ;; `-cache-proxy` or something like it, but probably not worth the extra complexity.
+      (let [basis-method (.getMethod aclass "getBasis" nil)
+            basis        (.invoke basis-method nil nil)]
+        (-run!
+          (fn [b]
+            (let [^Field cfield (.getField aclass (munge-cached (name b)))]
+              (let [fvalue (.get cfield x)]
+                (-freeze-without-meta! fvalue out))))
+          basis)))))
 
 (enc/compile-if java.time.Instant
   (id-freezer java.time.Instant id-time-instant

@@ -86,34 +86,52 @@
 
 ;;;; Custom types & records
 
-(deftype   MyType [data])
-(defrecord MyRec  [data])
+(deftype   MyType [basic_field fancy-field!]) ; Note `fancy-field!` field name will be munged
+(defrecord MyRec  [basic_field fancy-field!])
 
 (deftest _types
   (testing "Extend to custom type"
-    (is (thrown? Exception ; No thaw extension yet
-          (do (alter-var-root #'nippy/*custom-readers* (constantly {}))
-              (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (.data x)))
-              (thaw (freeze (MyType. "val"))))))
+    (is
+      (thrown? Exception ; No thaw extension yet
+        (do
+          (alter-var-root #'nippy/*custom-readers* (constantly {}))
+          (nippy/extend-freeze MyType 1 [x s]
+            (.writeUTF s (.basic_field  x))
+            (.writeUTF s (.fancy-field! x)))
 
-    (is (do (nippy/extend-thaw 1 [s] (MyType. (.readUTF s)))
-            (let [mt (MyType. "val")]
-              (=
-                (.data ^MyType               mt)
-                (.data ^MyType (thaw (freeze mt))))))))
+          (thaw (freeze (MyType. "basic" "fancy"))))))
+
+    (is
+      (do
+        (nippy/extend-thaw 1 [s] (MyType. (.readUTF s) (.readUTF s)))
+        (let [mt1 (MyType. "basic" "fancy")
+              ^MyType mt2 (thaw (freeze mt1))]
+          (=
+            [(.basic_field mt1) (.fancy-field! mt1)]
+            [(.basic_field mt2) (.fancy-field! mt2)])))))
 
   (testing "Extend to custom Record"
-    (is (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "foo-" (:data x))))
-            (nippy/extend-thaw 2 [s] (MyRec. (.readUTF s)))
-            (=
-              (do           (MyRec. "foo-val"))
-              (thaw (freeze (MyRec. "val")))))))
+    (is
+      (do
+        (nippy/extend-freeze MyRec 2 [x s]
+          (.writeUTF s (str "foo-" (:basic_field  x)))
+          (.writeUTF s (str "foo-" (:fancy-field! x))))
+
+        (nippy/extend-thaw 2 [s] (MyRec. (.readUTF s) (.readUTF s)))
+        (=
+          (do           (MyRec. "foo-basic" "foo-fancy"))
+          (thaw (freeze (MyRec.     "basic"     "fancy")))))))
 
   (testing "Keyword (prefixed) extensions"
     (is
-      (do (nippy/extend-freeze MyRec :nippy-tests/MyRec [x s] (.writeUTF s (:data x)))
-          (nippy/extend-thaw :nippy-tests/MyRec [s] (MyRec. (.readUTF s)))
-          (let [mr (MyRec. "val")] (= mr (thaw (freeze mr))))))))
+      (do
+        (nippy/extend-freeze MyRec :nippy-tests/MyRec [x s]
+          (.writeUTF s (:basic_field  x))
+          (.writeUTF s (:fancy-field! x)))
+
+        (nippy/extend-thaw :nippy-tests/MyRec [s] (MyRec. (.readUTF s) (.readUTF s)))
+        (let [mr (MyRec. "basic" "fancy")]
+          (=  mr (thaw (freeze mr))))))))
 
 ;;;; Caching
 
