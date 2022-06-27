@@ -1,11 +1,11 @@
 (ns taoensso.nippy.tests.main
   (:require
-   [clojure.test :as test :refer (is are deftest run-tests)]
+   [clojure.test :as test :refer [deftest testing is]]
    [clojure.test.check            :as tc]
    [clojure.test.check.generators :as tc-gens]
    [clojure.test.check.properties :as tc-props]
-   [taoensso.encore :as enc   :refer ()]
-   [taoensso.nippy  :as nippy :refer (freeze thaw)]
+   [taoensso.encore :as enc   :refer []]
+   [taoensso.nippy  :as nippy :refer [freeze thaw]]
    [taoensso.nippy.benchmarks :as benchmarks]))
 
 (comment (test/run-tests))
@@ -90,25 +90,30 @@
 (defrecord MyRec  [data])
 
 (deftest _types
-  ;;; Extend to custom Type
-  (is (thrown? Exception ; No thaw extension yet
-        (do (alter-var-root #'nippy/*custom-readers* (constantly {}))
-            (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (.data x)))
-            (thaw (freeze (MyType. "val"))))))
-  (is (do (nippy/extend-thaw 1 [s] (MyType. (.readUTF s)))
-          (let [mt (MyType. "val")] (= (.data ^MyType mt)
-                                       (.data ^MyType (thaw (freeze mt)))))))
+  (testing "Extend to custom type"
+    (is (thrown? Exception ; No thaw extension yet
+          (do (alter-var-root #'nippy/*custom-readers* (constantly {}))
+              (nippy/extend-freeze MyType 1 [x s] (.writeUTF s (.data x)))
+              (thaw (freeze (MyType. "val"))))))
 
-  ;;; Extend to custom Record
-  (is (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "foo-" (:data x))))
-          (nippy/extend-thaw 2 [s] (MyRec. (.readUTF s)))
-          (= (MyRec. "foo-val") (thaw (freeze (MyRec. "val"))))))
+    (is (do (nippy/extend-thaw 1 [s] (MyType. (.readUTF s)))
+            (let [mt (MyType. "val")]
+              (=
+                (.data ^MyType               mt)
+                (.data ^MyType (thaw (freeze mt))))))))
 
-  ;;; Keyword (prefixed) extensions
-  (is
-    (do (nippy/extend-freeze MyRec :nippy-tests/MyRec [x s] (.writeUTF s (:data x)))
-        (nippy/extend-thaw :nippy-tests/MyRec [s] (MyRec. (.readUTF s)))
-        (let [mr (MyRec. "val")] (= mr (thaw (freeze mr)))))))
+  (testing "Extend to custom Record"
+    (is (do (nippy/extend-freeze MyRec 2 [x s] (.writeUTF s (str "foo-" (:data x))))
+            (nippy/extend-thaw 2 [s] (MyRec. (.readUTF s)))
+            (=
+              (do           (MyRec. "foo-val"))
+              (thaw (freeze (MyRec. "val")))))))
+
+  (testing "Keyword (prefixed) extensions"
+    (is
+      (do (nippy/extend-freeze MyRec :nippy-tests/MyRec [x s] (.writeUTF s (:data x)))
+          (nippy/extend-thaw :nippy-tests/MyRec [s] (MyRec. (.readUTF s)))
+          (let [mr (MyRec. "val")] (= mr (thaw (freeze mr))))))))
 
 ;;;; Caching
 
