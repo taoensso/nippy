@@ -80,40 +80,41 @@ nippy/stress-data
 
  :regex     #"^(https?:)?//(www\?|\?)?"
 
- :queue        (-> (PersistentQueue/EMPTY) (conj :a :b :c :d :e :f :g))
- :queue-empty  (PersistentQueue/EMPTY)
+ :many-small-numbers  (vec (range 200))
+ :many-small-keywords (->> (java.util.Locale/getISOLanguages)
+                           (mapv keyword))
+ :many-small-strings  (->> (java.util.Locale/getISOCountries)
+                           (mapv #(.getDisplayCountry (java.util.Locale. "en" %))))
+
+ :queue        (enc/queue [:a :b :c :d :e :f :g])
  :queue-empty  (enc/queue)
  :sorted-set   (sorted-set 1 2 3 4 5)
  :sorted-map   (sorted-map :b 2 :a 1 :d 4 :c 3)
 
- :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
- :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
- :list-empty   (list)
- :vector       [1 2 3 4 5 [6 7 8 [9 10]]]
- :vector-empty []
- :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7}}}
- :map-empty    {}
- :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
- :set-empty    #{}
+ :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10 '(()))))
+ :vector       [1 2 3 4 5 [6 7 8 [9 10 [[]]]]]
+ :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7 :j {{} {}}}}}
+ :set          #{1 2 3 4 5 #{6 7 8 #{9 10 #{#{}}}}}
  :meta         (with-meta {:a :A} {:metakey :metaval})
- :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [] #{:a :b}}
-                #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [] #{:a :b}}
+ :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}
+                #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}
                 [1 [1 2 [1 2 3 [1 2 3 4 [1 2 3 4 5]]]]]]
 
  :lazy-seq       (repeatedly 1000 rand)
  :lazy-seq-empty (map identity '())
 
- :byte         (byte 16)
- :short        (short 42)
- :integer      (int 3)
- :long         (long 3)
+ :byte         (byte   16)
+ :short        (short  42)
+ :integer      (int    3)
+ :long         (long   3)
  :bigint       (bigint 31415926535897932384626433832795)
 
- :float        (float 3.14)
+ :float        (float  3.14)
  :double       (double 3.14)
  :bigdec       (bigdec 3.1415926535897932384626433832795)
 
  :ratio        22/7
+ :uri          (URI. "https://clojure.org/reference/data_structures")
  :uuid         (java.util.UUID/randomUUID)
  :date         (java.util.Date.)
 

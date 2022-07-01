@@ -2016,9 +2016,9 @@
 
 ;;;; Stress data
 
-(defrecord StressRecord [data])
-(deftype   StressType   [data]
-  Object (equals [a b] (= (.-data a) (.-data ^StressType b))))
+(defrecord StressRecord [my-data])
+(deftype   StressType   [my-data]
+  Object (equals [a b] (= (.-my-data a) (.-my-data ^StressType b))))
 
 (def stress-data "Reference data used for tests & benchmarks"
   {:nil                   nil
@@ -2044,29 +2044,24 @@
    :regex     #"^(https?:)?//(www\?|\?)?"
 
    ;;; Try reflect real-world data:
-   :lotsa-small-numbers  (vec (range 200))
-   :lotsa-small-keywords (->> (java.util.Locale/getISOLanguages)
-                              (mapv keyword))
-   :lotsa-small-strings  (->> (java.util.Locale/getISOCountries)
-                              (mapv #(.getDisplayCountry (java.util.Locale. "en" %))))
+   :many-small-numbers  (vec (range 200))
+   :many-small-keywords (->> (java.util.Locale/getISOLanguages)
+                             (mapv keyword))
+   :many-small-strings  (->> (java.util.Locale/getISOCountries)
+                             (mapv #(.getDisplayCountry (java.util.Locale. "en" %))))
 
    :queue        (enc/queue [:a :b :c :d :e :f :g])
    :queue-empty  (enc/queue)
    :sorted-set   (sorted-set 1 2 3 4 5)
    :sorted-map   (sorted-map :b 2 :a 1 :d 4 :c 3)
 
-   :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10)))
-   :list-quoted  '(1 2 3 4 5 (6 7 8 (9 10)))
-   :list-empty   (list)
-   :vector       [1 2 3 4 5 [6 7 8 [9 10]]]
-   :vector-empty []
-   :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7}}}
-   :map-empty    {}
-   :set          #{1 2 3 4 5 #{6 7 8 #{9 10}}}
-   :set-empty    #{}
+   :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10 '(()))))
+   :vector       [1 2 3 4 5 [6 7 8 [9 10 [[]]]]]
+   :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7 :j {{} {}}}}}
+   :set          #{1 2 3 4 5 #{6 7 8 #{9 10 #{#{}}}}}
    :meta         (with-meta {:a :A} {:metakey :metaval})
-   :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [] #{:a :b}}
-                  #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [] #{:a :b}}
+   :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}
+                  #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}
                   [1 [1 2 [1 2 3 [1 2 3 4 [1 2 3 4 5]]]]]]
 
    :lazy-seq       (repeatedly 1000 rand)
