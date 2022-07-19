@@ -1,4 +1,4 @@
-(ns taoensso.nippy.crypto
+(ns ^:no-doc taoensso.nippy.crypto
   "Low-level crypto utils.
   Private & alpha, very likely to change!"
   (:refer-clojure :exclude [rand-nth])

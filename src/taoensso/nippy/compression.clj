@@ -1,4 +1,5 @@
-(ns taoensso.nippy.compression
+(ns ^:no-doc taoensso.nippy.compression
+  "Private, implementation detail."
   (:require [taoensso.encore :as enc])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
              DataOutputStream]))

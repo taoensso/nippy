@@ -24,9 +24,7 @@
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
     LazySeq IRecord ISeq IType]))
 
-(if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [3 23 0])
-  (enc/assert-min-encore-version  3.23))
+(enc/assert-min-encore-version [3 58 0])
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
@@ -131,11 +129,9 @@
 
    106 [:kw-sm     [[:bytes {:read 1}]]]
    85  [:kw-md     [[:bytes {:read 2}]]]
-   14  [:kw-lg     [[:bytes {:read 4}]]] ; Unrealistic, removal candidate?
 
    56  [:sym-sm    [[:bytes {:read 1}]]]
    86  [:sym-md    [[:bytes {:read 2}]]]
-   57  [:sym-lg    [[:bytes {:read 4}]]] ; Unrealistic, removal candidate?
 
    47  [:reader-sm [[:bytes {:read 1}]]]
    51  [:reader-md [[:bytes {:read 2}]]]
@@ -196,7 +192,6 @@
 
    48  [:record-sm         [[:bytes {:read 1}] [:elements 1]]]
    49  [:record-md         [[:bytes {:read 2}] [:elements 1]]]
-   80  [:record-lg         [[:bytes {:read 4}] [:elements 1]]] ; Unrealistic, removal candidate?
 
    ;; Necessarily without size information
    81  [:type               nil]
@@ -221,6 +216,10 @@
    6   [:sz-unquarantined-lg_ nil] ; [2020-07-24 v2.15.0] Unskippable, Ref. #130
    50  [:sz-unquarantined-md_ nil] ; [2020-07-24 v2.15.0] Unskippable, Ref. #130
    46  [:sz-unquarantined-sm_ nil] ; [2020-07-24 v2.15.0] Unskippable, Ref. #130
+
+   14  [:kw-lg_     [[:bytes {:read 4}]]]               ; [2020-09-20 v3.0.0] Unrealistic
+   57  [:sym-lg_    [[:bytes {:read 4}]]]               ; [2020-09-20 v3.0.0] Unrealistic
+   80  [:record-lg_ [[:bytes {:read 4}] [:elements 1]]] ; [2020-09-20 v3.0.0] Unrealistic
 
    5   [:reader-lg_  [[:bytes {:read 4}]]] ; [2016-07-24 v2.12.0] Identical to :reader-lg, historical accident
    4   [:boolean_    [[:bytes 1]]]         ; [2016-07-24 v2.12.0] For switch to true/false ids
@@ -310,29 +309,30 @@
 
 ;;;; Ns imports (for convenience of lib consumers)
 
-(do
-  (enc/defalias compress          compression/compress)
-  (enc/defalias decompress        compression/decompress)
-  (enc/defalias snappy-compressor compression/snappy-compressor)
-  (enc/defalias lzma2-compressor  compression/lzma2-compressor)
-  (enc/defalias lz4-compressor    compression/lz4-compressor)
-  (enc/defalias lz4hc-compressor  compression/lz4hc-compressor)
+(enc/defaliases
+  compression/compress
+  compression/decompress
+  compression/snappy-compressor
+  compression/lzma2-compressor
+  compression/lz4-compressor
+  compression/lz4hc-compressor
 
-  (enc/defalias encrypt           encryption/encrypt)
-  (enc/defalias decrypt           encryption/decrypt)
+  encryption/encrypt
+  encryption/decrypt
 
-  (enc/defalias aes128-gcm-encryptor encryption/aes128-gcm-encryptor)
-  (enc/defalias aes128-cbc-encryptor encryption/aes128-cbc-encryptor)
-  (enc/defalias aes128-encryptor     encryption/aes128-gcm-encryptor) ; Default
+  encryption/aes128-gcm-encryptor
+  encryption/aes128-cbc-encryptor
+  encryption/aes128-gcm-encryptor
+  {:src encryption/aes128-gcm-encryptor, :alias aes128-encryptor}
 
-  (enc/defalias freezable?        utils/freezable?))
+  utils/freezable?)
 
 ;;;; Dynamic config
 ;; See also `nippy.tools` ns for further dynamic config support
 
 ;; For back compatibility (nb Timbre's Carmine appender)
-(enc/defonce ^:dynamic *final-freeze-fallback* "DEPRECATED: prefer `*freeze-fallback`."       nil)
-(enc/defonce ^:dynamic       *freeze-fallback* "(fn [data-output x])->freeze, nil => default" nil)
+(enc/defonce ^:dynamic ^:deprecated *final-freeze-fallback* "DEPRECATED: prefer `*freeze-fallback`."       nil)
+(enc/defonce ^:dynamic                    *freeze-fallback* "(fn [data-output x])->freeze, nil => default" nil)
 
 (enc/defonce ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])->read}" nil)
 (enc/defonce ^:dynamic *auto-freeze-compressor*
@@ -408,18 +408,20 @@
   (defn- init-allowlist [action default incl-legacy?]
     (let [allowlist-base
           (or
-            (when-let [s (or
-                           (enc/get-sys-val (get-in ids [action  :base :prop]) (get-in ids [action  :base :env]))
-                           (when incl-legacy?
-                             (enc/get-sys-val (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env]))))]
+            (when-let [s
+                       (or
+                         (do                (enc/get-sys-val (get-in ids [action  :base :prop]) (get-in ids [action  :base :env])))
+                         (when incl-legacy? (enc/get-sys-val (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env]))))]
+
               (if (allow-and-record? s) s (split-class-names>set s)))
             default)
 
           allowlist-add
-          (when-let [s (or
-                         (enc/get-sys-val (get-in ids [action  :add :prop]) (get-in ids [action  :add :env]))
-                         (when incl-legacy?
-                           (enc/get-sys-val (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env]))))]
+          (when-let [s
+                     (or
+                       (do                (enc/get-sys-val (get-in ids [action  :add :prop]) (get-in ids [action  :add :env])))
+                       (when incl-legacy? (enc/get-sys-val (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env]))))]
+
             (if (allow-and-record? s) s (split-class-names>set s)))]
 
       (if (and allowlist-base allowlist-add)
@@ -496,7 +498,7 @@
   (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (init-allowlist :freeze default-freeze-serializable-allowlist false))
   (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (init-allowlist :thaw     default-thaw-serializable-allowlist true)))
 
-(enc/defonce ^:dynamic *serializable-whitelist*
+(enc/defonce ^:dynamic ^:deprecated *serializable-whitelist*
   ;; Mostly retained for https://github.com/juxt/crux/releases/tag/20.09-1.11.0
   "DEPRECATED, now called `*thaw-serializable-allowlist*`" nil)
 
@@ -610,8 +612,8 @@
 (do
   (defmacro write-id [out id] `(.writeByte ~out ~id))
 
-  (defmacro ^:private sm-count? [n] `(<= ~n 127))
-  (defmacro ^:private md-count? [n] `(<= ~n 32767))
+  (defmacro ^:private sm-count? [n] `(<= ~n  Byte/MAX_VALUE))
+  (defmacro ^:private md-count? [n] `(<= ~n Short/MAX_VALUE))
 
   (defmacro ^:private write-sm-count [out n] `(.writeByte  ~out ~n))
   (defmacro ^:private write-md-count [out n] `(.writeShort ~out ~n))
@@ -636,40 +638,18 @@
   nil    (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output))
   Object (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output)))
 
-(defn- write-bytes-sm [^DataOutput out ^bytes ba]
-  (let [len (alength ba)]
-    ;; (byte len)
-    (write-sm-count out len)
-    (.write         out ba 0 len)))
-
-(defn- write-bytes-md [^DataOutput out ^bytes ba]
-  (let [len (alength ba)]
-    ;; (short len)
-    (write-md-count out len)
-    (.write         out ba 0 len)))
-
-(defn- write-bytes-lg [^DataOutput out ^bytes ba]
-  (let [len (alength ba)]
-    (write-lg-count out len)
-    (.write         out ba 0 len)))
-
-(defn- write-bytes [^DataOutput out ^bytes ba]
+(defn- write-bytes-sm  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-sm-count out len) (.write out ba 0 len)))
+(defn- write-bytes-md  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-md-count out len) (.write out ba 0 len)))
+(defn- write-bytes-lg  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-lg-count out len) (.write out ba 0 len)))
+(defn- write-bytes     [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
     (if (zero? len)
       (write-id out id-bytes-0)
       (do
         (enc/cond
-          (sm-count? len)
-          (do (write-id       out id-bytes-sm)
-              (write-sm-count out len))
-
-          (md-count? len)
-          (do (write-id       out id-bytes-md)
-              (write-md-count out len))
-
-          :else
-          (do (write-id       out id-bytes-lg)
-              (write-lg-count out len)))
+          (sm-count? len) (do (write-id out id-bytes-sm) (write-sm-count out len))
+          (md-count? len) (do (write-id out id-bytes-md) (write-md-count out len))
+          :else           (do (write-id out id-bytes-lg) (write-lg-count out len)))
 
         (.write out ba 0 len)))))
 
@@ -678,23 +658,15 @@
 (defn- write-str-sm [^DataOutput out ^String s] (write-bytes-sm out (.getBytes s charset)))
 (defn- write-str-md [^DataOutput out ^String s] (write-bytes-md out (.getBytes s charset)))
 (defn- write-str-lg [^DataOutput out ^String s] (write-bytes-lg out (.getBytes s charset)))
-(defn- write-str [^DataOutput out ^String s]
+(defn- write-str    [^DataOutput out ^String s]
   (if (identical? s "")
     (write-id out id-str-0)
     (let [ba  (.getBytes s charset)
           len (alength ba)]
       (enc/cond
-        (sm-count? len)
-        (do (write-id       out id-str-sm)
-            (write-sm-count out len))
-
-        (md-count? len)
-        (do (write-id       out id-str-md)
-            (write-md-count out len))
-
-        :else
-        (do (write-id       out id-str-lg)
-            (write-lg-count out len)))
+        (sm-count? len) (do (write-id out id-str-sm) (write-sm-count out len))
+        (md-count? len) (do (write-id out id-str-md) (write-md-count out len))
+        :else           (do (write-id out id-str-lg) (write-lg-count out len)))
 
       (.write out ba 0 len))))
 
@@ -703,18 +675,9 @@
         ba  (.getBytes s charset)
         len (alength ba)]
     (enc/cond
-      (sm-count? len)
-      (do (write-id       out id-kw-sm)
-          (write-sm-count out len))
-
-      (md-count? len)
-      (do (write-id       out id-kw-md)
-          (write-md-count out len))
-
-      ;; :else ; Unrealistic
-      ;; (do (write-id       out id-kw-lg)
-      ;;     (write-lg-count out len))
-
+      (sm-count? len) (do (write-id out id-kw-sm) (write-sm-count out len))
+      (md-count? len) (do (write-id out id-kw-md) (write-md-count out len))
+      ;; :else        (do (write-id out id-kw-lg) (write-lg-count out len)) ; Unrealistic
       :else (throw (ex-info "Keyword too long" {:full-name s})))
 
     (.write out ba 0 len)))
@@ -724,62 +687,29 @@
         ba  (.getBytes s charset)
         len (alength ba)]
     (enc/cond
-      (sm-count? len)
-      (do (write-id       out id-sym-sm)
-          (write-sm-count out len))
-
-      (md-count? len)
-      (do (write-id       out id-sym-md)
-          (write-md-count out len))
-
-      ;; :else ; Unrealistic
-      ;; (do (write-id       out id-sym-lg)
-      ;;     (write-lg-count out len))
-
+      (sm-count? len) (do (write-id out id-sym-sm) (write-sm-count out len))
+      (md-count? len) (do (write-id out id-sym-md) (write-md-count out len))
+      ;; :else        (do (write-id out id-sym-lg) (write-lg-count out len)) ; Unrealistic
       :else (throw (ex-info "Symbol too long" {:full-name s})))
 
     (.write out ba 0 len)))
 
 (defn- write-long [^DataOutput out ^long n]
   (enc/cond
-    (zero? n)
-    (write-id out id-long-0)
-
-    (> n 0)
+    (zero? n) (write-id out id-long-0)
+    (pos?  n)
     (enc/cond
-      (<= n 127 #_Byte/MAX_VALUE)
-      (do (write-id   out id-long-sm)
-          (.writeByte out n))
-
-      (<= n 32767 #_Short/MAX_VALUE)
-      (do (write-id    out id-long-md)
-          (.writeShort out n))
-
-      (<= n 2147483647 #_Integer/MAX_VALUE)
-      (do (write-id  out id-long-lg)
-          (.writeInt out n))
-
-      :else
-      (do (write-id   out id-long-xl)
-          (.writeLong out n)))
+      (<= n    Byte/MAX_VALUE) (do (write-id out id-long-sm) (.writeByte  out n))
+      (<= n   Short/MAX_VALUE) (do (write-id out id-long-md) (.writeShort out n))
+      (<= n Integer/MAX_VALUE) (do (write-id out id-long-lg) (.writeInt   out n))
+      :else                    (do (write-id out id-long-xl) (.writeLong  out n)))
 
     :else
     (enc/cond
-      (>= n -128 #_Byte/MIN_VALUE)
-      (do (write-id   out id-long-sm)
-          (.writeByte out n))
-
-      (>= n -32768 #_Short/MIN_VALUE)
-      (do (write-id    out id-long-md)
-          (.writeShort out n))
-
-      (>= n -2147483648 #_Integer/MIN_VALUE)
-      (do (write-id   out id-long-lg)
-          (.writeInt  out n))
-
-      :else
-      (do (write-id   out id-long-xl)
-          (.writeLong out n)))))
+      (>= n    Byte/MIN_VALUE) (do (write-id out id-long-sm) (.writeByte  out n))
+      (>= n   Short/MIN_VALUE) (do (write-id out id-long-md) (.writeShort out n))
+      (>= n Integer/MIN_VALUE) (do (write-id out id-long-lg) (.writeInt   out n))
+      :else                    (do (write-id out id-long-xl) (.writeLong  out n)))))
 
 (defmacro ^:private -run!    [proc coll] `(do (reduce    #(~proc %2)    nil ~coll) nil))
 (defmacro ^:private -run-kv! [proc    m] `(do (reduce-kv #(~proc %2 %3) nil    ~m) nil))
@@ -794,17 +724,10 @@
           (enc/cond
             (== cnt 2) (write-id out id-vec-2)
             (== cnt 3) (write-id out id-vec-3)
-            :else
-            (do (write-id       out id-vec-sm)
-                (write-sm-count out cnt)))
+            :else  (do (write-id out id-vec-sm) (write-sm-count out cnt)))
 
-          (md-count? cnt)
-          (do (write-id       out id-vec-md)
-              (write-md-count out cnt))
-
-          :else
-          (do (write-id       out id-vec-lg)
-              (write-lg-count out cnt)))
+          (md-count? cnt) (do (write-id out id-vec-md) (write-md-count out cnt))
+          :else           (do (write-id out id-vec-lg) (write-lg-count out cnt)))
 
         (-run! (fn [in] (-freeze-with-meta! in out)) v)))))
 
@@ -825,17 +748,9 @@
        (write-id out id-empty)
        (do
          (enc/cond
-           (sm-count? cnt)
-           (do (write-id       out id-sm)
-               (write-sm-count out cnt))
-
-           (md-count? cnt)
-           (do (write-id       out id-md)
-               (write-md-count out cnt))
-
-           :else
-           (do (write-id       out id-lg)
-               (write-lg-count out cnt)))
+           (sm-count? cnt) (do (write-id out id-sm) (write-sm-count out cnt))
+           (md-count? cnt) (do (write-id out id-md) (write-md-count out cnt))
+           :else           (do (write-id out id-lg) (write-lg-count out cnt)))
 
          (-run-kv!
            (fn [k v]
@@ -858,17 +773,9 @@
        (write-id out id-empty)
        (do
          (enc/cond
-           (sm-count? cnt)
-           (do (write-id       out id-sm)
-               (write-sm-count out cnt))
-
-           (md-count? cnt)
-           (do (write-id       out id-md)
-               (write-md-count out cnt))
-
-           :else
-           (do (write-id       out id-lg)
-               (write-lg-count out cnt)))
+           (sm-count? cnt) (do (write-id out id-sm) (write-sm-count out cnt))
+           (md-count? cnt) (do (write-id out id-md) (write-md-count out cnt))
+           :else           (do (write-id out id-lg) (write-lg-count out cnt)))
 
          (-run! (fn [in] (-freeze-with-meta! in out)) coll))))))
 
@@ -894,17 +801,9 @@
        (write-id out id-empty)
        (do
          (enc/cond
-           (sm-count? cnt)
-           (do (write-id       out id-sm)
-               (write-sm-count out cnt))
-
-           (md-count? cnt)
-           (do (write-id       out id-md)
-               (write-md-count out cnt))
-
-           :else
-           (do (write-id       out id-lg)
-               (write-lg-count out cnt)))
+           (sm-count? cnt) (do (write-id out id-sm) (write-sm-count out cnt))
+           (md-count? cnt) (do (write-id out id-md) (write-md-count out cnt))
+           :else           (do (write-id out id-lg) (write-lg-count out cnt)))
 
          (.write out ba))))))
 
@@ -927,17 +826,9 @@
       (write-id out id-map-0)
       (do
         (enc/cond
-          (sm-count? cnt)
-          (do (write-id       out id-map-sm)
-              (write-sm-count out cnt))
-
-          (md-count? cnt)
-          (do (write-id       out id-map-md)
-              (write-md-count out cnt))
-
-          :else
-          (do (write-id      out id-map-lg)
-              (write-lg-count out cnt)))
+          (sm-count? cnt) (do (write-id out id-map-sm) (write-sm-count out cnt))
+          (md-count? cnt) (do (write-id out id-map-md) (write-md-count out cnt))
+          :else           (do (write-id out id-map-lg) (write-lg-count out cnt)))
 
         (-run-kv!
           (fn [k v]
@@ -953,17 +844,9 @@
       (write-id out id-set-0)
       (do
         (enc/cond
-          (sm-count? cnt)
-          (do (write-id       out id-set-sm)
-              (write-sm-count out cnt))
-
-          (md-count? cnt)
-          (do (write-id       out id-set-md)
-              (write-md-count out cnt))
-
-          :else
-          (do (write-id       out id-set-lg)
-              (write-lg-count out cnt)))
+          (sm-count? cnt) (do (write-id out id-set-sm) (write-sm-count out cnt))
+          (md-count? cnt) (do (write-id out id-set-md) (write-md-count out cnt))
+          :else           (do (write-id out id-set-lg) (write-lg-count out cnt)))
 
         (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
 
@@ -979,18 +862,9 @@
         len           (alength   class-name-ba)]
 
     (enc/cond
-      (sm-count? len)
-      (do (write-id       out id-sz-quarantined-sm)
-          (write-bytes-sm out class-name-ba))
-
-      (md-count? len)
-      (do (write-id       out id-sz-quarantined-md)
-          (write-bytes-md out class-name-ba))
-
-      ;; :else ; Unrealistic
-      ;; (do (write-id       out id-sz-quarantined-lg)
-      ;;     (write-bytes-md out class-name-ba))
-
+      (sm-count? len) (do (write-id out id-sz-quarantined-sm) (write-bytes-sm out class-name-ba))
+      (md-count? len) (do (write-id out id-sz-quarantined-md) (write-bytes-md out class-name-ba))
+      ;; :else        (do (write-id out id-sz-quarantined-lg) (write-bytes-md out class-name-ba)) ; Unrealistic
       :else
       (throw
         (ex-info "Serializable class name too long"
@@ -1011,17 +885,9 @@
         edn-ba (.getBytes ^String edn charset)
         len    (alength edn-ba)]
     (enc/cond
-      (sm-count? len)
-      (do (write-id       out id-reader-sm)
-          (write-bytes-sm out edn-ba))
-
-      (md-count? len)
-      (do (write-id       out id-reader-md)
-          (write-bytes-md out edn-ba))
-
-      :else
-      (do (write-id       out id-reader-lg)
-          (write-bytes-lg out edn-ba)))))
+      (sm-count? len) (do (write-id out id-reader-sm) (write-bytes-sm out edn-ba))
+      (md-count? len) (do (write-id out id-reader-md) (write-bytes-md out edn-ba))
+      :else           (do (write-id out id-reader-lg) (write-bytes-lg out edn-ba)))))
 
 (defn try-write-serializable [out x]
   (when (and (instance? Serializable x) (not (fn? x)))
@@ -1120,7 +986,7 @@
   (let [x-val (.-val x)]
     (if-let [cache_ (.get -cache-proxy)]
       (let [cache    @cache_
-            k        #_x-val [x-val (meta x-val)]
+            k        #_x-val [x-val (meta x-val)] ; Also check meta for equality
             ?idx     (get cache k)
             ^int idx (or ?idx
                        (let [idx (count cache)]
@@ -1194,7 +1060,7 @@
 (id-freezer Float      id-float      (.writeFloat      out x))
 (id-freezer BigDecimal id-bigdec
   (write-biginteger out (.unscaledValue x))
-  (.writeInt out (.scale x)))
+  (.writeInt        out (.scale         x)))
 
 (id-freezer Ratio id-ratio
   (write-biginteger out (.numerator   x))
@@ -1218,9 +1084,8 @@
 (freezer Long                 (write-long  out x))
 (freezer Double
   (if (zero? ^double x)
-    (write-id         out id-double-0)
-    (do (write-id     out id-double)
-        (.writeDouble out x))))
+    (do (write-id out id-double-0))
+    (do (write-id out id-double) (.writeDouble out x))))
 
 (freezer PersistentQueue      (write-counted-coll   out id-queue-lg      x))
 (freezer PersistentTreeSet    (write-counted-coll   out id-sorted-set-lg x))
@@ -1236,18 +1101,9 @@
         class-name-ba (.getBytes class-name charset)
         len           (alength   class-name-ba)]
     (enc/cond
-      (sm-count? len)
-      (do (write-id       out id-record-sm)
-          (write-bytes-sm out class-name-ba))
-
-      (md-count? len)
-      (do (write-id       out id-record-md)
-          (write-bytes-md out class-name-ba))
-
-      ;; :else ; Unrealistic
-      ;; (do (write-id       out id-record-lg)
-      ;;     (write-bytes-md out class-name-ba))
-
+      (sm-count? len) (do (write-id out id-record-sm) (write-bytes-sm out class-name-ba))
+      (md-count? len) (do (write-id out id-record-md) (write-bytes-md out class-name-ba))
+      ;; :else        (do (write-id out id-record-lg) (write-bytes-md out class-name-ba)) ; Unrealistic
       :else
       (throw
         (ex-info "Record class name too long"
@@ -1381,8 +1237,8 @@
     (.toByteArray baos)))
 
 (defn freeze
-  "Serializes arg (any Clojure data type) to a byte array. To freeze custom
-  types, extend the Clojure reader or see `extend-freeze`."
+  "Serializes arg (any Clojure data type) to a byte array.
+  To freeze custom types, extend the Clojure reader or see `extend-freeze`."
 
   ([x] (freeze x nil))
   ([x {:as   opts
@@ -1392,7 +1248,6 @@
 
    (call-with-bindings :freeze opts
      (fn []
-
        (let [;; Intentionally undocumented:
              no-header? (or (get opts :no-header?)
                             (get opts :skip-header?))
@@ -1433,17 +1288,8 @@
                (if no-header?
                  ba
                  (wrap-header ba
-                   {:compressor-id
-                    (when-let [c compressor]
-                      (or (compression/standard-header-ids
-                            (compression/header-id c))
-                        :else))
-
-                    :encryptor-id
-                    (when-let [e encryptor]
-                      (or (encryption/standard-header-ids
-                            (encryption/header-id e))
-                        :else))}))))))))))
+                   {:compressor-id (when-let [c compressor] (or (compression/standard-header-ids (compression/header-id c)) :else))
+                    :encryptor-id  (when-let [e encryptor]  (or (encryption/standard-header-ids  (encryption/header-id  e)) :else))}))))))))))
 
 ;;;; Thawing
 
@@ -1455,10 +1301,10 @@
   ([^DataInput in len] (let [ba (byte-array len)] (.readFully in ba 0 len) ba))
   ([^DataInput in    ]
    (enc/case-eval (.readByte in)
-    id-bytes-0  (byte-array 0)
-    id-bytes-sm (read-bytes in (read-sm-count in))
-    id-bytes-md (read-bytes in (read-md-count in))
-    id-bytes-lg (read-bytes in (read-lg-count in)))))
+     id-bytes-0  (byte-array 0)
+     id-bytes-sm (read-bytes in (read-sm-count in))
+     id-bytes-md (read-bytes in (read-md-count in))
+     id-bytes-lg (read-bytes in (read-lg-count in)))))
 
 (defn- read-str-sm [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count in)) charset))
 (defn- read-str-md [^DataInput in] (String. ^bytes (read-bytes in (read-md-count in)) charset))
@@ -1512,13 +1358,11 @@
         (throw
           (ex-info
             (str "Reader exception for custom type id: " type-id)
-            {:type-id type-id
-             :prefixed? prefixed?} e))))
+            {:type-id type-id, :prefixed? prefixed?} e))))
     (throw
       (ex-info
         (str "No reader provided for custom type id: " type-id)
-        {:type-id type-id
-         :prefixed? prefixed?}))))
+        {:type-id type-id, :prefixed? prefixed?}))))
 
 (defn- read-edn [edn]
   (try
@@ -1649,6 +1493,7 @@
   [^DataInput data-input]
   (let [in      data-input
         type-id (.readByte in)]
+
     (when-debug (println (str "thaw-from-in!: " type-id)))
     (try
       (enc/case-eval type-id
@@ -1659,7 +1504,7 @@
         id-reader-lg_      (read-edn             (read-str in (read-lg-count in)))
         id-record-sm       (read-record       in (read-str in (read-sm-count in)))
         id-record-md       (read-record       in (read-str in (read-md-count in)))
-        id-record-lg       (read-record       in (read-str in (read-lg-count in)))
+        id-record-lg_      (read-record       in (read-str in (read-lg-count in)))
 
         id-sz-quarantined-sm    (read-sz-quarantined   in (read-str in (read-sm-count in)))
         id-sz-quarantined-md    (read-sz-quarantined   in (read-str in (read-md-count in)))
@@ -1705,12 +1550,12 @@
         id-kw-sm       (keyword (read-str in (read-sm-count in)))
         id-kw-md       (keyword (read-str in (read-md-count in)))
         id-kw-md_      (keyword (read-str in (read-lg-count in)))
-        id-kw-lg       (keyword (read-str in (read-lg-count in)))
+        id-kw-lg_      (keyword (read-str in (read-lg-count in)))
 
         id-sym-sm      (symbol  (read-str in (read-sm-count in)))
         id-sym-md      (symbol  (read-str in (read-md-count in)))
         id-sym-md_     (symbol  (read-str in (read-lg-count in)))
-        id-sym-lg      (symbol  (read-str in (read-lg-count in)))
+        id-sym-lg_     (symbol  (read-str in (read-lg-count in)))
         id-regex       (re-pattern (thaw-from-in! in))
 
         id-vec-0       []
@@ -1734,7 +1579,7 @@
         id-sorted-set-lg (read-into     (sorted-set)        in (read-lg-count in))
         id-sorted-map-lg (read-kvs-into (sorted-map)        in (read-lg-count in))
 
-        id-list-0      '()
+        id-list-0            '()
         id-list-sm     (into '() (rseq (read-into [] in (read-sm-count in))))
         id-list-md     (into '() (rseq (read-into [] in (read-md-count in))))
         id-list-lg     (into '() (rseq (read-into [] in (read-lg-count in))))
@@ -1830,9 +1675,10 @@
               (str "Unrecognized type id (" type-id "). Data frozen with newer Nippy version?")
               {:type-id type-id}))))
 
-      (catch Exception e
-        (throw (ex-info (str "Thaw failed against type-id: " type-id)
-                 {:type-id type-id} e))))))
+      (catch Throwable t
+        (throw
+          (ex-info (str "Thaw failed against type-id: " type-id)
+            {:type-id type-id} t))))))
 
 (let [head-sig head-sig] ; Not ^:const
   (defn- try-parse-header [^bytes ba]
@@ -1866,11 +1712,8 @@
     (do        (throw (ex-info (str "Unrecognized :auto encryptor id: " encryptor-id)
                         {:encryptor-id encryptor-id})))))
 
-(def ^:private err-msg-unknown-thaw-failure
-  "Decryption/decompression failure, or data unfrozen/damaged.")
-
-(def ^:private err-msg-unrecognized-header
-  "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?")
+(def ^:private err-msg-unknown-thaw-failure "Decryption/decompression failure, or data unfrozen/damaged.")
+(def ^:private err-msg-unrecognized-header  "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?")
 
 (defn fast-thaw
   "Like `thaw` but:
@@ -1912,25 +1755,23 @@
 
    (call-with-bindings :thaw opts
      (fn []
-
        (let [v2+?       (not v1-compatibility?)
              no-header? (get opts :no-header?) ; Intentionally undocumented
-             ex (fn ex
-                  ([  msg] (ex nil msg))
-                  ([e msg] (throw (ex-info (str "Thaw failed: " msg)
-                                    {:opts (assoc opts
-                                             :compressor compressor
-                                             :encryptor  encryptor)}
-                                    e))))
+             ex
+             (fn ex
+               ([  msg] (ex nil msg))
+               ([e msg]
+                (throw
+                  (ex-info (str "Thaw failed. " msg)
+                    {:opts (assoc opts
+                             :compressor compressor
+                             :encryptor  encryptor)}
+                    e))))
 
              thaw-data
              (fn [data-ba compressor-id encryptor-id ex-fn]
-               (let [compressor (if (identical? compressor :auto)
-                                  (get-auto-compressor compressor-id)
-                                  compressor)
-                     encryptor  (if (identical? encryptor :auto)
-                                  (get-auto-encryptor encryptor-id)
-                                  encryptor)]
+               (let [compressor (if (identical? compressor :auto) (get-auto-compressor compressor-id) compressor)
+                     encryptor  (if (identical? encryptor  :auto) (get-auto-encryptor  encryptor-id)  encryptor)]
 
                  (when (and encryptor (not password))
                    (ex "Password required for decryption."))
@@ -1954,9 +1795,8 @@
 
          (if no-header?
            (if v2+?
-             (thaw-data ba :no-header :no-header (fn [e] (ex e err-msg-unknown-thaw-failure)))
-             (thaw-data ba :no-header :no-header
-               (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure))))))
+             (thaw-data ba :no-header :no-header (fn [e]                          (ex e err-msg-unknown-thaw-failure)))
+             (thaw-data ba :no-header :no-header (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure))))))
 
            ;; At this point we assume that we have a header iff we have v2+ data
            (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
@@ -1971,9 +1811,8 @@
                    (fn [e] (ex e err-msg-unknown-thaw-failure))))
 
                (if unrecognized-meta?
-                 (thaw-v1-data ba (fn [_] (ex err-msg-unrecognized-header)))
-                 (thaw-data data-ba compressor-id encryptor-id
-                   (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure)))))))
+                 (thaw-v1-data ba                              (fn [_]                          (ex   err-msg-unrecognized-header)))
+                 (thaw-data data-ba compressor-id encryptor-id (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure)))))))
 
              ;; Well-formed header definitely not present
              (if v2+?
@@ -1982,8 +1821,8 @@
 
 (comment
   (thaw (freeze "hello"))
-  (thaw (freeze "hello" {:compressor nil}))
-  (thaw (freeze "hello" {:password [:salted "p"]})) ; ex: no pwd
+  (thaw (freeze "hello"  {:compressor nil}))
+  (thaw (freeze "hello"  {:password [:salted "p"]})) ; ex: no pwd
   (thaw (freeze "hello") {:password [:salted "p"]}))
 
 ;;;; Custom types
@@ -1994,7 +1833,7 @@
 
 (defn- coerce-custom-type-id
   "* +ive byte id ->  -ive byte id (for unprefixed custom types)
- *   Keyword id -> Short hash id (for   prefixed custom types)"
+   *   Keyword id -> Short hash id (for   prefixed custom types)"
   [custom-type-id]
   (assert-custom-type-id custom-type-id)
   (if-not (keyword? custom-type-id)
@@ -2003,8 +1842,9 @@
           short-hash-id (if (pos? hash-id)
                           (mod hash-id Short/MAX_VALUE)
                           (mod hash-id Short/MIN_VALUE))]
+
       ;; Make sure hash ids can't collide with byte ids (unlikely anyway):
-      (assert (not (<= -128 short-hash-id -1))
+      (assert (not (<= Byte/MIN_VALUE short-hash-id -1))
         "Custom type id hash collision; please choose a different id")
 
       (int short-hash-id))))
@@ -2134,7 +1974,7 @@
    :bigdec       (bigdec 3.1415926535897932384626433832795)
 
    :ratio        22/7
-   :uri          (URI. "https://clojure.org/reference/data_structures")
+   :uri          (java.net.URI. "https://clojure.org/reference/data_structures")
    :uuid         (java.util.UUID/randomUUID)
    :date         (java.util.Date.)
 
@@ -2167,7 +2007,8 @@
 
 ;;;; Tools
 
-(defn inspect-ba "Alpha - subject to change"
+(defn inspect-ba
+  "Experimental, subject to change. Feedback welcome."
   ([ba          ] (inspect-ba ba nil))
   ([ba thaw-opts]
    (when (enc/bytes? ba)
@@ -2192,7 +2033,7 @@
         :data-len        (alength ^bytes data-ba)}))))
 
 (comment
-  (inspect-ba (freeze "hello"))
+  (do            (inspect-ba (freeze "hello")))
   (seq (:data-ba (inspect-ba (freeze "hello")))))
 
 (defn freeze-to-string
@@ -2257,11 +2098,11 @@
 ;;;; Deprecated
 
 (enc/deprecated
-  (def freeze-fallback-as-str       "DEPRECATED, use `write-unfreezable`"   write-unfreezable)
-  (defn set-freeze-fallback!        "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
-  (defn set-auto-freeze-compressor! "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
-  (defn swap-custom-readers!        "DEPRECATED, just use `alter-var-root`" [f] (alter-var-root #'*custom-readers* f))
-  (defn swap-serializable-whitelist!
+  (def  ^:deprecated freeze-fallback-as-str      "DEPRECATED, use `write-unfreezable`"   write-unfreezable)
+  (defn ^:deprecated set-freeze-fallback!        "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
+  (defn ^:deprecated set-auto-freeze-compressor! "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
+  (defn ^:deprecated swap-custom-readers!        "DEPRECATED, just use `alter-var-root`" [f] (alter-var-root #'*custom-readers* f))
+  (defn ^:deprecated swap-serializable-whitelist!
     "DEPRECATED, just use
     (alter-var-root *thaw-serializable-allowlist*    f) and/or
     (alter-var-root *freeze-serializable-allow-list* f) instead."

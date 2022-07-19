@@ -1,4 +1,5 @@
-(ns taoensso.nippy.utils
+(ns ^:no-doc taoensso.nippy.utils
+  "Private, implementation detail."
   (:require [clojure.string  :as str]
             [taoensso.encore :as enc])
   (:import  [java.io ByteArrayInputStream ByteArrayOutputStream Serializable

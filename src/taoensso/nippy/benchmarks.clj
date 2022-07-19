@@ -1,4 +1,5 @@
 (ns taoensso.nippy.benchmarks
+  "Nippy benchmarks."
   (:require [clojure.data.fressian :as fressian]
             [taoensso.encore       :as enc]
             [taoensso.nippy :as nippy :refer [freeze thaw]]))
