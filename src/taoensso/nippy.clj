@@ -622,7 +622,7 @@
 (defn- write-str-sm [^DataOutput out ^String s] (write-bytes-sm out (.getBytes s charset)))
 (defn- write-str-md [^DataOutput out ^String s] (write-bytes-md out (.getBytes s charset)))
 (defn- write-str-lg [^DataOutput out ^String s] (write-bytes-lg out (.getBytes s charset)))
-(defn- write-str [^DataOutput out ^String s]
+(defn- write-str    [^DataOutput out ^String s]
   (if (identical? s "")
     (write-id out id-str-0)
     (let [ba  (.getBytes s charset)
@@ -1678,7 +1678,7 @@
         id-sorted-set  (read-into     (sorted-set)        in (read-lg-count in))
         id-sorted-map  (read-kvs-into (sorted-map)        in (read-lg-count in))
 
-        id-list-0      '()
+        id-list-0            '()
         id-list-sm     (into '() (rseq (read-into [] in (read-sm-count in))))
         id-list-md     (into '() (rseq (read-into [] in (read-md-count in))))
         id-list-lg     (into '() (rseq (read-into [] in (read-lg-count in))))
