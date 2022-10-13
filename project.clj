@@ -7,20 +7,17 @@
             :distribution :repo
             :comments "Same as Clojure"}
   :min-lein-version "2.3.3"
-  :global-vars {*warn-on-reflection* true
-                *assert*             true
-                ;; *unchecked-math*  :warn-on-boxed
-                }
+  :global-vars
+  {*warn-on-reflection* true
+   *assert*             true
+   *unchecked-math*     false #_:warn-on-boxed}
 
   :dependencies
   [[org.clojure/tools.reader "1.3.6"]
-   [com.taoensso/encore      "3.23.0"]
+   [com.taoensso/encore      "3.31.0"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.9"]
    [org.lz4/lz4-java         "1.8.0"]]
-
-  :resources
-  ["resources"]
 
   :plugins
   [[lein-pprint  "1.3.2"]
@@ -30,13 +27,13 @@
   :profiles
   {;; :default [:base :system :user :provided :dev]
    :server-jvm {:jvm-opts ^:replace ["-server" "-Xms1024m" "-Xmx2048m"]}
-   :provided {:dependencies [[org.clojure/clojure "1.7.0"]]}
-   :1.7      {:dependencies [[org.clojure/clojure "1.7.0"]]}
-   :1.8      {:dependencies [[org.clojure/clojure "1.8.0"]]}
-   :1.9      {:dependencies [[org.clojure/clojure "1.9.0"]]}
-   :1.10     {:dependencies [[org.clojure/clojure "1.10.1"]]}
-   :1.11     {:dependencies [[org.clojure/clojure "1.11.1"]]}
+   :provided {:dependencies [[org.clojure/clojure "1.11.1"]]}
+   :c1.11    {:dependencies [[org.clojure/clojure "1.11.1"]]}
+   :c1.10    {:dependencies [[org.clojure/clojure "1.10.1"]]}
+   :c1.9     {:dependencies [[org.clojure/clojure "1.9.0"]]}
+
    :depr     {:jvm-opts ["-Dtaoensso.elide-deprecated=true"]}
+   :dev      [:c1.11 :test :server-jvm :depr]
    :test
    {:jvm-opts
     ["-Xms1024m" "-Xmx2048m"
@@ -45,14 +42,17 @@
     :dependencies
     [[org.clojure/test.check        "1.1.1"]
      [org.clojure/data.fressian     "1.0.0"]
-     [org.xerial.snappy/snappy-java "1.1.8.4"]]}
+     [org.xerial.snappy/snappy-java "1.1.8.4"]]}}
 
-   :dev [:1.11 :test :server-jvm :depr]}
+  :test-paths ["test" #_"src"]
 
   :aliases
   {"start-dev"  ["with-profile" "+dev" "repl" ":headless"]
-   "deploy-lib" ["do" "deploy" "clojars," "install"]
-   "test-all"   ["with-profile" "+1.10:+1.9:+1.8:+1.7" "test"]}
+   "deploy-lib" ["do" ["build-once"] ["deploy" "clojars"] ["install"]]
+
+   "test-all"
+   ["do" ["clean"]
+    "with-profile" "+c1.11:+c1.10:+c1.9" "test"]}
 
   :repositories
   {"sonatype-oss-public"

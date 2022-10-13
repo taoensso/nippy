@@ -24,9 +24,7 @@
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
     LazySeq IRecord ISeq IType]))
 
-(if (vector? enc/encore-version)
-  (enc/assert-min-encore-version [3 23 0])
-  (enc/assert-min-encore-version  3.23))
+(enc/assert-min-encore-version [3 31 0])
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
