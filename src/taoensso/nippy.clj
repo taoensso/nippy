@@ -91,166 +91,222 @@
 
 (defmacro ^:private when-debug [& body] (when #_true false `(do ~@body)))
 
-(def ^:private type-ids
-  "{<byte-id> <type-name-kw>}, ~random ordinal ids for historical reasons.
-  -ive ids reserved for custom (user-defined) types.
+(def ^:private types-spec
+  "Private representation of Nippy's internal type schema,
+    {<type-id> [<type-kw> ?<payload-info>]}.
 
-  Size-optimized suffixes:
-    -0  (empty       => 0-sized)
-    -sm (small       => byte-sized)
-    -md (medium      => short-sized)
-    -lg (large       => int-sized)   ; Default when no suffix
-    -xl (extra large => long-sized)"
+  See `public-types-spec` for more info."
 
-  {82  :prefixed-custom
+  {3   [:nil      []]
+   8   [:true     []]
+   9   [:false    []]
+   10  [:char     [[:bytes 2]]]
 
-   47  :reader-sm
-   51  :reader-md
-   52  :reader-lg
+   40  [:byte     [[:bytes 1]]]
+   41  [:short    [[:bytes 2]]]
+   42  [:integer  [[:bytes 4]]]
 
-   75  :serializable-q-sm ; Quarantined
-   76  :serializable-q-md ; ''
+   0   [:long-0   []]
+   100 [:long-sm  [[:bytes 1]]]
+   101 [:long-md  [[:bytes 2]]]
+   102 [:long-lg  [[:bytes 4]]]
+   43  [:long-xl  [[:bytes 8]]]
 
-   48  :record-sm
-   49  :record-md
-   80  :record-lg ; Unrealistic, future removal candidate
+   55  [:double-0 []]
+   60  [:float    [[:bytes 4]]]
+   61  [:double   [[:bytes 8]]]
 
-   81  :type
+   90  [:date     [[:bytes 8]]]
+   91  [:uuid     [[:bytes 16]]]
 
-   3   :nil
-   8   :true
-   9   :false
-   10  :char
+   ;; JVM >=8
+   79  [:time-instant  [[:bytes 12]]]
+   83  [:time-duration [[:bytes 12]]]
+   84  [:time-period   [[:bytes 12]]]
 
-   34  :str-0
-   105 :str-sm
-   16  :str-md
-   13  :str-lg
+   34  [:str-0     []]
+   105 [:str-sm    [[:bytes {:read 1}]]]
+   16  [:str-md    [[:bytes {:read 2}]]]
+   13  [:str-lg    [[:bytes {:read 4}]]]
 
-   106 :kw-sm
-   85  :kw-md
-   14  :kw-lg ; Unrealistic, future removal candidate
+   106 [:kw-sm     [[:bytes {:read 1}]]]
+   85  [:kw-md     [[:bytes {:read 2}]]]
+   14  [:kw-lg     [[:bytes {:read 4}]]] ; Unrealistic, removal candidate?
 
-   56  :sym-sm
-   86  :sym-md
-   57  :sym-lg ; Unrealistic, future removal candidate
+   56  [:sym-sm    [[:bytes {:read 1}]]]
+   86  [:sym-md    [[:bytes {:read 2}]]]
+   57  [:sym-lg    [[:bytes {:read 4}]]] ; Unrealistic, removal candidate?
 
-   58  :regex
-   71  :uri
+   47  [:reader-sm [[:bytes {:read 1}]]]
+   51  [:reader-md [[:bytes {:read 2}]]]
+   52  [:reader-lg [[:bytes {:read 4}]]]
 
-   53  :bytes-0
-   7   :bytes-sm
-   15  :bytes-md
-   2   :bytes-lg
+   53  [:bytes-0   []]
+   7   [:bytes-sm  [[:bytes {:read 1}]]]
+   15  [:bytes-md  [[:bytes {:read 2}]]]
+   2   [:bytes-lg  [[:bytes {:read 4}]]]
 
-   17  :vec-0
-   113 :vec-2
-   114 :vec-3
-   110 :vec-sm
-   69  :vec-md
-   21  :vec-lg
+   17  [:vec-0     []]
+   113 [:vec-2     [[:elements 2]]]
+   114 [:vec-3     [[:elements 3]]]
+   110 [:vec-sm    [[:elements {:read 1}]]]
+   69  [:vec-md    [[:elements {:read 2}]]]
+   21  [:vec-lg    [[:elements {:read 4}]]]
 
-   115 :objects-lg ; TODO Could include md, sm, 0 later if there's demand
+   18  [:set-0     []]
+   111 [:set-sm    [[:elements {:read 1}]]]
+   32  [:set-md    [[:elements {:read 2}]]]
+   23  [:set-lg    [[:elements {:read 4}]]]
 
-   18  :set-0
-   111 :set-sm
-   32  :set-md
-   23  :set-lg
+   19  [:map-0     []]
+   112 [:map-sm    [[:elements {:read 1 :multiplier 2}]]]
+   33  [:map-md    [[:elements {:read 2 :multiplier 2}]]]
+   30  [:map-lg    [[:elements {:read 4 :multiplier 2}]]]
 
-   19  :map-0
-   112 :map-sm
-   33  :map-md
-   30  :map-lg
+   35  [:list-0    []]
+   36  [:list-sm   [[:elements {:read 1}]]]
+   54  [:list-md   [[:elements {:read 2}]]]
+   20  [:list-lg   [[:elements {:read 4}]]]
 
-   35  :list-0
-   36  :list-sm
-   54  :list-md
-   20  :list-lg
+   37  [:seq-0     []]
+   38  [:seq-sm    [[:elements {:read 1}]]]
+   39  [:seq-md    [[:elements {:read 2}]]]
+   24  [:seq-lg    [[:elements {:read 4}]]]
 
-   37  :seq-0
-   38  :seq-sm
-   39  :seq-md
-   24  :seq-lg
+   28  [:sorted-set-lg [[:elements {:read 4}]]]
+   31  [:sorted-map-lg [[:elements {:read 4 :multiplier 2}]]]
+   26  [:queue-lg      [[:elements {:read 4}]]]
+   115 [:objects-lg    [[:elements {:read 4}]]]
 
-   28  :sorted-set
-   31  :sorted-map
-   26  :queue
-   25  :meta
+   25  [:meta  [[:elements 1]]]
+   58  [:regex [[:elements 1]]]
+   71  [:uri   [[:elements 1]]]
 
-   40  :byte
-   41  :short
-   42  :integer
+   ;; BigInteger based
+   44  [:bigint     [[:bytes {:read 4}]]]
+   45  [:biginteger [[:bytes {:read 4}]]]
+   62  [:bigdec     [[:bytes 4]
+                     [:bytes {:read 4}]]]
+   70  [:ratio      [[:bytes {:read 4}]
+                     [:bytes {:read 4}]]]
 
-   0   :long-zero
-   100 :long-sm
-   101 :long-md
-   102 :long-lg
-   43  :long-xl
+   ;; Serializable
+   75  [:sz-quarantined-sm [[:bytes {:read 1}] [:elements 1]]]
+   76  [:sz-quarantined-md [[:bytes {:read 2}] [:elements 1]]]
 
-   44  :bigint
-   45  :biginteger
+   48  [:record-sm         [[:bytes {:read 1}] [:elements 1]]]
+   49  [:record-md         [[:bytes {:read 2}] [:elements 1]]]
+   80  [:record-lg         [[:bytes {:read 4}] [:elements 1]]] ; Unrealistic, removal candidate?
 
-   60  :float
-   55  :double-zero
-   61  :double
-   62  :bigdec
-   70  :ratio
-
-   90  :date
-   91  :uuid
-
-   59  :cached-0
-   63  :cached-1
-   64  :cached-2
-   65  :cached-3
-   66  :cached-4
-   72  :cached-5
-   73  :cached-6
-   74  :cached-7
-   67  :cached-sm
-   68  :cached-md
-
-   79  :time-instant  ; JVM 8+
-   83  :time-duration ; ''
-   84  :time-period   ; ''
+   ;; Necessarily without size information
+   81  [:type               nil]
+   82  [:prefixed-custom-md nil]
+   59  [:cached-0           nil]
+   63  [:cached-1           nil]
+   64  [:cached-2           nil]
+   65  [:cached-3           nil]
+   66  [:cached-4           nil]
+   72  [:cached-5           nil]
+   73  [:cached-6           nil]
+   74  [:cached-7           nil]
+   67  [:cached-sm          nil]
+   68  [:cached-md          nil]
 
    ;;; DEPRECATED (only support thawing)
-   5   :reader-lg2 ; == :reader-lg, used only for back-compatible thawing
-   1   :reader-depr1          ; v0.9.2 for +64k support
-   11  :str-depr1             ; ''
-   22  :map-depr1             ; v0.9.0 for more efficient thaw
-   12  :kw-depr1              ; v2.0.0-alpha5 for str consistecy
-   27  :map-depr2             ; v2.11 for count/2
-   29  :sorted-map-depr1      ; ''
-   4   :boolean-depr1         ; v2.12 for switch to true/false ids
-   77  :kw-md-depr1           ; Buggy size field, Ref. #138 2020-11-18
-   78  :sym-md-depr1          ; Buggy size field, Ref. #138 2020-11-18
+   ;; Desc-sorted by deprecation date
 
-   46  :serializable-uq-sm ; Unquarantined
-   50  :serializable-uq-md ; ''
-   6   :serializable-uq-lg ; ''; unrealistic, future removal candidate
+   78  [:sym-md_ [[:bytes {:read 4}]]] ; [2020-11-18 v3.1.1] Buggy size field, Ref. #138
+   77  [:kw-md_  [[:bytes {:read 4}]]] ; [2020-11-18 v3.1.1] Buggy size field, Ref. #138
+
+   6   [:sz-unquarantined-lg_ nil] ; [2020-07-24 v2.15.0] Unskippable, Ref. #130
+   50  [:sz-unquarantined-md_ nil] ; [2020-07-24 v2.15.0] Unskippable, Ref. #130
+   46  [:sz-unquarantined-sm_ nil] ; [2020-07-24 v2.15.0] Unskippable, Ref. #130
+
+   5   [:reader-lg_  [[:bytes {:read 4}]]] ; [2016-07-24 v2.12.0] Identical to :reader-lg, historical accident
+   4   [:boolean_    [[:bytes 1]]]         ; [2016-07-24 v2.12.0] For switch to true/false ids
+
+   29  [:sorted-map_ [[:elements {:read 4}]]] ; [2016-02-25 v2.11.0] For count/2
+   27  [:map__       [[:elements {:read 4}]]] ; [2016-02-25 v2.11.0] For count/2
+
+   12  [:kw_     [[:bytes {:read 2}]]] ; [2013-07-22 v2.0.0] For consistecy with str impln
+
+   1   [:reader_ [[:bytes {:read 2}]]] ; [2012-07-20 v0.9.2] For >64k length support
+   11  [:str_    [[:bytes {:read 2}]]] ; [2012-07-20 v0.9.2] For >64k length support
+
+   22  [:map_    [[:elements {:read 4 :multiplier 2}]]] ; [2012-07-07 v0.9.0] For more efficient thaw impln
    })
 
 (comment
-  (defn- get-free-byte-ids [ids-map]
-    (reduce (fn [acc in] (if-not (ids-map in) (conj acc in) acc))
-      [] (range 0 Byte/MAX_VALUE)))
-
-  (count (get-free-byte-ids type-ids)))
+  (count ; Eval to check for unused type-ids
+    (enc/reduce-n (fn [acc in] (if-not (types-spec in) (conj acc in) acc))
+      [] Byte/MAX_VALUE)))
 
 (defmacro ^:private defids []
   `(do
      ~@(map
-         (fn [[id# name#]]
-           (let [name# (str "id-" (name name#))
-                 sym#  (with-meta (symbol name#)
-                         {:const true :private true})]
+         (fn [[id# [kw#]]]
+           (let [kw#  (str "id-" (name   kw#))
+                 sym# (with-meta (symbol kw#) {:const true :private true})]
              `(def ~sym# (byte ~id#))))
-         type-ids)))
+         types-spec)))
 
 (comment (macroexpand '(defids)))
 
 (defids)
+
+(def public-types-spec
+  "Public representation of Nippy's internal type schema.
+  For use by tooling and advanced users.
+
+  **HIGHLY EXPERIMENTAL!**
+  Subject to breaking change without notice.
+  Currently completely untested, may contain bugs.
+  Intended for use only by early adopters to give design feedback.
+
+  Format:
+    {<type-id> {:keys [type-id type-kw payload-spec deprecated?]}},
+
+    - `type-id`: A +ive single-byte identifier like `110`.
+                 -ive type ids are reserved for custom user-defined types.
+
+    - `type-kw`: A keyword like `:vec-sm`,
+      suffixes used to differentiate subtypes of different sizes:
+        -0  ; Empty       => 0 byte         payload / element-count
+        -sm ; Small       => 1 byte (byte)  payload / element-count
+        -md ; Medium      => 2 byte (short) payload / element-count
+        -lg ; Large       => 4 byte (int)   payload / element-count
+        -xl ; Extra large => 8 byte (long)  payload / element-count
+
+    - `payload-spec` examples:
+      - nil                        ; No spec available (e.g. unpredictable payload)
+      - []                         ; Type has no payload
+      - [[:bytes 4]]               ; Type has a payload of exactly 4 bytes
+      - [[:bytes 2] [:elements 2]] ; Type has a payload of exactly 2 bytes, then
+                                   ; 2 elements
+
+      - [[:bytes    {:read 2}]
+         [:elements {:read 4 :multiplier 2}]]
+
+        ; Type has payload of <short-count> bytes, then
+        ; <int-count>*2 (multiplier) elements
+
+      Note that `payload-spec` can be handy for skipping over items in
+      data stream without fully reading every item."
+
+  ;; TODO Add unit tests for size data once API is finalized
+
+  (reduce-kv
+    (fn [m type-id [type-kw ?payload-spec]]
+      (assoc m type-id
+        (enc/assoc-when
+          {:type-id type-id
+           :type-kw type-kw}
+
+          :payload-spec ?payload-spec
+          :deprecated? (enc/str-ends-with? (name type-kw) "_"))))
+
+    types-spec
+    types-spec))
 
 ;;;; Ns imports (for convenience of lib consumers)
 
@@ -687,7 +743,7 @@
 (defn- write-long [^DataOutput out ^long n]
   (enc/cond
     (zero? n)
-    (write-id out id-long-zero)
+    (write-id out id-long-0)
 
     (> n 0)
     (enc/cond
@@ -924,15 +980,15 @@
 
     (enc/cond
       (sm-count? len)
-      (do (write-id       out id-serializable-q-sm)
+      (do (write-id       out id-sz-quarantined-sm)
           (write-bytes-sm out class-name-ba))
 
       (md-count? len)
-      (do (write-id       out id-serializable-q-md)
+      (do (write-id       out id-sz-quarantined-md)
           (write-bytes-md out class-name-ba))
 
       ;; :else ; Unrealistic
-      ;; (do (write-id       out id-serializable-q-lg)
+      ;; (do (write-id       out id-sz-quarantined-lg)
       ;;     (write-bytes-md out class-name-ba))
 
       :else
@@ -1162,16 +1218,16 @@
 (freezer Long                 (write-long  out x))
 (freezer Double
   (if (zero? ^double x)
-    (write-id         out id-double-zero)
+    (write-id         out id-double-0)
     (do (write-id     out id-double)
         (.writeDouble out x))))
 
-(freezer PersistentQueue      (write-counted-coll   out id-queue      x))
-(freezer PersistentTreeSet    (write-counted-coll   out id-sorted-set x))
-(freezer PersistentTreeMap    (write-kvs            out id-sorted-map x))
-(freezer APersistentVector    (write-vec            out               x))
-(freezer APersistentSet       (write-set            out               x))
-(freezer APersistentMap       (write-map            out               x))
+(freezer PersistentQueue      (write-counted-coll   out id-queue-lg      x))
+(freezer PersistentTreeSet    (write-counted-coll   out id-sorted-set-lg x))
+(freezer PersistentTreeMap    (write-kvs            out id-sorted-map-lg x))
+(freezer APersistentVector    (write-vec            out                  x))
+(freezer APersistentSet       (write-set            out                  x))
+(freezer APersistentMap       (write-map            out                  x))
 (freezer PersistentList       (write-counted-coll   out id-list-0 id-list-sm id-list-md id-list-lg x))
 (freezer LazySeq              (write-uncounted-coll out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
 (freezer ISeq                 (write-coll           out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
@@ -1444,7 +1500,7 @@
     (enc/reduce-n (fn [acc _] (assoc acc (thaw-from-in! in) (thaw-from-in! in)))
       to n)))
 
-(defn- read-kvs-depr1 [to ^DataInput in] (read-kvs-into to in (quot (.readInt in) 2)))
+(defn- read-kvs-depr [to ^DataInput in] (read-kvs-into to in (quot (.readInt in) 2)))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
@@ -1519,7 +1575,7 @@
   (read-quarantined-serializable-object-unsafe!
     (thaw (freeze (java.util.concurrent.Semaphore. 1)))))
 
-(defn- read-serializable-q
+(defn- read-sz-quarantined
   "Quarantined => object serialized to ba, then ba written to output stream.
   Has length prefix => can skip `readObject` in event of allowlist failure."
   [^DataInput in class-name]
@@ -1533,7 +1589,7 @@
         :class-name class-name
         :content    quarantined-ba}})))
 
-(defn- read-serializable-uq
+(defn- read-sz-unquarantined
   "Unquarantined => object serialized directly to output stream.
   No length prefix => cannot skip `readObject` in event of allowlist failure."
   [^DataInput in class-name]
@@ -1600,17 +1656,17 @@
         id-reader-sm       (read-edn             (read-str in (read-sm-count in)))
         id-reader-md       (read-edn             (read-str in (read-md-count in)))
         id-reader-lg       (read-edn             (read-str in (read-lg-count in)))
-        id-reader-lg2      (read-edn             (read-str in (read-lg-count in)))
+        id-reader-lg_      (read-edn             (read-str in (read-lg-count in)))
         id-record-sm       (read-record       in (read-str in (read-sm-count in)))
         id-record-md       (read-record       in (read-str in (read-md-count in)))
         id-record-lg       (read-record       in (read-str in (read-lg-count in)))
 
-        id-serializable-q-sm  (read-serializable-q  in (read-str in (read-sm-count in)))
-        id-serializable-q-md  (read-serializable-q  in (read-str in (read-md-count in)))
+        id-sz-quarantined-sm    (read-sz-quarantined   in (read-str in (read-sm-count in)))
+        id-sz-quarantined-md    (read-sz-quarantined   in (read-str in (read-md-count in)))
 
-        id-serializable-uq-sm (read-serializable-uq in (read-str in (read-sm-count in)))
-        id-serializable-uq-md (read-serializable-uq in (read-str in (read-md-count in)))
-        id-serializable-uq-lg (read-serializable-uq in (read-str in (read-lg-count in)))
+        id-sz-unquarantined-sm_ (read-sz-unquarantined in (read-str in (read-sm-count in)))
+        id-sz-unquarantined-md_ (read-sz-unquarantined in (read-str in (read-md-count in)))
+        id-sz-unquarantined-lg_ (read-sz-unquarantined in (read-str in (read-lg-count in)))
 
         id-type        (read-type in (thaw-from-in! in))
 
@@ -1648,14 +1704,14 @@
 
         id-kw-sm       (keyword (read-str in (read-sm-count in)))
         id-kw-md       (keyword (read-str in (read-md-count in)))
-        id-kw-md-depr1 (keyword (read-str in (read-lg-count in)))
+        id-kw-md_      (keyword (read-str in (read-lg-count in)))
         id-kw-lg       (keyword (read-str in (read-lg-count in)))
 
-        id-sym-sm       (symbol  (read-str in (read-sm-count in)))
-        id-sym-md       (symbol  (read-str in (read-md-count in)))
-        id-sym-md-depr1 (symbol  (read-str in (read-lg-count in)))
-        id-sym-lg       (symbol  (read-str in (read-lg-count in)))
-        id-regex        (re-pattern (thaw-from-in! in))
+        id-sym-sm      (symbol  (read-str in (read-sm-count in)))
+        id-sym-md      (symbol  (read-str in (read-md-count in)))
+        id-sym-md_     (symbol  (read-str in (read-lg-count in)))
+        id-sym-lg      (symbol  (read-str in (read-lg-count in)))
+        id-regex       (re-pattern (thaw-from-in! in))
 
         id-vec-0       []
         id-vec-2       [(thaw-from-in! in) (thaw-from-in! in)]
@@ -1674,9 +1730,9 @@
         id-map-md      (read-kvs-into {} in (read-md-count in))
         id-map-lg      (read-kvs-into {} in (read-lg-count in))
 
-        id-queue       (read-into (PersistentQueue/EMPTY) in (read-lg-count in))
-        id-sorted-set  (read-into     (sorted-set)        in (read-lg-count in))
-        id-sorted-map  (read-kvs-into (sorted-map)        in (read-lg-count in))
+        id-queue-lg      (read-into (PersistentQueue/EMPTY) in (read-lg-count in))
+        id-sorted-set-lg (read-into     (sorted-set)        in (read-lg-count in))
+        id-sorted-map-lg (read-kvs-into (sorted-map)        in (read-lg-count in))
 
         id-list-0            '()
         id-list-sm     (into '() (rseq (read-into [] in (read-sm-count in))))
@@ -1691,7 +1747,7 @@
         id-byte              (.readByte  in)
         id-short             (.readShort in)
         id-integer           (.readInt   in)
-        id-long-zero   0
+        id-long-0      0
         id-long-sm     (long (.readByte  in))
         id-long-md     (long (.readShort in))
         id-long-lg     (long (.readInt   in))
@@ -1701,7 +1757,7 @@
         id-biginteger          (read-biginteger in)
 
         id-float       (.readFloat  in)
-        id-double-zero 0.0
+        id-double-0    0.0
         id-double      (.readDouble in)
         id-bigdec      (BigDecimal. ^BigInteger (read-biginteger in) (.readInt in))
 
@@ -1710,8 +1766,8 @@
                          (read-biginteger in))
 
         id-date        (Date. (.readLong in))
-        id-uri         (URI. (thaw-from-in! in))
         id-uuid        (UUID. (.readLong in) (.readLong in))
+        id-uri         (URI. (thaw-from-in! in))
 
         id-time-instant
         (let [secs  (.readLong in)
@@ -1754,18 +1810,18 @@
               :content    {:years years :months months :days days}}}))
 
         ;; Deprecated ------------------------------------------------------
-        id-boolean-depr1    (.readBoolean in)
-        id-sorted-map-depr1 (read-kvs-depr1 (sorted-map) in)
-        id-map-depr2        (read-kvs-depr1 {} in)
-        id-reader-depr1     (read-edn (.readUTF in))
-        id-str-depr1                  (.readUTF in)
-        id-kw-depr1         (keyword  (.readUTF in))
-        id-map-depr1        (apply hash-map
-                              (enc/repeatedly-into [] (* 2 (.readInt in))
-                                (fn [] (thaw-from-in! in))))
+        id-boolean_    (.readBoolean in)
+        id-sorted-map_ (read-kvs-depr (sorted-map) in)
+        id-map__       (read-kvs-depr {} in)
+        id-reader_     (read-edn (.readUTF in))
+        id-str_                  (.readUTF in)
+        id-kw_         (keyword  (.readUTF in))
+        id-map_        (apply hash-map
+                         (enc/repeatedly-into [] (* 2 (.readInt in))
+                           (fn [] (thaw-from-in! in))))
         ;; -----------------------------------------------------------------
 
-        id-prefixed-custom (read-custom! in :prefixed (.readShort in))
+        id-prefixed-custom-md (read-custom! in :prefixed (.readShort in))
 
         (if (neg? type-id)
           (read-custom! in nil type-id) ; Unprefixed custom type
@@ -1977,7 +2033,7 @@
   (let [write-id-form
         (if (keyword? custom-type-id)
           ;; Prefixed [const byte id][cust hash id][payload]:
-          `(do (write-id    ~out ~id-prefixed-custom)
+          `(do (write-id    ~out ~id-prefixed-custom-md)
                (.writeShort ~out ~(coerce-custom-type-id custom-type-id)))
           ;; Unprefixed [cust byte id][payload]:
           `(write-id ~out ~(coerce-custom-type-id custom-type-id)))]
