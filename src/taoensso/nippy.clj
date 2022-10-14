@@ -196,19 +196,20 @@
    ;; Necessarily without size information
    81  [:type               nil]
    82  [:prefixed-custom-md nil]
-   59  [:cached-0           nil]
-   63  [:cached-1           nil]
-   64  [:cached-2           nil]
-   65  [:cached-3           nil]
-   66  [:cached-4           nil]
-   72  [:cached-5           nil]
-   73  [:cached-6           nil]
-   74  [:cached-7           nil]
-   67  [:cached-sm          nil]
-   68  [:cached-md          nil]
 
    ;;; DEPRECATED (only support thawing)
    ;; Desc-sorted by deprecation date
+
+   59  [:cached-0_  nil] ; [2022-10-14 v3.3.0]
+   63  [:cached-1_  nil] ; [2022-10-14 v3.3.0]
+   64  [:cached-2_  nil] ; [2022-10-14 v3.3.0]
+   65  [:cached-3_  nil] ; [2022-10-14 v3.3.0]
+   66  [:cached-4_  nil] ; [2022-10-14 v3.3.0]
+   72  [:cached-5_  nil] ; [2022-10-14 v3.3.0]
+   73  [:cached-6_  nil] ; [2022-10-14 v3.3.0]
+   74  [:cached-7_  nil] ; [2022-10-14 v3.3.0]
+   67  [:cached-sm_ nil] ; [2022-10-14 v3.3.0]
+   68  [:cached-md_ nil] ; [2022-10-14 v3.3.0]
 
    78  [:sym-md_ [[:bytes {:read 4}]]] ; [2020-11-18 v3.1.1] Buggy size field, Ref. #138
    77  [:kw-md_  [[:bytes {:read 4}]]] ; [2020-11-18 v3.1.1] Buggy size field, Ref. #138
@@ -945,85 +946,15 @@
       (write-id ~'out ~id)
       ~@body)))
 
-;;;; Caching ; Experimental
+;;;; Caching (deprecated)
 
-;; Nb: don't use an auto initialValue; can cause thread-local state to
-;; accidentally hang around with the use of `freeze-to-out!`, etc.
-;; Safer to require explicit activation through `with-cache`.
-(def ^ThreadLocal -cache-proxy
-  "{[<x> <meta>] <idx>} for freezing, {<idx> <x-with-meta>} for thawing."
-  (proxy [ThreadLocal] []))
-
+(def ^ThreadLocal -cache-proxy (proxy [ThreadLocal] []))
 (defmacro ^:private with-cache
-  "Experimental, subject to change.
-  Executes body with support for freezing/thawing cached values.
-
-  This is a low-level util: you won't need to use this yourself unless
-  you're using `freeze-to-out!` or `thaw-from-in!` (also low-level utils).
-
-  See also `cache`."
   [& body]
   `(try
      (.set -cache-proxy (volatile! nil))
      (do ~@body)
      (finally (.remove -cache-proxy))))
-
-(deftype Cached [val])
-(defn cache
-  "Experimental, subject to change.
-
-  Wraps value so that future writes of the same wrapped value with same
-  metadata will be efficiently encoded as references to this one.
-
-  (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
-    will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
-  [x]
-  (if (instance? Cached x) x (Cached. x)))
-
-(comment (cache "foo"))
-
-(freezer Cached
-  (let [x-val (.-val x)]
-    (if-let [cache_ (.get -cache-proxy)]
-      (let [cache    @cache_
-            k        #_x-val [x-val (meta x-val)] ; Also check meta for equality
-            ?idx     (get cache k)
-            ^int idx (or ?idx
-                       (let [idx (count cache)]
-                         (vswap! cache_ assoc k idx)
-                         idx))
-
-            first-occurance? (nil? ?idx)]
-
-        (enc/cond
-          (sm-count? idx)
-          (case (int idx)
-            0 (do (write-id out id-cached-0) (when first-occurance? (-freeze-with-meta! x-val out)))
-            1 (do (write-id out id-cached-1) (when first-occurance? (-freeze-with-meta! x-val out)))
-            2 (do (write-id out id-cached-2) (when first-occurance? (-freeze-with-meta! x-val out)))
-            3 (do (write-id out id-cached-3) (when first-occurance? (-freeze-with-meta! x-val out)))
-            4 (do (write-id out id-cached-4) (when first-occurance? (-freeze-with-meta! x-val out)))
-            5 (do (write-id out id-cached-5) (when first-occurance? (-freeze-with-meta! x-val out)))
-            6 (do (write-id out id-cached-6) (when first-occurance? (-freeze-with-meta! x-val out)))
-            7 (do (write-id out id-cached-7) (when first-occurance? (-freeze-with-meta! x-val out)))
-
-            (do
-              (write-id       out id-cached-sm)
-              (write-sm-count out idx)
-              (when first-occurance? (-freeze-with-meta! x-val out))))
-
-          (md-count? idx)
-          (do
-            (write-id       out id-cached-md)
-            (write-md-count out idx)
-            (when first-occurance? (-freeze-with-meta! x-val out)))
-
-          :else
-          ;; (throw (ex-info "Max cache size exceeded" {:idx idx}))
-          (-freeze-with-meta! x-val out) ; Just freeze uncached
-          ))
-
-      (-freeze-with-meta! x-val out))))
 
 (declare thaw-from-in!)
 (def ^:private thaw-cached
@@ -1038,13 +969,6 @@
             v))
         (throw (ex-info "No cache_ established, can't thaw. See `with-cache`."
                  {}))))))
-
-(comment
-  (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")]))
-  (let [v1 (with-meta [] {:id :v1})
-        v2 (with-meta [] {:id :v2})]
-    (mapv meta
-      (thaw (freeze [(cache v1) (cache v2) (cache v1) (cache v2)])))))
 
 ;;;;
 
@@ -1233,7 +1157,7 @@
   [x]
   (let [baos (ByteArrayOutputStream. 64)
         dos  (DataOutputStream. baos)]
-    (with-cache (-freeze-with-meta! x dos))
+    (-freeze-with-meta! x dos)
     (.toByteArray baos)))
 
 (defn freeze
@@ -1260,11 +1184,11 @@
              (when-not no-header? ; Avoid `wrap-header`'s array copy:
                (let [head-ba (get-head-ba {:compressor-id nil :encryptor-id nil})]
                  (.write dos head-ba 0 4)))
-             (with-cache (-freeze-with-meta! x dos))
+             (-freeze-with-meta! x dos)
              (.toByteArray baos))
 
            (do
-             (with-cache (-freeze-with-meta! x dos))
+             (-freeze-with-meta! x dos)
              (let [ba (.toByteArray baos)
 
                    compressor
@@ -1524,16 +1448,16 @@
                            (with-meta (thaw-from-in! in) m)
                            (do        (thaw-from-in! in))))
 
-        id-cached-0    (thaw-cached 0 in)
-        id-cached-1    (thaw-cached 1 in)
-        id-cached-2    (thaw-cached 2 in)
-        id-cached-3    (thaw-cached 3 in)
-        id-cached-4    (thaw-cached 4 in)
-        id-cached-5    (thaw-cached 5 in)
-        id-cached-6    (thaw-cached 6 in)
-        id-cached-7    (thaw-cached 7 in)
-        id-cached-sm   (thaw-cached (read-sm-count in) in)
-        id-cached-md   (thaw-cached (read-md-count in) in)
+        id-cached-0_   (thaw-cached 0 in)
+        id-cached-1_   (thaw-cached 1 in)
+        id-cached-2_   (thaw-cached 2 in)
+        id-cached-3_   (thaw-cached 3 in)
+        id-cached-4_   (thaw-cached 4 in)
+        id-cached-5_   (thaw-cached 5 in)
+        id-cached-6_   (thaw-cached 6 in)
+        id-cached-7_   (thaw-cached 7 in)
+        id-cached-sm_  (thaw-cached (read-sm-count in) in)
+        id-cached-md_  (thaw-cached (read-md-count in) in)
 
         id-bytes-0     (byte-array 0)
         id-bytes-sm    (read-bytes in (read-sm-count in))
