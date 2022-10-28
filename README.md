@@ -1,39 +1,31 @@
 <a href="https://www.taoensso.com" title="More stuff by @ptaoussanis at www.taoensso.com">
-<img src="https://www.taoensso.com/taoensso-open-source.png" alt="Taoensso open-source" width="400"/></a>
+<img src="https://www.taoensso.com/taoensso-open-source.png" alt="Taoensso open-source" width="350"/></a>
 
-**[CHANGELOG]** | [API] | current [Break Version]:
+**[CHANGELOG][]** | [API][] | current [Break Version][]:
 
 ```clojure
-[com.taoensso/nippy "3.2.0"]
+[com.taoensso/nippy "3.2.0"] ; See CHANGELOG for details
 ```
 
-<!-- ![build status](https://github.com/ptaoussanis/nippy/workflows/build/badge.svg?branch=master) -->
-
-> See [here](https://taoensso.com/clojure/backers) if you're interested in helping support my open-source work, thanks! - Peter Taoussanis
-
-## _SECURITY ADVISORY_
-
-Users of Nippy <= `v2.15.0-RC1` should **please upgrade ASAP** due to a **Remote Code Execution (RCE) vulnerability** when deserializing data from an **untrusted source**.
-
-See [here](https://github.com/ptaoussanis/nippy/issues/130) for details, including upgrade instructions.
+> See [here][backers] if to help support my open-source work, thanks! - [Peter Taoussanis][Taoensso.com]
 
 # Nippy: the fastest serialization library for Clojure
 
-Clojure's [rich data types] are *awesome*. And its [reader] allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
+Clojure's [rich data types] are *awesome*. And its [reader][] allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
-Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**. Used by the [Carmine Redis client], the [Faraday DynamoDB client], [PigPen], [Onyx] and others.
+Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**. Used by the [Carmine Redis client][], the [Faraday DynamoDB client][], [PigPen][], [Onyx][] and others.
 
 ## Features
- * Small, uncomplicated **all-Clojure** library
- * **Terrific performance** (the fastest for Clojure that I'm aware of)
- * Comprehesive **support for all standard data types**
- * **Easily extendable to custom data types** (v2.1+)
- * Java's **Serializable** fallback when available (v2.5+)
- * **Reader-fallback** for all other types (including Clojure 1.4+ tagged literals)
- * **Full test coverage** for every supported type
- * Fully pluggable **compression**, including built-in high-performance [LZ4] compressor
- * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option (v2+)
- * Utils for **easy integration into 3rd-party tools/libraries** (v2+)
+ * Small, simple **all-Clojure** library.
+ * **Terrific performance** (the fastest for Clojure that I'm aware of).
+ * Comprehesive **support for all standard data types**.
+ * **Easily extendable to custom data types**.
+ * Java's **Serializable** fallback when available.
+ * **Reader-fallback** for all other types (including tagged literals)
+ * **Full test coverage** for every supported type.
+ * Fully pluggable **compression**, including built-in high-performance [LZ4][] compressor.
+ * Fully pluggable **encryption**, including built-in high-strength AES128 enabled with a single `:password [:salted "my-password"]` option.
+ * Utils for **easy integration into 3rd-party tools/libraries**.
 
 ## Getting started
 
@@ -155,7 +147,7 @@ Couldn't be simpler!
 
 See also the lower-level `freeze-to-out!` and `thaw-from-in!` fns for operating on `DataOutput` and `DataInput` types directly. 
 
-### Encryption (v2+)
+### Encryption
 
 Nippy also gives you **dead simple data encryption**. Add a single option to your usual freeze/thaw calls like so:
 
@@ -164,9 +156,9 @@ Nippy also gives you **dead simple data encryption**. Add a single option to you
 (nippy/thaw   <encrypted-data>  {:password [:salted "my-password"]}) ; Decrypt
 ```
 
-There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-encryptor` [API] docs for a detailed explanation of why/when you'd want one or the other.
+There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See the `aes128-encryptor` [API][] docs for a detailed explanation of why/when you'd want one or the other.
 
-### Custom types (v2.1+)
+### Custom types
 
 ```clojure
 (defrecord MyType [data])
@@ -186,29 +178,27 @@ There's two default forms of encryption on offer: `:salted` and `:cached`. Each 
 
 Nippy is currently the **fastest serialization library for Clojure** that I'm aware of, and offers roundtrip times between **~10x and ~15x** faster than Clojure's `tools.reader.edn`, with a **~40% smaller output size**.
 
-![benchmarks-png]
+![benchmarks-png][]
 
-[Detailed benchmark info] is available on Google Docs.
+Benchmark code is included with this repo, and can be easily run in your own environment.
 
 ## Contacting me / contributions
 
-Please use the project's [GitHub issues page] for all questions, ideas, etc. **Pull requests welcome**. See the project's [GitHub contributors page] for a list of contributors.
+Please use the project's [GitHub issues page][] for all questions, ideas, etc. **Pull requests welcome**. See the project's [GitHub contributors page][] for a list of contributors.
 
-Otherwise, you can reach me at [Taoensso.com]. Happy hacking!
+Otherwise, you can reach me at [Taoensso.com][]. Happy hacking!
 
-\- [Peter Taoussanis]
+\- [Peter Taoussanis][Taoensso.com]
 
 ## License
 
-Distributed under the [EPL v1.0] \(same as Clojure).  
-Copyright &copy; 2012-2022 [Peter Taoussanis].
+Distributed under the [EPL v1.0][] \(same as Clojure).  
+Copyright &copy; 2012-2022 [Peter Taoussanis][Taoensso.com].
 
 <!--- Standard links -->
 [Taoensso.com]: https://www.taoensso.com
-[Peter Taoussanis]: https://www.taoensso.com
-[@ptaoussanis]: https://www.taoensso.com
-[More by @ptaoussanis]: https://www.taoensso.com
 [Break Version]: https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md
+[backers]: https://taoensso.com/clojure/backers
 
 <!--- Standard links (repo specific) -->
 [CHANGELOG]: https://github.com/ptaoussanis/nippy/releases
@@ -227,4 +217,3 @@ Copyright &copy; 2012-2022 [Peter Taoussanis].
 [Onyx]: https://github.com/onyx-platform/onyx
 [LZ4]: https://code.google.com/p/lz4/
 [benchmarks-png]: https://github.com/ptaoussanis/nippy/raw/master/benchmarks.png
-[Detailed benchmark info]: https://docs.google.com/spreadsheet/ccc?key=0AuSXb68FH4uhdE5kTTlocGZKSXppWG9sRzA5Y2pMVkE
