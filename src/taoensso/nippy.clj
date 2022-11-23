@@ -33,6 +33,9 @@
 
 ;;;; TODO
 ;; - Performance would benefit from ^:static support / direct linking / etc.
+;; - Counts could actually be unsigned (e.g. -sm as [0,255] instead of [-128,127]).
+;;   Would require a breaking change (e.g. version 2 header), probably not worth
+;;   the effort.
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
@@ -407,18 +410,20 @@
   (defn- init-allowlist [action default incl-legacy?]
     (let [allowlist-base
           (or
-            (when-let [s (or
-                           (enc/get-sys-val (get-in ids [action  :base :prop]) (get-in ids [action  :base :env]))
-                           (when incl-legacy?
-                             (enc/get-sys-val (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env]))))]
+            (when-let [s
+                       (or
+                         (do                (enc/get-sys-val (get-in ids [action  :base :prop]) (get-in ids [action  :base :env])))
+                         (when incl-legacy? (enc/get-sys-val (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env]))))]
+
               (if (allow-and-record? s) s (split-class-names>set s)))
             default)
 
           allowlist-add
-          (when-let [s (or
-                         (enc/get-sys-val (get-in ids [action  :add :prop]) (get-in ids [action  :add :env]))
-                         (when incl-legacy?
-                           (enc/get-sys-val (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env]))))]
+          (when-let [s
+                     (or
+                       (do                (enc/get-sys-val (get-in ids [action  :add :prop]) (get-in ids [action  :add :env])))
+                       (when incl-legacy? (enc/get-sys-val (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env]))))]
+
             (if (allow-and-record? s) s (split-class-names>set s)))]
 
       (if (and allowlist-base allowlist-add)
