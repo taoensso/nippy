@@ -11,6 +11,7 @@
     [encryption  :as encryption]])
 
   (:import
+   [java.nio.charset StandardCharsets]
    [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
     DataOutputStream Serializable ObjectOutputStream ObjectInputStream
     DataOutput DataInput]
@@ -52,8 +53,7 @@
 ;; [2] See `IFreezable1` protocol for type-specific payload formats,
 ;;     `thaw-from-in!` for reference type-specific thaw implementations
 ;;
-(def ^:private ^:const charset "UTF-8")
-(def ^:private head-sig "First 3 bytes of Nippy header" (.getBytes "NPY" charset))
+(def ^:private head-sig "First 3 bytes of Nippy header" (.getBytes "NPY" StandardCharsets/UTF_8))
 (def ^:private ^:const head-version "Current Nippy header format version" 1)
 (def ^:private ^:const head-meta
   "Final byte of 4-byte Nippy header stores version-dependent metadata"
@@ -679,13 +679,13 @@
 
 (defn- write-biginteger [out ^BigInteger n] (write-bytes-lg out (.toByteArray n)))
 
-(defn- write-str-sm [^DataOutput out ^String s] (write-bytes-sm out (.getBytes s charset)))
-(defn- write-str-md [^DataOutput out ^String s] (write-bytes-md out (.getBytes s charset)))
-(defn- write-str-lg [^DataOutput out ^String s] (write-bytes-lg out (.getBytes s charset)))
+(defn- write-str-sm [^DataOutput out ^String s] (write-bytes-sm out (.getBytes s StandardCharsets/UTF_8)))
+(defn- write-str-md [^DataOutput out ^String s] (write-bytes-md out (.getBytes s StandardCharsets/UTF_8)))
+(defn- write-str-lg [^DataOutput out ^String s] (write-bytes-lg out (.getBytes s StandardCharsets/UTF_8)))
 (defn- write-str    [^DataOutput out ^String s]
   (if (identical? s "")
     (write-id out id-str-0)
-    (let [ba  (.getBytes s charset)
+    (let [ba  (.getBytes s StandardCharsets/UTF_8)
           len (alength ba)]
       (enc/cond
         (sm-count? len)
@@ -704,7 +704,7 @@
 
 (defn- write-kw [^DataOutput out kw]
   (let [s   (if-let [ns (namespace kw)] (str ns "/" (name kw)) (name kw))
-        ba  (.getBytes s charset)
+        ba  (.getBytes s StandardCharsets/UTF_8)
         len (alength ba)]
     (enc/cond
       (sm-count? len)
@@ -725,7 +725,7 @@
 
 (defn- write-sym [^DataOutput out s]
   (let [s   (if-let [ns (namespace s)] (str ns "/" (name s)) (name s))
-        ba  (.getBytes s charset)
+        ba  (.getBytes s StandardCharsets/UTF_8)
         len (alength ba)]
     (enc/cond
       (sm-count? len)
@@ -979,7 +979,7 @@
 
 (defn- write-serializable [^DataOutput out x ^String class-name]
   (when-debug (println (str "write-serializable: " (type x))))
-  (let [class-name-ba (.getBytes class-name charset)
+  (let [class-name-ba (.getBytes class-name StandardCharsets/UTF_8)
         len           (alength   class-name-ba)]
 
     (enc/cond
@@ -1012,7 +1012,7 @@
 (defn- write-readable [^DataOutput out x]
   (when-debug (println (str "write-readable: " (type x))))
   (let [edn    (enc/pr-edn x)
-        edn-ba (.getBytes ^String edn charset)
+        edn-ba (.getBytes ^String edn StandardCharsets/UTF_8)
         len    (alength edn-ba)]
     (enc/cond
       (sm-count? len)
@@ -1160,7 +1160,7 @@
 (freezer ISeq                 (write-coll           out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
 (freezer IRecord
   (let [class-name    (.getName (class x)) ; Reflect
-        class-name-ba (.getBytes class-name charset)
+        class-name-ba (.getBytes class-name StandardCharsets/UTF_8)
         len           (alength   class-name-ba)]
     (enc/cond
       (sm-count? len)
@@ -1387,17 +1387,17 @@
     id-bytes-md (read-bytes in (read-md-count in))
     id-bytes-lg (read-bytes in (read-lg-count in)))))
 
-(defn- read-str-sm [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count in)) charset))
-(defn- read-str-md [^DataInput in] (String. ^bytes (read-bytes in (read-md-count in)) charset))
-(defn- read-str-lg [^DataInput in] (String. ^bytes (read-bytes in (read-lg-count in)) charset))
+(defn- read-str-sm [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count in)) StandardCharsets/UTF_8))
+(defn- read-str-md [^DataInput in] (String. ^bytes (read-bytes in (read-md-count in)) StandardCharsets/UTF_8))
+(defn- read-str-lg [^DataInput in] (String. ^bytes (read-bytes in (read-lg-count in)) StandardCharsets/UTF_8))
 (defn- read-str
-  ([^DataInput in len] (String. ^bytes (read-bytes in len) charset))
+  ([^DataInput in len] (String. ^bytes (read-bytes in len) StandardCharsets/UTF_8))
   ([^DataInput in    ]
    (enc/case-eval (.readByte in)
      id-str-0  ""
-     id-str-sm (String. ^bytes (read-bytes in (read-sm-count in)) charset)
-     id-str-md (String. ^bytes (read-bytes in (read-md-count in)) charset)
-     id-str-lg (String. ^bytes (read-bytes in (read-lg-count in)) charset))))
+     id-str-sm (String. ^bytes (read-bytes in (read-sm-count in)) StandardCharsets/UTF_8)
+     id-str-md (String. ^bytes (read-bytes in (read-md-count in)) StandardCharsets/UTF_8)
+     id-str-lg (String. ^bytes (read-bytes in (read-lg-count in)) StandardCharsets/UTF_8))))
 
 (defn- read-biginteger [^DataInput in] (BigInteger. ^bytes (read-bytes in (.readInt in))))
 
@@ -2101,8 +2101,8 @@
      (let [[first2bytes nextbytes] (enc/ba-split ba 2)
            ?known-wrapper
            (enc/cond
-             (enc/ba= first2bytes (.getBytes "\u0000<" charset)) :carmine/bin
-             (enc/ba= first2bytes (.getBytes "\u0000>" charset)) :carmine/clj)
+             (enc/ba= first2bytes (.getBytes "\u0000<" StandardCharsets/UTF_8)) :carmine/bin
+             (enc/ba= first2bytes (.getBytes "\u0000>" StandardCharsets/UTF_8)) :carmine/clj)
 
            unwrapped-ba (if ?known-wrapper nextbytes ba)
            [data-ba ?nippy-header] (or (try-parse-header unwrapped-ba)
