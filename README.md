@@ -108,6 +108,7 @@ nippy/stress-data
  :uri          (URI. "https://clojure.org/reference/data_structures")
  :uuid         (java.util.UUID/randomUUID)
  :date         (java.util.Date.)
+ :sql-date     (java.sql.Date/valueOf "2023-06-21")
 
  ;;; JVM 8+
  :time-instant  (java.time.Instant/now)
