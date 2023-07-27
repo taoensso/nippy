@@ -17,7 +17,7 @@
     DataOutput DataInput]
    [java.lang.reflect Method Field Constructor]
    [java.net URI]
-   [java.util Date UUID]
+   [java.util #_Date UUID]
    [java.util.regex Pattern]
    [clojure.lang Keyword Symbol BigInt Ratio
     APersistentMap APersistentVector APersistentSet
@@ -114,8 +114,9 @@
    60  [:float    [[:bytes 4]]]
    61  [:double   [[:bytes 8]]]
 
-   90  [:date     [[:bytes 8]]]
-   91  [:uuid     [[:bytes 16]]]
+   91  [:uuid      [[:bytes 16]]]
+   90  [:util-date [[:bytes 8]]]
+   92  [:sql-date  [[:bytes 8]]]
 
    ;; JVM >=8
    79  [:time-instant  [[:bytes 12]]]
@@ -367,8 +368,9 @@
     "java.lang.ClassCastException"
 
     "java.net.URI"
-    "java.util.UUID"
-    "java.util.Date"
+    ;; "java.util.UUID" ; Unnecessary (have native Nippy implementation)
+    ;; "java.util.Date" ; ''
+    ;; "java.sql.Date"  ; ''
 
     #_"java.time.*" ; Safe?
     "java.time.Clock"
@@ -1066,7 +1068,8 @@
   (write-biginteger out (.numerator   x))
   (write-biginteger out (.denominator x)))
 
-(id-freezer Date id-date (.writeLong out (.getTime x)))
+(id-freezer java.util.Date id-util-date (.writeLong out (.getTime x)))
+(id-freezer java.sql.Date  id-sql-date  (.writeLong out (.getTime x)))
 
 (id-freezer URI id-uri
   (write-str out (.toString x)))
@@ -1610,7 +1613,8 @@
                          (read-biginteger in)
                          (read-biginteger in))
 
-        id-date        (Date. (.readLong in))
+        id-util-date   (java.util.Date. (.readLong in))
+        id-sql-date    (java.sql.Date.  (.readLong in))
         id-uuid        (UUID. (.readLong in) (.readLong in))
         id-uri         (URI. (thaw-from-in! in))
 
@@ -1986,7 +1990,8 @@
    :ratio        22/7
    :uri          (java.net.URI. "https://clojure.org/reference/data_structures")
    :uuid         (java.util.UUID/randomUUID)
-   :date         (java.util.Date.)
+   :util-date    (java.util.Date.)
+   :sql-date     (java.sql.Date/valueOf "2023-06-21")
 
    ;;; JVM 8+
    :time-instant  (enc/compile-if java.time.Instant  (java.time.Instant/now)                nil)
