@@ -364,6 +364,7 @@
     "java.lang.IllegalArgumentException"
     "java.lang.NullPointerException"
     "java.lang.IndexOutOfBoundsException"
+    "java.lang.ClassCastException"
 
     "java.net.URI"
     "java.util.UUID"
