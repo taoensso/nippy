@@ -326,6 +326,8 @@
 
 ;;;; Metadata
 
+(def my-var "Just a string")
+
 (deftest _metadata
   [(is
      (:has-meta?
@@ -355,7 +357,12 @@
            {:incl-metadata? true}
            )))
 
-     "Metadata successfully excluded by freeze")])
+     "Metadata successfully excluded by freeze")
+
+   (is (var? (nippy/read-quarantined-serializable-object-unsafe!
+               (nippy/thaw (nippy/freeze #'my-var))))
+
+     "Don't try to preserve metadata on vars")])
 
 ;;;; Benchmarks
 

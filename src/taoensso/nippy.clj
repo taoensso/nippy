@@ -630,9 +630,9 @@
 (defprotocol     IFreezable1 (-freeze-without-meta! [x data-output]))
 (defprotocol     IFreezable2 (-freeze-with-meta!    [x data-output]))
 (extend-protocol IFreezable2 ; Must be a separate protocol
-  clojure.lang.IMeta
+  clojure.lang.IObj ; IMeta => `meta` will work, IObj => `with-meta` will work
   (-freeze-with-meta! [x ^DataOutput data-output]
-    (let [m (when *incl-metadata?* (.meta x))]
+    (let [m (when *incl-metadata?* (meta x))]
       (when m
         (write-id data-output id-meta)
         (-freeze-without-meta! m data-output)))
