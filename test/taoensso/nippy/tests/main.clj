@@ -133,6 +133,44 @@
         (let [mr (MyRec. "basic" "fancy")]
           (=  mr (thaw (freeze mr))))))))
 
+;;;; Caching
+
+(deftest _caching
+  (let [stress [nippy/stress-data-comparable
+                nippy/stress-data-comparable
+                nippy/stress-data-comparable
+                nippy/stress-data-comparable]
+        cached (mapv nippy/cache stress)
+        cached (mapv nippy/cache stress) ; <=1 wrap auto-enforced
+        ]
+
+    (is (= stress (thaw (freeze stress {:compressor nil}))))
+    (is (= stress (thaw (freeze cached {:compressor nil}))))
+    (let [size-stress (count (freeze stress {:compressor nil}))
+          size-cached (count (freeze cached {:compressor nil}))]
+      (is (>= size-stress (* 3 size-cached)))
+      (is (<  size-stress (* 4 size-cached))))))
+
+(deftest _caching-metadata
+  (let [v1 (with-meta [] {:id :v1})
+        v2 (with-meta [] {:id :v2})
+
+        frozen-without-caching (freeze [v1 v2 v1 v2])
+        frozen-with-caching
+        (freeze [(nippy/cache v1)
+                 (nippy/cache v2)
+                 (nippy/cache v1)
+                 (nippy/cache v2)])]
+
+    (is (> (count frozen-without-caching)
+           (count frozen-with-caching)))
+
+    (is (= (thaw frozen-without-caching)
+           (thaw frozen-with-caching)))
+
+    (is (= (mapv meta (thaw frozen-with-caching))
+           [{:id :v1} {:id :v2} {:id :v1} {:id :v2}]))))
+
 ;;;; Stable binary representation of vals
 
 (deftest _stable-bin
