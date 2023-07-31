@@ -86,7 +86,15 @@
    (is ; CBC auto-encryptor compatibility
      (= "payload"
        (thaw (freeze "payload" {:password [:salted "pwd"] :encryptor nippy/aes128-cbc-encryptor})
-         (do                   {:password [:salted "pwd"]}))))])
+         (do                   {:password [:salted "pwd"]}))))
+
+   (testing "Signed long types"
+     (let [range-ushort+ (+ (long @#'nippy/range-ushort) 128)
+           range-uint+   (+ (long @#'nippy/range-uint)   128)]
+
+       [(let [r (range (- range-ushort+) range-ushort+)] (= (thaw (freeze r)) r))
+        (let [n    range-uint+]                          (= (thaw (freeze n)) n))
+        (let [n (- range-uint+)]                         (= (thaw (freeze n)) n))]))])
 
 ;;;; Custom types & records
 

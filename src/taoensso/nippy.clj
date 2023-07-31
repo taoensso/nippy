@@ -104,11 +104,17 @@
    41  [:short    [[:bytes 2]]]
    42  [:integer  [[:bytes 4]]]
 
-   0   [:long-0   []]
-   100 [:long-sm  [[:bytes 1]]]
-   101 [:long-md  [[:bytes 2]]]
-   102 [:long-lg  [[:bytes 4]]]
-   43  [:long-xl  [[:bytes 8]]]
+   0   [:long-0      []]
+
+   87  [:long-pos-sm [[:bytes 1]]]
+   88  [:long-pos-md [[:bytes 2]]]
+   89  [:long-pos-lg [[:bytes 4]]]
+
+   93  [:long-neg-sm [[:bytes 1]]]
+   94  [:long-neg-md [[:bytes 2]]]
+   95  [:long-neg-lg [[:bytes 4]]]
+
+   43  [:long-xl     [[:bytes 8]]]
 
    55  [:double-0 []]
    60  [:float    [[:bytes 4]]]
@@ -210,6 +216,10 @@
 
    ;;; DEPRECATED (only support thawing)
    ;; Desc-sorted by deprecation date
+
+   100 [:long-sm_ [[:bytes 1]]] ; [2023-mm-dd v3.3.3] Switch to 2x pos/neg ids
+   101 [:long-md_ [[:bytes 2]]] ; [2023-mm-dd v3.3.3] Switch to 2x pos/neg ids
+   102 [:long-lg_ [[:bytes 4]]] ; [2023-mm-dd v3.3.3] Switch to 2x pos/neg ids
 
    78  [:sym-md_ [[:bytes {:read 4}]]] ; [2020-11-18 v3.1.1] Buggy size field, Ref. #138
    77  [:kw-md_  [[:bytes {:read 4}]]] ; [2020-11-18 v3.1.1] Buggy size field, Ref. #138
@@ -613,6 +623,11 @@
 ;;;; Freezing
 
 (do
+  (def ^:private ^:const range-ubyte  (-    Byte/MAX_VALUE    Byte/MIN_VALUE))
+  (def ^:private ^:const range-ushort (-   Short/MAX_VALUE   Short/MIN_VALUE))
+  (def ^:private ^:const range-uint   (- Integer/MAX_VALUE Integer/MIN_VALUE)))
+
+(do
   (defmacro write-id [out id] `(.writeByte ~out ~id))
 
   (defmacro ^:private sm-count? [n] `(<= ~n  Byte/MAX_VALUE))
@@ -702,17 +717,18 @@
     (zero? n) (write-id out id-long-0)
     (pos?  n)
     (enc/cond
-      (<= n    Byte/MAX_VALUE) (do (write-id out id-long-sm) (.writeByte  out n))
-      (<= n   Short/MAX_VALUE) (do (write-id out id-long-md) (.writeShort out n))
-      (<= n Integer/MAX_VALUE) (do (write-id out id-long-lg) (.writeInt   out n))
-      :else                    (do (write-id out id-long-xl) (.writeLong  out n)))
+      (<= n range-ubyte)  (do (write-id out id-long-pos-sm) (.writeByte  out (+ n    Byte/MIN_VALUE)))
+      (<= n range-ushort) (do (write-id out id-long-pos-md) (.writeShort out (+ n   Short/MIN_VALUE)))
+      (<= n range-uint)   (do (write-id out id-long-pos-lg) (.writeInt   out (+ n Integer/MIN_VALUE)))
+      :else               (do (write-id out id-long-xl)     (.writeLong  out    n)))
 
     :else
-    (enc/cond
-      (>= n    Byte/MIN_VALUE) (do (write-id out id-long-sm) (.writeByte  out n))
-      (>= n   Short/MIN_VALUE) (do (write-id out id-long-md) (.writeShort out n))
-      (>= n Integer/MIN_VALUE) (do (write-id out id-long-lg) (.writeInt   out n))
-      :else                    (do (write-id out id-long-xl) (.writeLong  out n)))))
+    (let [y (- n)]
+      (enc/cond
+        (<= y range-ubyte)  (do (write-id out id-long-neg-sm) (.writeByte  out (+ y    Byte/MIN_VALUE)))
+        (<= y range-ushort) (do (write-id out id-long-neg-md) (.writeShort out (+ y   Short/MIN_VALUE)))
+        (<= y range-uint)   (do (write-id out id-long-neg-lg) (.writeInt   out (+ y Integer/MIN_VALUE)))
+        :else               (do (write-id out id-long-xl)     (.writeLong  out    n))))))
 
 (defmacro ^:private -run!    [proc coll] `(do (reduce    #(~proc %2)    nil ~coll) nil))
 (defmacro ^:private -run-kv! [proc    m] `(do (reduce-kv #(~proc %2 %3) nil    ~m) nil))
@@ -1596,10 +1612,18 @@
         id-short             (.readShort in)
         id-integer           (.readInt   in)
         id-long-0      0
-        id-long-sm     (long (.readByte  in))
-        id-long-md     (long (.readShort in))
-        id-long-lg     (long (.readInt   in))
+        id-long-sm_    (long (.readByte  in))
+        id-long-md_    (long (.readShort in))
+        id-long-lg_    (long (.readInt   in))
         id-long-xl           (.readLong  in)
+
+        id-long-pos-sm    (- (long (.readByte  in))    Byte/MIN_VALUE)
+        id-long-pos-md    (- (long (.readShort in))   Short/MIN_VALUE)
+        id-long-pos-lg    (- (long (.readInt   in)) Integer/MIN_VALUE)
+
+        id-long-neg-sm (- (- (long (.readByte  in))    Byte/MIN_VALUE))
+        id-long-neg-md (- (- (long (.readShort in))   Short/MIN_VALUE))
+        id-long-neg-lg (- (- (long (.readInt   in)) Integer/MIN_VALUE))
 
         id-bigint      (bigint (read-biginteger in))
         id-biginteger          (read-biginteger in)
