@@ -130,7 +130,7 @@
    84  [:time-period   [[:bytes 12]]]
 
    34  [:str-0     []]
-   105 [:str-sm    [[:bytes {:read 1}]]]
+   96  [:str-sm*   [[:bytes {:read 1 :unsigned? true}]]]
    16  [:str-md    [[:bytes {:read 2}]]]
    13  [:str-lg    [[:bytes {:read 4}]]]
 
@@ -152,17 +152,17 @@
    17  [:vec-0     []]
    113 [:vec-2     [[:elements 2]]]
    114 [:vec-3     [[:elements 3]]]
-   110 [:vec-sm    [[:elements {:read 1}]]]
+   97  [:vec-sm*   [[:elements {:read 1 :unsigned? true}]]]
    69  [:vec-md    [[:elements {:read 2}]]]
    21  [:vec-lg    [[:elements {:read 4}]]]
 
    18  [:set-0     []]
-   111 [:set-sm    [[:elements {:read 1}]]]
+   98  [:set-sm*   [[:elements {:read 1 :unsigned? true}]]]
    32  [:set-md    [[:elements {:read 2}]]]
    23  [:set-lg    [[:elements {:read 4}]]]
 
    19  [:map-0     []]
-   112 [:map-sm    [[:elements {:read 1 :multiplier 2}]]]
+   99  [:map-sm*   [[:elements {:read 1 :multiplier 2 :unsigned? true}]]]
    33  [:map-md    [[:elements {:read 2 :multiplier 2}]]]
    30  [:map-lg    [[:elements {:read 4 :multiplier 2}]]]
 
@@ -216,6 +216,11 @@
 
    ;;; DEPRECATED (only support thawing)
    ;; Desc-sorted by deprecation date
+
+   105 [:str-sm_  [[:bytes    {:read 1}]]]               ; [2023-mm-dd v3.3.3] Switch to unsigned sm*
+   110 [:vec-sm_  [[:elements {:read 1}]]]               ; [2023-mm-dd v3.3.3] Switch to unsigned sm*
+   111 [:set-sm_  [[:elements {:read 1}]]]               ; [2023-mm-dd v3.3.3] Switch to unsigned sm*
+   112 [:map-sm_  [[:elements {:read 1 :multiplier 2}]]] ; [2023-mm-dd v3.3.3] Switch to unsigned sm*
 
    100 [:long-sm_ [[:bytes 1]]] ; [2023-mm-dd v3.3.3] Switch to 2x pos/neg ids
    101 [:long-md_ [[:bytes 2]]] ; [2023-mm-dd v3.3.3] Switch to 2x pos/neg ids
@@ -279,7 +284,7 @@
     - `type-id`: A +ive single-byte identifier like `110`.
                  -ive type ids are reserved for custom user-defined types.
 
-    - `type-kw`: A keyword like `:vec-sm`,
+    - `type-kw`: A keyword like `:kw-sm`,
       suffixes used to differentiate subtypes of different sizes:
         -0  ; Empty       => 0 byte         payload / element-count
         -sm ; Small       => 1 byte (byte)  payload / element-count
@@ -295,10 +300,10 @@
                                    ; 2 elements
 
       - [[:bytes    {:read 2}]
-         [:elements {:read 4 :multiplier 2}]]
+         [:elements {:read 4 :multiplier 2 :unsigned? true}]]
 
         ; Type has payload of <short-count> bytes, then
-        ; <int-count>*2 (multiplier) elements
+        ; <unsigned-int-count>*2 (multiplier) elements
 
       Note that `payload-spec` can be handy for skipping over items in
       data stream without fully reading every item."
@@ -317,6 +322,8 @@
 
     types-spec
     types-spec))
+
+(comment (get public-types-spec 96))
 
 ;;;; Ns imports (for convenience of lib consumers)
 
@@ -630,16 +637,19 @@
 (do
   (defmacro write-id [out id] `(.writeByte ~out ~id))
 
-  (defmacro ^:private sm-count? [n] `(<= ~n  Byte/MAX_VALUE))
-  (defmacro ^:private md-count? [n] `(<= ~n Short/MAX_VALUE))
+  (defmacro ^:private sm-count?* [n] `(<= ~n     range-ubyte)) ; Unsigned
+  (defmacro ^:private sm-count?  [n] `(<= ~n  Byte/MAX_VALUE))
+  (defmacro ^:private md-count?  [n] `(<= ~n Short/MAX_VALUE))
 
-  (defmacro ^:private write-sm-count [out n] `(.writeByte  ~out ~n))
-  (defmacro ^:private write-md-count [out n] `(.writeShort ~out ~n))
-  (defmacro ^:private write-lg-count [out n] `(.writeInt   ~out ~n))
+  (defmacro ^:private write-sm-count* [out n] `(.writeByte  ~out (+ ~n Byte/MIN_VALUE)))
+  (defmacro ^:private write-sm-count  [out n] `(.writeByte  ~out    ~n))
+  (defmacro ^:private write-md-count  [out n] `(.writeShort ~out    ~n))
+  (defmacro ^:private write-lg-count  [out n] `(.writeInt   ~out    ~n))
 
-  (defmacro ^:private read-sm-count [in] `(.readByte  ~in))
-  (defmacro ^:private read-md-count [in] `(.readShort ~in))
-  (defmacro ^:private read-lg-count [in] `(.readInt   ~in)))
+  (defmacro ^:private read-sm-count* [in] `(- (.readByte  ~in) Byte/MIN_VALUE))
+  (defmacro ^:private read-sm-count  [in]    `(.readByte  ~in))
+  (defmacro ^:private read-md-count  [in]    `(.readShort ~in))
+  (defmacro ^:private read-lg-count  [in]    `(.readInt   ~in)))
 
  ; We extend `IFreezable1` to supported types:
 (defprotocol     IFreezable1 (-freeze-without-meta! [x data-output]))
@@ -656,9 +666,10 @@
   nil    (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output))
   Object (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output)))
 
-(defn- write-bytes-sm  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-sm-count out len) (.write out ba 0 len)))
-(defn- write-bytes-md  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-md-count out len) (.write out ba 0 len)))
-(defn- write-bytes-lg  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-lg-count out len) (.write out ba 0 len)))
+(defn- write-bytes-sm* [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-sm-count* out len) (.write out ba 0 len)))
+(defn- write-bytes-sm  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-sm-count  out len) (.write out ba 0 len)))
+(defn- write-bytes-md  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-md-count  out len) (.write out ba 0 len)))
+(defn- write-bytes-lg  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-lg-count  out len) (.write out ba 0 len)))
 (defn- write-bytes     [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
     (if (zero? len)
@@ -673,18 +684,18 @@
 
 (defn- write-biginteger [out ^BigInteger n] (write-bytes-lg out (.toByteArray n)))
 
-(defn- write-str-sm [^DataOutput out ^String s] (write-bytes-sm out (.getBytes s StandardCharsets/UTF_8)))
-(defn- write-str-md [^DataOutput out ^String s] (write-bytes-md out (.getBytes s StandardCharsets/UTF_8)))
-(defn- write-str-lg [^DataOutput out ^String s] (write-bytes-lg out (.getBytes s StandardCharsets/UTF_8)))
-(defn- write-str    [^DataOutput out ^String s]
+(defn- write-str-sm* [^DataOutput out ^String s] (write-bytes-sm* out (.getBytes s StandardCharsets/UTF_8)))
+(defn- write-str-md  [^DataOutput out ^String s] (write-bytes-md  out (.getBytes s StandardCharsets/UTF_8)))
+(defn- write-str-lg  [^DataOutput out ^String s] (write-bytes-lg  out (.getBytes s StandardCharsets/UTF_8)))
+(defn- write-str     [^DataOutput out ^String s]
   (if (identical? s "")
     (write-id out id-str-0)
     (let [ba  (.getBytes s StandardCharsets/UTF_8)
           len (alength ba)]
       (enc/cond
-        (sm-count? len) (do (write-id out id-str-sm) (write-sm-count out len))
-        (md-count? len) (do (write-id out id-str-md) (write-md-count out len))
-        :else           (do (write-id out id-str-lg) (write-lg-count out len)))
+        (sm-count?* len) (do (write-id out id-str-sm*) (write-sm-count* out len))
+        (md-count?  len) (do (write-id out id-str-md)  (write-md-count  out len))
+        :else            (do (write-id out id-str-lg)  (write-lg-count  out len)))
 
       (.write out ba 0 len))))
 
@@ -739,11 +750,11 @@
       (write-id out id-vec-0)
       (do
         (enc/cond
-          (sm-count? cnt)
+          (sm-count?* cnt)
           (enc/cond
             (== cnt 2) (write-id out id-vec-2)
             (== cnt 3) (write-id out id-vec-3)
-            :else  (do (write-id out id-vec-sm) (write-sm-count out cnt)))
+            :else  (do (write-id out id-vec-sm*) (write-sm-count* out cnt)))
 
           (md-count? cnt) (do (write-id out id-vec-md) (write-md-count out cnt))
           :else           (do (write-id out id-vec-lg) (write-lg-count out cnt)))
@@ -845,9 +856,9 @@
       (write-id out id-map-0)
       (do
         (enc/cond
-          (sm-count? cnt) (do (write-id out id-map-sm) (write-sm-count out cnt))
-          (md-count? cnt) (do (write-id out id-map-md) (write-md-count out cnt))
-          :else           (do (write-id out id-map-lg) (write-lg-count out cnt)))
+          (sm-count?* cnt) (do (write-id out id-map-sm*) (write-sm-count* out cnt))
+          (md-count?  cnt) (do (write-id out id-map-md)  (write-md-count  out cnt))
+          :else            (do (write-id out id-map-lg)  (write-lg-count  out cnt)))
 
         (-run-kv!
           (fn [k v]
@@ -863,9 +874,9 @@
       (write-id out id-set-0)
       (do
         (enc/cond
-          (sm-count? cnt) (do (write-id out id-set-sm) (write-sm-count out cnt))
-          (md-count? cnt) (do (write-id out id-set-md) (write-md-count out cnt))
-          :else           (do (write-id out id-set-lg) (write-lg-count out cnt)))
+          (sm-count?* cnt) (do (write-id out id-set-sm*) (write-sm-count* out cnt))
+          (md-count?  cnt) (do (write-id out id-set-md)  (write-md-count  out cnt))
+          :else            (do (write-id out id-set-lg)  (write-lg-count  out cnt)))
 
         (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
 
@@ -1313,9 +1324,10 @@
 ;;;; Thawing
 
 (declare ^:private read-bytes)
-(defn- read-bytes-sm [^DataInput in] (read-bytes in (read-sm-count in)))
-(defn- read-bytes-md [^DataInput in] (read-bytes in (read-md-count in)))
-(defn- read-bytes-lg [^DataInput in] (read-bytes in (read-lg-count in)))
+(defn- read-bytes-sm* [^DataInput in] (read-bytes in (read-sm-count* in)))
+(defn- read-bytes-sm  [^DataInput in] (read-bytes in (read-sm-count  in)))
+(defn- read-bytes-md  [^DataInput in] (read-bytes in (read-md-count  in)))
+(defn- read-bytes-lg  [^DataInput in] (read-bytes in (read-lg-count  in)))
 (defn- read-bytes
   ([^DataInput in len] (let [ba (byte-array len)] (.readFully in ba 0 len) ba))
   ([^DataInput in    ]
@@ -1325,17 +1337,19 @@
      id-bytes-md (read-bytes in (read-md-count in))
      id-bytes-lg (read-bytes in (read-lg-count in)))))
 
-(defn- read-str-sm [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count in)) StandardCharsets/UTF_8))
-(defn- read-str-md [^DataInput in] (String. ^bytes (read-bytes in (read-md-count in)) StandardCharsets/UTF_8))
-(defn- read-str-lg [^DataInput in] (String. ^bytes (read-bytes in (read-lg-count in)) StandardCharsets/UTF_8))
+(defn- read-str-sm* [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count* in)) StandardCharsets/UTF_8))
+(defn- read-str-sm  [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count  in)) StandardCharsets/UTF_8))
+(defn- read-str-md  [^DataInput in] (String. ^bytes (read-bytes in (read-md-count  in)) StandardCharsets/UTF_8))
+(defn- read-str-lg  [^DataInput in] (String. ^bytes (read-bytes in (read-lg-count  in)) StandardCharsets/UTF_8))
 (defn- read-str
   ([^DataInput in len] (String. ^bytes (read-bytes in len) StandardCharsets/UTF_8))
   ([^DataInput in    ]
    (enc/case-eval (.readByte in)
      id-str-0  ""
-     id-str-sm (String. ^bytes (read-bytes in (read-sm-count in)) StandardCharsets/UTF_8)
-     id-str-md (String. ^bytes (read-bytes in (read-md-count in)) StandardCharsets/UTF_8)
-     id-str-lg (String. ^bytes (read-bytes in (read-lg-count in)) StandardCharsets/UTF_8))))
+     id-str-sm* (String. ^bytes (read-bytes in (read-sm-count* in)) StandardCharsets/UTF_8)
+     id-str-sm_ (String. ^bytes (read-bytes in (read-sm-count  in)) StandardCharsets/UTF_8)
+     id-str-md  (String. ^bytes (read-bytes in (read-md-count  in)) StandardCharsets/UTF_8)
+     id-str-lg  (String. ^bytes (read-bytes in (read-lg-count  in)) StandardCharsets/UTF_8))))
 
 (defn- read-biginteger [^DataInput in] (BigInteger. ^bytes (read-bytes in (.readInt in))))
 
@@ -1562,9 +1576,10 @@
         id-objects-lg  (read-objects (object-array (read-lg-count in)) in)
 
         id-str-0       ""
-        id-str-sm               (read-str in (read-sm-count in))
-        id-str-md               (read-str in (read-md-count in))
-        id-str-lg               (read-str in (read-lg-count in))
+        id-str-sm*              (read-str in (read-sm-count* in))
+        id-str-sm_              (read-str in (read-sm-count  in))
+        id-str-md               (read-str in (read-md-count  in))
+        id-str-lg               (read-str in (read-lg-count  in))
 
         id-kw-sm       (keyword (read-str in (read-sm-count in)))
         id-kw-md       (keyword (read-str in (read-md-count in)))
@@ -1580,19 +1595,22 @@
         id-vec-0       []
         id-vec-2       [(thaw-from-in! in) (thaw-from-in! in)]
         id-vec-3       [(thaw-from-in! in) (thaw-from-in! in) (thaw-from-in! in)]
-        id-vec-sm      (read-into [] in (read-sm-count in))
-        id-vec-md      (read-into [] in (read-md-count in))
-        id-vec-lg      (read-into [] in (read-lg-count in))
+        id-vec-sm*     (read-into [] in (read-sm-count* in))
+        id-vec-sm_     (read-into [] in (read-sm-count  in))
+        id-vec-md      (read-into [] in (read-md-count  in))
+        id-vec-lg      (read-into [] in (read-lg-count  in))
 
         id-set-0       #{}
-        id-set-sm      (read-into    #{} in (read-sm-count in))
-        id-set-md      (read-into    #{} in (read-md-count in))
-        id-set-lg      (read-into    #{} in (read-lg-count in))
+        id-set-sm*     (read-into    #{} in (read-sm-count* in))
+        id-set-sm_     (read-into    #{} in (read-sm-count  in))
+        id-set-md      (read-into    #{} in (read-md-count  in))
+        id-set-lg      (read-into    #{} in (read-lg-count  in))
 
         id-map-0       {}
-        id-map-sm      (read-kvs-into {} in (read-sm-count in))
-        id-map-md      (read-kvs-into {} in (read-md-count in))
-        id-map-lg      (read-kvs-into {} in (read-lg-count in))
+        id-map-sm*     (read-kvs-into {} in (read-sm-count* in))
+        id-map-sm_     (read-kvs-into {} in (read-sm-count  in))
+        id-map-md      (read-kvs-into {} in (read-md-count  in))
+        id-map-lg      (read-kvs-into {} in (read-lg-count  in))
 
         id-queue-lg      (read-into (PersistentQueue/EMPTY) in (read-lg-count in))
         id-sorted-set-lg (read-into     (sorted-set)        in (read-lg-count in))
