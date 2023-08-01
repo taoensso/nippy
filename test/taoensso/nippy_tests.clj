@@ -372,6 +372,25 @@
 
      "Don't try to preserve metadata on vars")])
 
+;;;; thaw-xform
+
+(deftest _thaw-xform
+  [(is (= (binding [nippy/*thaw-xform* nil]                                           (thaw (freeze [1 2 :secret 3 4]))) [1 2 :secret   3 4]))
+   (is (= (binding [nippy/*thaw-xform* (map (fn [x] (if (= x :secret) :redacted x)))] (thaw (freeze [1 2 :secret 3 4]))) [1 2 :redacted 3 4]))
+
+   (is (= (binding [nippy/*thaw-xform* (remove (fn [x] (and (map-entry? x) (and (= (key x) :x) (val x)))))]
+            (thaw (freeze {:a :A, :b :B, :x :X, :c {:x :X}, :d #{:d1 :d2 {:d3 :D3, :x :X}}})))
+         {:a :A, :b :B, :c {}, :d #{:d1 :d2 {:d3 :D3}}}))
+
+   (is (= (binding [nippy/*thaw-xform* (remove (fn [x] (and (map? x) (contains? x :x))))]
+            (thaw (freeze {:a :A, :b :B, :x :X, :c {:x :X}, :d #{:d1 :d2 {:d3 :D3, :x :X}}})))
+         {:a :A, :b :B, :x :X, :c {:x :X}, :d #{:d1 :d2}}))
+
+   (is (= (binding [nippy/*thaw-xform* (map (fn [x] (/ 1 0)))] (thaw (freeze []))) []) "rf not run on empty colls")
+
+   (let [ex (enc/throws :default (binding [nippy/*thaw-xform* (map (fn [x] (/ 1 0)))] (thaw (freeze [:a :b]))))]
+     (is (= (-> ex enc/ex-cause enc/ex-cause ex-data :call) '(rf acc in)) "Error thrown via `*thaw-xform*`"))])
+
 ;;;; Benchmarks
 
 (deftest _benchmarks
