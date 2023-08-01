@@ -2103,15 +2103,19 @@
    :ex-info      (ex-info "ExInfo" {:data "data"})})
 
 (def stress-data-comparable
-  "Reference data with stuff removed that breaks roundtrip equality"
-  (dissoc stress-data :bytes :throwable :exception :ex-info :regex :objects))
+  "Reference data with stuff removed that breaks roundtrip equality."
+  (dissoc stress-data :bytes :objects :throwable :exception :ex-info :regex))
+
+(comment (let [data stress-data-comparable] (= (thaw (freeze data)) data)))
 
 (def stress-data-benchable
   "Reference data with stuff removed that breaks reader or other utils we'll
-  be benching against"
-  (dissoc stress-data
-    :bytes :throwable :exception :ex-info :queue :queue-empty
-    :byte :stress-record :stress-type :regex :objects))
+  be benching with."
+  (dissoc stress-data-comparable
+    :queue :queue-empty
+    :stress-record :stress-type
+    :time-instant :time-duration :time-period
+    :byte :uri))
 
 ;;;; Tools
 

@@ -393,6 +393,4 @@
 
 ;;;; Benchmarks
 
-(deftest _benchmarks
-  (is (benchmarks/bench {})) ; Also tests :cached passwords
-  )
+(deftest _benchmarks (is (benchmarks/bench {})))
