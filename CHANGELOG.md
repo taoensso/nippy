@@ -1,5 +1,31 @@
 This project uses Break Versioning (https://www.taoensso.com/break-versioning)
 
+[releases]: https://github.com/taoensso/nippy/releases
+
+# `v3.3.0-RC1` (2023-08-02)
+
+> 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.3.3-RC1)
+
+This is a non-breaking **feature and maintenance** pre-release.  
+Please test carefully and report any unexpected problems, thank you! 🙏
+
+## Fixes since `v3.2.0`
+
+* fa1cc66 [fix] [#143] Don't freeze meta info for types that don't support `with-meta`
+
+## New since `v3.2.0`
+
+* 89f98b4 [new] [#153] PoC: transducer support on thaw
+* 60bc4e9 [new] [Storage efficiency] PoC: unsigned counts for small core colls
+* 0a9d670 [new] [Storage efficiency] PoC: separate signed long types
+* 8778fa4 [new] Include `:bindings` in ex-data of thaw failures
+* aba153e [new] [#159] Add native impln for `java.sql.Date` (@philomates)
+* d8b1825 [new] [#158] Add `java.lang.ClassCastException` to default thaw allow list (@carlosgeos)
+* 8b7186a [new] Update [benchmark results](https://github.com/taoensso/nippy#performance)
+* 3ac06b6 [new] Refactor tools ns, embed dynamic `*freeze-opts*` in wrappers
+* 129ce95 [new] [#151] [#140] Add experimental `public-types-spec`
+
+
 # `v3.2.0` (2022-07-18)
 
 > Identical to `v3.2.0-RC3` (2022 Jun 27)
@@ -207,4 +233,4 @@ Likely breaking. Please see [#130] for **detailed upgrade instructions**.
   
 # Earlier releases
 
-See [here](https://github.com/taoensso/nippy/releases) for earlier releases.
+See [here][releases] for earlier releases.

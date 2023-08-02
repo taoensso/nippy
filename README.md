@@ -13,7 +13,8 @@ Used by [Carmine](https://github.com/taoensso/carmine), [Faraday](https://github
 
 ## Latest release/s
 
-- `2022-07-18` `3.2.0`: [changes](../../releases/tag/v3.2.0)
+- `2023-08-02` `3.3.0-RC1` (dev): [changes](../../releases/tag/v3.3.0-RC1)
+- `2022-07-18` `3.2.0` (stable):  [changes](../../releases/tag/v3.2.0)
 
 [![Main tests][Main tests SVG]][Main tests URL]
 [![Graal tests][Graal tests SVG]][Graal tests URL]
