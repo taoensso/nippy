@@ -3,13 +3,14 @@
 
 # Nippy
 
-#### The fastest serialization library for Clojure
+### The fastest serialization library for Clojure
 
 Clojure's rich data types are awesome. And its [reader](https://clojure.org/reference/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
 Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**.
 
-Used by [Carmine](https://github.com/taoensso/carmine), [Faraday](https://github.com/ptaoussanis/faraday), [PigPen](https://github.com/Netflix/PigPen), [Onyx](https://github.com/onyx-platform/onyx), [XTDB](https://github.com/xtdb/xtdb), and others.
+Used by [Carmine](https://www.taoensso.com/carmine), [Faraday](https://www.taoensso.com/faraday), [PigPen](https://github.com/Netflix/PigPen), [Onyx](https://github.com/onyx-platform/onyx), 
+[XTDB](https://github.com/xtdb/xtdb), [Datalevin](https://github.com/juji-io/datalevin), and others.
 
 ## Latest release/s
 
@@ -25,14 +26,15 @@ See [here][GitHub releases] for earlier releases.
 
 - Small, simple **all-Clojure** library
 - **Terrific performance**: the [best](#performance) for Clojure that I'm aware of
-- Comprehensive support for **all standard data types**
-- Easily extendable to **custom data types**
+- Comprehensive support for [all standard data types](../../wiki/1-Getting-started#deserializing)
+- Easily extendable to [custom data types](../../wiki/1-Getting-started#custom-types)
 - **Robust test suite**, incl. full coverage for every supported type
 - Auto fallback to Java Serializable when available
 - Auto fallback to Clojure Reader for all other types (including tagged literals
 - Pluggable **compression** with built-in [LZ4](https://code.google.com/p/lz4/)
-- Pluggable **encryption** with built-in AES128
-- Tools for easy + robust **integration into 3rd-party libraries**, etc.
+- Pluggable [encryption](../../wiki/1-Getting-started#encryption) with built-in AES128
+- [Tools](https://taoensso.github.io/nippy/taoensso.nippy.tools.html) for easy + robust **integration into 3rd-party libraries**, etc.
+- Powerful [thaw transducer](https://taoensso.github.io/nippy/taoensso.nippy.html#var-*thaw-xform*) for flexible data inspection and transformation
 
 ## Performance
 
@@ -41,9 +43,9 @@ Since its earliest versions, Nippy has consistently been the **fastest serializa
 - Roundtrip times **>12x faster** than `tools.reader` with **60% smaller** data size.
 - Roundtrip times **>2x faster** than `data.fressian` with **30% smaller** data size.
 
-![benchmarks-png](benchmarks.png)
+![benchmarks-png](../../raw/master/benchmarks.png)
 
-The [benchmark code](https://github.com/taoensso/nippy/blob/master/src/taoensso/nippy/benchmarks.clj) can be easily run in your own environment.
+The [benchmark code](../../blob/master/src/taoensso/nippy/benchmarks.clj) can be easily run in your own environment.
 
 ## Documentation
 
@@ -52,7 +54,7 @@ The [benchmark code](https://github.com/taoensso/nippy/blob/master/src/taoensso/
 
 ## Funding
 
-You can [help support][sponsor] on this project, thank you!! 🙏
+You can [help support][sponsor] continued work on this project, thank you!! 🙏
 
 ## License
 

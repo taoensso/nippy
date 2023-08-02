@@ -1,6 +1,6 @@
-This project uses Break Versioning (https://www.taoensso.com/break-versioning)
+This project uses [**Break Versioning**](https://www.taoensso.com/break-versioning).
 
-[releases]: https://github.com/taoensso/nippy/releases
+---
 
 # `v3.3.0-RC1` (2023-08-02)
 
@@ -35,7 +35,7 @@ Please test carefully and report any unexpected problems, thank you! 🙏
 ```
 
 > This is a non-breaking maintenance release.  
-> See [here](https://github.com/ptaoussanis/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
+> See [here](https://github.com/taoensso/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
 
 ## New since `v3.1.3`
 
@@ -53,7 +53,7 @@ Please test carefully and report any unexpected problems, thank you! 🙏
 * [#145] [Fix] Freezing custom types with munged field names
 
 The boxed Boolean bug has been around since the first version of Nippy and is mostly
-relevant to users doing Java interop. For more info see: https://github.com/ptaoussanis/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
+relevant to users doing Java interop. For more info see: https://github.com/taoensso/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
 
 
 # `v3.2.0-RC3` (2022-06-27)
@@ -63,7 +63,7 @@ relevant to users doing Java interop. For more info see: https://github.com/ptao
 ```
 
 > This is a non-breaking maintenance release.  
-> See [here](https://github.com/ptaoussanis/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
+> See [here](https://github.com/taoensso/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
 
 ## New since `v3.1.3`
 
@@ -81,7 +81,7 @@ relevant to users doing Java interop. For more info see: https://github.com/ptao
 * [#145] [Fix] Freezing custom types with munged field names
 
 The boxed Boolean bug has been around since the first version of Nippy and is mostly
-relevant to users doing Java interop. For more info see: https://github.com/ptaoussanis/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
+relevant to users doing Java interop. For more info see: https://github.com/taoensso/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
 
 
 # `v3.2.0-RC2` (2022-06-23)
@@ -91,7 +91,7 @@ relevant to users doing Java interop. For more info see: https://github.com/ptao
 ```
 
 > This is a non-breaking maintenance release.  
-> See [here](https://github.com/ptaoussanis/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
+> See [here](https://github.com/taoensso/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
 
 ## New since `v3.1.3`
 
@@ -108,7 +108,7 @@ relevant to users doing Java interop. For more info see: https://github.com/ptao
 * [#89 #150] [Fix] Boxed Booleans incorrectly freezing to primitive `true` (@RolT)
 
 The boxed Boolean bug has been around since the first version of Nippy and is mostly
-relevant to users doing Java interop. For more info see: https://github.com/ptaoussanis/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
+relevant to users doing Java interop. For more info see: https://github.com/taoensso/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
 
 
 # `v3.1.3` (2022-06-23)
@@ -118,7 +118,7 @@ relevant to users doing Java interop. For more info see: https://github.com/ptao
 ```
 
 > This is a non-breaking, bugfix release.  
-> See [here](https://github.com/ptaoussanis/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
+> See [here](https://github.com/taoensso/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
 
 ## Fixes since `v3.1.1`
 
@@ -126,7 +126,7 @@ relevant to users doing Java interop. For more info see: https://github.com/ptao
 * [#89 #150] [Fix] Boxed Booleans incorrectly freezing to primitive `true` (@RolT)
 
 The boxed Boolean bug has been around since the first version of Nippy and is mostly
-relevant to users doing Java interop. For more info see: https://github.com/ptaoussanis/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
+relevant to users doing Java interop. For more info see: https://github.com/taoensso/nippy/commit/8909a32bdd654a136da385e0e09c9cc44416f964
 
 
 # `v3.1.1` (2020-11-18)
@@ -184,7 +184,7 @@ relevant to users doing Java interop. For more info see: https://github.com/ptao
 
 > This release is focused on smoothing out rough edges left by `CVE-2020-24164` [#130], and to **ease transition** from versions of Nippy < `v2.15.0 final`.
 
-> See [here](https://github.com/ptaoussanis/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
+> See [here](https://github.com/taoensso/encore#recommended-steps-after-any-significant-dependency-update) for recommended steps when updating any Clojure/Script dependencies.
 
 Note that there's **separate details** below for upgrading from `v2.15` vs `v2.14`:
 
@@ -203,8 +203,8 @@ Usually a non-breaking drop-in replacement, but there's some changes you might l
 
   - [#122] Option to disable freezing and/or thawing of metadata.
   - `freeze` and `thaw` now support opts: `:serializable-allowlist`, `:incl-metadata?`.
-  - New `read-quarantined-serializable-object-unsafe!` util to read quarantined Serializable objects. See [API docs](http://ptaoussanis.github.io/nippy/taoensso.nippy.html#var-read-quarantined-serializable-object-unsafe.21) and/or [#130] for details.
-  - Add `allow-and-record-any-serializable-class-unsafe` util. See [API docs](http://ptaoussanis.github.io/nippy/taoensso.nippy.html#var-allow-and-record-any-serializable-class-unsafe) and/or [#130] for details.
+  - New `read-quarantined-serializable-object-unsafe!` util to read quarantined Serializable objects. See [API docs](http://taoensso.github.io/nippy/taoensso.nippy.html#var-read-quarantined-serializable-object-unsafe.21) and/or [#130] for details.
+  - Add `allow-and-record-any-serializable-class-unsafe` util. See [API docs](http://taoensso.github.io/nippy/taoensso.nippy.html#var-allow-and-record-any-serializable-class-unsafe) and/or [#130] for details.
 
 
 ## Upgrading from `v2.14` (may be BREAKING)
@@ -230,7 +230,8 @@ Likely breaking. Please see [#130] for **detailed upgrade instructions**.
 
   - [#120] Update `freezable?` to cover `nil`
 
-  
+---
+
 # Earlier releases
 
-See [here][releases] for earlier releases.
+See [here](https://github.com/taoensso/nippy/releases) for earlier releases.
