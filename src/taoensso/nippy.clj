@@ -388,6 +388,8 @@
   To help, if Nippy encounters an errors while applying your xform, it
   will throw a detailed `ExceptionInfo` with message
   \"Error thrown via `*thaw-xform*`\" to help you debug."
+
+  {:added "v3.3.0-RC1 (2023-08-02)"}
   nil)
 
 (comment
