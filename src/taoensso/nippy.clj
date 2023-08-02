@@ -1762,9 +1762,19 @@
                ([e msg]
                 (throw
                   (ex-info (str "Thaw failed. " msg)
-                    {:opts (assoc opts
-                             :compressor compressor
-                             :encryptor  encryptor)}
+                    {:opts
+                     (assoc opts
+                       :compressor compressor
+                       :encryptor  encryptor)
+
+                     :bindings
+                     (enc/assoc-some {}
+                       '*freeze-fallback*             *freeze-fallback*
+                       '*auto-freeze-compressor*      *auto-freeze-compressor*
+                       '*custom-readers*              *custom-readers*
+                       '*incl-metadata?*              *incl-metadata?*
+                       '*thaw-serializable-allowlist* *thaw-serializable-allowlist*)}
+
                     e))))
 
              thaw-data
