@@ -15,17 +15,20 @@
 ;;;; Config, etc.
 
 (def test-data nippy/stress-data-comparable)
-(def tc-num-tests 120)
-(def tc-gens
-  "Like `tc-gens/any` but removes NaN (which breaks equality tests)"
-  (tc-gens/recursive-gen tc-gens/container-type #_simple-type
-    (tc-gens/one-of
-      [tc-gens/int tc-gens/large-integer #_tc-gens/double
-       (tc-gens/double* {:NaN? false})
-       tc-gens/char tc-gens/string tc-gens/ratio tc-gens/boolean tc-gens/keyword
-       tc-gens/keyword-ns tc-gens/symbol tc-gens/symbol-ns tc-gens/uuid])))
+(def tc-gen-recursive-any-equatable
+  (tc-gens/recursive-gen tc-gens/container-type
+    tc-gens/any-equatable))
 
-(comment (tc-gens/sample tc-gens 10))
+(defmacro gen-test [num-tests [data-sym] & body]
+  `(let [tc-result#
+         (tc/quick-check ~num-tests
+           (tc-props/for-all [~data-sym tc-gen-recursive-any-equatable]
+             ~@body))]
+     (true? (:pass? tc-result#))))
+
+(comment
+  (tc-gens/sample tc-gen-recursive-any-equatable 10)
+  (gen-test 10 [gen-data] true))
 
 ;;;; Core
 
@@ -43,7 +46,7 @@
                      test-data)))
 
    (is (= (vec (:objects nippy/stress-data))
-         ((comp vec thaw freeze) (:objects nippy/stress-data))))
+          ((comp vec thaw freeze) (:objects nippy/stress-data))))
 
    (is (= test-data ((comp #(thaw   % {:compressor nippy/lzma2-compressor})
                            #(freeze % {:compressor nippy/lzma2-compressor}))
@@ -59,11 +62,6 @@
                            #(freeze % {:compressor nippy/lz4hc-compressor}))
                      test-data)))
 
-   (is ; Try roundtrip anything that simple-check can dream up
-     (:result (tc/quick-check tc-num-tests
-                (tc-props/for-all [val tc-gens]
-                  (= val (thaw (freeze val)))))))
-
    (is (enc/throws? Exception (thaw (freeze test-data {:password "malformed"}))))
    (is (enc/throws? Exception (thaw (freeze test-data {:password [:salted "p"]})
                                 {;; Necessary to prevent against JVM segfault due to
@@ -73,28 +71,34 @@
                                 {:v1-compatibility? false ; Ref. https://goo.gl/t0OUIo
                                  :compressor nil})))
 
-   (is ; Snappy lib compatibility (for legacy versions of Nippy)
+   (is
      (let [^bytes raw-ba    (freeze test-data {:compressor nil})
            ^bytes xerial-ba (org.xerial.snappy.Snappy/compress raw-ba)
            ^bytes iq80-ba   (org.iq80.snappy.Snappy/compress   raw-ba)]
+
        (= (thaw raw-ba)
           (thaw (org.xerial.snappy.Snappy/uncompress xerial-ba))
           (thaw (org.xerial.snappy.Snappy/uncompress iq80-ba))
           (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
-          (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba))))))
+          (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba)))))
+     "Snappy lib compatibility (for legacy versions of Nippy)")
 
-   (is ; CBC auto-encryptor compatibility
+   (is
      (= "payload"
        (thaw (freeze "payload" {:password [:salted "pwd"] :encryptor nippy/aes128-cbc-encryptor})
-         (do                   {:password [:salted "pwd"]}))))
+         (do                   {:password [:salted "pwd"]})))
+     "CBC auto-encryptor compatibility")
 
    (testing "Signed long types"
      (let [range-ushort+ (+ (long @#'nippy/range-ushort) 128)
            range-uint+   (+ (long @#'nippy/range-uint)   128)]
 
-       [(let [r (range (- range-ushort+) range-ushort+)] (= (thaw (freeze r)) r))
+       [(let [r (range (long -2.5e6) (long 2.5e6))]      (= (thaw (freeze r)) r))
+        (let [r (range (- range-ushort+) range-ushort+)] (= (thaw (freeze r)) r))
         (let [n    range-uint+]                          (= (thaw (freeze n)) n))
-        (let [n (- range-uint+)]                         (= (thaw (freeze n)) n))]))])
+        (let [n (- range-uint+)]                         (= (thaw (freeze n)) n))]))
+
+   (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
 
 ;;;; Custom types & records
 
@@ -156,12 +160,12 @@
         cached (mapv nippy/cache stress) ; <=1 wrap auto-enforced
         ]
 
-    (is (= stress (thaw (freeze stress {:compressor nil}))))
-    (is (= stress (thaw (freeze cached {:compressor nil}))))
-    (let [size-stress (count (freeze stress {:compressor nil}))
-          size-cached (count (freeze cached {:compressor nil}))]
-      (is (>= size-stress (* 3 size-cached)))
-      (is (<  size-stress (* 4 size-cached))))))
+    [(is (= stress (thaw (freeze stress {:compressor nil}))))
+     (is (= stress (thaw (freeze cached {:compressor nil}))))
+     (let [size-stress (count (freeze stress {:compressor nil}))
+           size-cached (count (freeze cached {:compressor nil}))]
+       (is (>= size-stress (* 3 size-cached)))
+       (is (<  size-stress (* 4 size-cached))))]))
 
 (deftest _caching-metadata
   (let [v1 (with-meta [] {:id :v1})
@@ -174,79 +178,68 @@
                  (nippy/cache v1)
                  (nippy/cache v2)])]
 
-    (is (> (count frozen-without-caching)
-           (count frozen-with-caching)))
+    [(is (> (count frozen-without-caching)
+            (count frozen-with-caching)))
 
-    (is (= (thaw frozen-without-caching)
-           (thaw frozen-with-caching)))
+     (is (= (thaw frozen-without-caching)
+            (thaw frozen-with-caching)))
 
-    (is (= (mapv meta (thaw frozen-with-caching))
-           [{:id :v1} {:id :v2} {:id :v1} {:id :v2}]))))
+     (is (= (mapv meta (thaw frozen-with-caching))
+            [{:id :v1} {:id :v2} {:id :v1} {:id :v2}]))]))
 
 ;;;; Stable binary representation of vals
 
 (deftest _stable-bin
-  [(is (= (seq (freeze test-data))
-          (seq (freeze test-data)))) ; f(x)=f(y) | x=y
+  (testing "Stable binary representation of vals"
 
-   ;; As above, but try multiple times to catch possible protocol interface races:
-   (is (every? true?
-         (repeatedly 1000 (fn [] (= (seq (freeze test-data))
-                                    (seq (freeze test-data)))))))
+    (testing "x=y !=> f(x)=f(y)"
+      ;; `x=y => f(x)=f(y)` is unfortunately NOT true in general
+      ;; Be careful to never assume the above relationship!
+      [(is (not= (vec (freeze {:a 1 :b 1})) (vec (freeze {:b 1 :a 1}))) "Small (array) map (not= (seq {:a 1 :b 1}) (seq {:b 1 :a 1}))")
+       (is (not= (vec (freeze [[]]))        (vec (freeze ['()])))       "(= [] '()) is true")
+       (is (= (vec (freeze (sorted-map :a 1 :b 1)))
+              (vec (freeze (sorted-map :b 1 :a 1)))) "Sorted structures are immune")])
 
-   ;; NB abandoning - no way to do this reliably w/o appropriate contracts from
-   ;; (seq <unordered-coll>):
-   ;;
-   ;; (is (=  (seq (-> test-data freeze))
-   ;;         (seq (-> test-data freeze thaw freeze)))) ; f(x)=f(f-1(f(x)))
-   ;;
-   ;; As above, but with repeated refreeze to catch possible protocol interface races:
-   ;; (is (= (seq (freeze test-data))
-   ;;        (seq (reduce (fn [frozen _] (freeze (thaw frozen)))
-   ;;               (freeze test-data) (range 1000)))))
-   ])
+    (testing "x==y => f(x)=f(y)"
+      ;; This weaker version of `x=y => f(x)=f(y)` does hold
+      [(is (= (vec (freeze test-data))
+              (vec (freeze test-data))))
 
-(defn qc-prop-bijection [& [n]]
-  (let [bin->val (atom {})
-        val->bin (atom {})]
-    (merge
-      (tc/quick-check (or n 1)
-        (tc-props/for-all [val tc-gens]
-          (let [;; Nb need `seq` for Clojure hash equality:
-                bin (hash (seq (freeze val)))]
-            (and
-              (if (contains? val->bin val)
-                (= (get val->bin val) bin) ; x=y => f(x)=f(y) by clj=
-                (do (swap! val->bin assoc val bin)
-                    true))
+       (is (every? true? (repeatedly 1000 (fn [] (= (vec (freeze test-data))
+                                                    (vec (freeze test-data))))))
+         "Try repeatedly to catch possible protocol interface races")
 
-              (if (contains? bin->val bin)
-                (= (get bin->val bin) val) ; f(x)=f(y) => x=y by clj=
-                (do (swap! bin->val assoc bin val)
-                    true))))))
-      #_{:bin->val @bin->val
-         :val->bin @val->bin}
-      nil)))
+       (is (gen-test 400 [gen-data]
+              (= (vec (freeze gen-data))
+                 (vec (freeze gen-data)))) "Generative")])
 
-(comment
-  (tc-gens/sample tc-gens 10)
-  (:result (qc-prop-bijection 80))
-  (let [{:keys [result bin->val val->bin]} (qc-prop-bijection 10)]
-    [result (vals bin->val)]))
+    (testing "f(x)=f(f-1(f(x)))"
+      [(is (= (vec (-> test-data freeze))
+              (vec (-> test-data freeze thaw freeze))))
 
-(deftest _gc-prop-bijection
-  (is (:result (qc-prop-bijection tc-num-tests))))
+       (is (= (seq (freeze test-data))
+              (seq (reduce (fn [frozen _] (freeze (thaw frozen)))
+                     (freeze test-data) (range 1000))))
+         "Try repeatedly to catch possible protocol interface races")
+
+       (is (gen-test 400 [gen-data]
+             (= (vec (-> gen-data freeze))
+                (vec (-> gen-data freeze thaw freeze)))) "Generative")])
+
+    (testing "f(x)=f(y) => x=y"
+      (let [vals_ (atom {})]
+        (gen-test 400 [gen-data]
+          (let [bin (freeze     gen-data)
+                ref (get @vals_ gen-data ::nx)]
+            (swap! vals_ assoc bin gen-data)
+            (or (= ref ::nx) (= ref bin))))))))
 
 ;;;; Thread safety
 
 (deftest _thread-safe
   [(is
-     (let [futures
-           (mapv
-             (fn [_]
-               (future
-                 (= (thaw (freeze test-data)) test-data)))
-             (range 50))]
+     (let [futures (mapv (fn [_] (future (= (thaw (freeze test-data)) test-data)))
+                     (range 50))]
        (every? deref futures)))
 
    (is
