@@ -349,8 +349,8 @@
 ;; See also `nippy.tools` ns for further dynamic config support
 
 ;; For back compatibility (nb Timbre's Carmine appender)
-(enc/defonce ^:dynamic ^:deprecated *final-freeze-fallback* "DEPRECATED: prefer `*freeze-fallback`."       nil)
-(enc/defonce ^:dynamic                    *freeze-fallback* "(fn [data-output x])->freeze, nil => default" nil)
+(enc/defonce ^:dynamic ^:no-doc ^:deprecated *final-freeze-fallback* "DEPRECATED: prefer `*freeze-fallback`."       nil)
+(enc/defonce ^:dynamic                             *freeze-fallback* "(fn [data-output x])->freeze, nil => default" nil)
 
 (enc/defonce ^:dynamic *custom-readers* "{<hash-or-byte-id> (fn [data-input])->read}" nil)
 (enc/defonce ^:dynamic *auto-freeze-compressor*
@@ -385,7 +385,7 @@
   Note that while this is a very powerful feature, correctly writing
   and debugging transducers and reducing fns can be tricky.
 
-  To help, if Nippy encounters an errors while applying your xform, it
+  To help, if Nippy encounters an error while applying your xform, it
   will throw a detailed `ExceptionInfo` with message
   \"Error thrown via `*thaw-xform*`\" to help you debug."
 
@@ -559,7 +559,7 @@
   (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (init-allowlist :freeze default-freeze-serializable-allowlist false))
   (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (init-allowlist :thaw     default-thaw-serializable-allowlist true)))
 
-(enc/defonce ^:dynamic ^:deprecated *serializable-whitelist*
+(enc/defonce ^:dynamic ^:no-doc ^:deprecated *serializable-whitelist*
   ;; Mostly retained for https://github.com/juxt/crux/releases/tag/20.09-1.11.0
   "DEPRECATED, now called `*thaw-serializable-allowlist*`" nil)
 

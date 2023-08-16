@@ -67,7 +67,6 @@
            warmup    25e3}}]
 
   (println "\nStarting benchmarks")
-  (println "---")
 
   (let [results_ (atom {})]
     (when (or all? reader?)
@@ -105,7 +104,7 @@
     (println "- Benchmarks complete! (Time for cake?)")
 
     (let [results @results_]
-      (println "\n")
+      (println "\nBenchmark results:")
       (doseq [[k v] results] (println k " " v))
       (do           results))))
 
