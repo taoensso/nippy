@@ -12,7 +12,8 @@
    [com.taoensso/encore      "3.68.0"]
    [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.9"]
-   [org.lz4/lz4-java         "1.8.0"]]
+   [org.lz4/lz4-java         "1.8.0"]
+   [io.airlift/aircompressor "0.25"]]
 
   :profiles
   {;; :default [:base :system :user :provided :dev]
