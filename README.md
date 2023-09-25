@@ -44,7 +44,7 @@ Since its earliest versions, Nippy has consistently been the **fastest serializa
 
 ![benchmarks-png](../../raw/master/benchmarks.png)
 
-The [benchmark code](../../blob/master/src/taoensso/nippy/benchmarks.clj) can be easily run in your own environment.
+The [benchmark code](../../blob/master/test/taoensso/nippy_benchmarks.clj) can be easily run in your own environment.
 
 ## Documentation
 
