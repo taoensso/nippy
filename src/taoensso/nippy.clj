@@ -25,7 +25,7 @@
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
     LazySeq IRecord ISeq IType]))
 
-(enc/assert-min-encore-version [3 58 0])
+(enc/assert-min-encore-version [3 67 0])
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
@@ -471,8 +471,8 @@
           (or
             (when-let [s
                        (or
-                         (do                (enc/get-sys-val (get-in ids [action  :base :prop]) (get-in ids [action  :base :env])))
-                         (when incl-legacy? (enc/get-sys-val (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env]))))]
+                         (do                (enc/get-sys-val* (get-in ids [action  :base :prop]) (get-in ids [action  :base :env])))
+                         (when incl-legacy? (enc/get-sys-val* (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env]))))]
 
               (if (allow-and-record? s) s (split-class-names>set s)))
             default)
@@ -480,8 +480,8 @@
           allowlist-add
           (when-let [s
                      (or
-                       (do                (enc/get-sys-val (get-in ids [action  :add :prop]) (get-in ids [action  :add :env])))
-                       (when incl-legacy? (enc/get-sys-val (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env]))))]
+                       (do                (enc/get-sys-val* (get-in ids [action  :add :prop]) (get-in ids [action  :add :env])))
+                       (when incl-legacy? (enc/get-sys-val* (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env]))))]
 
             (if (allow-and-record? s) s (split-class-names>set s)))]
 
@@ -547,8 +547,8 @@
   Upgrading from an older version of Nippy and unsure whether you've been
   using Nippy's Serializable support, or which classes to allow? See [2].
 
-  See also `taoensso.encore/compile-str-filter` for a util to help easily
-  build more advanced predicate functions.
+  See also `taoensso.encore/name-filter` for a util to help easily build
+  more advanced predicate functions.
 
   Thanks to Timo Mihaljov (@solita-timo-mihaljov) for an excellent report
   identifying this vulnerability.
@@ -649,7 +649,7 @@
         (fn [x]
           (if (allow-and-record? x)
             allow-and-record-any-serializable-class-unsafe
-            (enc/compile-str-filter x))))
+            (enc/name-filter x))))
 
       conform?* (fn [x cn] ((compile x) cn)) ; Uncached because input domain possibly infinite
       conform?

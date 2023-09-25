@@ -9,17 +9,17 @@
 ;; Unfortunately the only ~reliable way we can tell if something's
 ;; really serializable/readable is to actually try a full roundtrip.
 
-(let [swap-cache! enc/-swap-val!]
-  (defn- memoize-type-test [test-fn]
-    (let [cache (atom {})] ; {<type> <type-okay?>}
-      (fn [x]
-        (let [t (type x)
-              ;; This is a bit hackish, but no other obvious solutions (?):
-              cacheable? (not (re-find #"__\d+" (str t))) ; gensym form
-              test (fn [] (try (test-fn x) (catch Exception _ false)))]
-          (if cacheable?
-            @(swap-cache! cache t #(if % % (delay (test))))
-            (test)))))))
+(defn- memoize-type-test [test-fn]
+  (let [cache_ (enc/latom {})] ; {<type> <type-okay?>}
+    (fn [x]
+      (let [t          (type x)
+            gensym?    (re-find #"__\d+" (str t))
+            cacheable? (not gensym?) ; Hack, but no obviously better solutions
+            test       (fn [] (try (test-fn x) (catch Exception _ false)))]
+
+        (if cacheable?
+          @(cache_ t #(if % % (delay (test))))
+          (do                        (test)))))))
 
 (def     readable? (memoize-type-test (fn [x] (-> x enc/pr-edn enc/read-edn) true)))
 (def serializable?
@@ -53,7 +53,7 @@
     (serializable? "Hello world") ; Cacheable
     (readable?     (fn []))       ; Uncacheable
     (serializable? (fn []))       ; Uncacheable
-    )) ; [5.65 5.88 1129.46 1.4]
+    )) ; [2.52 2.53 521.34 0.63]
 
 ;;;;
 
