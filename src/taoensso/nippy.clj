@@ -56,8 +56,8 @@
   "Final byte of 4-byte Nippy header stores version-dependent metadata"
 
   ;; Currently
-  ;;   - 5 compressors, #{nil :snappy :lz4 :lzma2 :else}
-  ;;   - 4 encryptors,  #{nil :aes128-cbc-sha512 :aes128-gcm-sha512 :else}
+  ;;   - 6x compressors: #{nil :zstd :lz4 #_:lzo :lzma2 :snappy :else}
+  ;;   - 4x encryptors:  #{nil :aes128-cbc-sha512 :aes128-gcm-sha512 :else}
 
   {(byte 0)  {:version 1 :compressor-id nil     :encryptor-id nil}
    (byte 2)  {:version 1 :compressor-id nil     :encryptor-id :aes128-cbc-sha512}
@@ -69,7 +69,6 @@
    (byte 15) {:version 1 :compressor-id :snappy :encryptor-id :aes128-gcm-sha512}
    (byte 7)  {:version 1 :compressor-id :snappy :encryptor-id :else}
 
-   ;;; :lz4 used for both lz4 and lz4hc compressor (the two are compatible)
    (byte 8)  {:version 1 :compressor-id :lz4    :encryptor-id nil}
    (byte 9)  {:version 1 :compressor-id :lz4    :encryptor-id :aes128-cbc-sha512}
    (byte 16) {:version 1 :compressor-id :lz4    :encryptor-id :aes128-gcm-sha512}
@@ -79,6 +78,11 @@
    (byte 12) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-cbc-sha512}
    (byte 17) {:version 1 :compressor-id :lzma2  :encryptor-id :aes128-gcm-sha512}
    (byte 13) {:version 1 :compressor-id :lzma2  :encryptor-id :else}
+
+   (byte 20) {:version 1 :compressor-id :zstd   :encryptor-id nil}
+   (byte 21) {:version 1 :compressor-id :zstd   :encryptor-id :aes128-cbc-sha512}
+   (byte 22) {:version 1 :compressor-id :zstd   :encryptor-id :aes128-gcm-sha512}
+   (byte 23) {:version 1 :compressor-id :zstd   :encryptor-id :else}
 
    (byte 5)  {:version 1 :compressor-id :else   :encryptor-id nil}
    (byte 18) {:version 1 :compressor-id :else   :encryptor-id :aes128-cbc-sha512}
@@ -330,10 +334,12 @@
 (enc/defaliases
   compression/compress
   compression/decompress
-  compression/snappy-compressor
-  compression/lzma2-compressor
+  compression/zstd-compressor
   compression/lz4-compressor
   compression/lz4hc-compressor
+  #_compression/lzo-compressor
+  compression/snappy-compressor
+  compression/lzma2-compressor
 
   encryption/encrypt
   encryption/decrypt

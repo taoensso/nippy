@@ -4,9 +4,11 @@
    [clojure.test.check            :as tc]
    [clojure.test.check.generators :as tc-gens]
    [clojure.test.check.properties :as tc-props]
-   [taoensso.encore :as enc   :refer []]
-   [taoensso.nippy  :as nippy :refer [freeze thaw]]
-   [taoensso.nippy.benchmarks :as benchmarks]))
+   [taoensso.encore               :as enc   :refer []]
+   [taoensso.nippy                :as nippy :refer [freeze thaw]]
+   [taoensso.nippy.compression    :as compr]
+   [taoensso.nippy.crypto         :as crypto]
+   [taoensso.nippy.benchmarks     :as benchmarks]))
 
 (comment
   (remove-ns      'taoensso.nippy-tests)
@@ -59,29 +61,16 @@
                      test-data)))
 
    (is (= test-data ((comp #(thaw   % {:compressor nippy/lz4-compressor})
-                           #(freeze % {:compressor nippy/lz4hc-compressor}))
+                           #(freeze % {:compressor nippy/lz4-compressor}))
+                     test-data)))
+
+   (is (= test-data ((comp #(thaw   % {:compressor nippy/zstd-compressor})
+                           #(freeze % {:compressor nippy/zstd-compressor}))
                      test-data)))
 
    (is (enc/throws? Exception (thaw (freeze test-data {:password "malformed"}))))
-   (is (enc/throws? Exception (thaw (freeze test-data {:password [:salted "p"]})
-                                {;; Necessary to prevent against JVM segfault due to
-                                 ;; https://goo.gl/t0OUIo:
-                                 :v1-compatibility? false})))
-   (is (enc/throws? Exception (thaw (freeze test-data {:password [:salted "p"]})
-                                {:v1-compatibility? false ; Ref. https://goo.gl/t0OUIo
-                                 :compressor nil})))
-
-   (is
-     (let [^bytes raw-ba    (freeze test-data {:compressor nil})
-           ^bytes xerial-ba (org.xerial.snappy.Snappy/compress raw-ba)
-           ^bytes iq80-ba   (org.iq80.snappy.Snappy/compress   raw-ba)]
-
-       (= (thaw raw-ba)
-          (thaw (org.xerial.snappy.Snappy/uncompress xerial-ba))
-          (thaw (org.xerial.snappy.Snappy/uncompress iq80-ba))
-          (thaw (org.iq80.snappy.Snappy/uncompress   iq80-ba    0 (alength iq80-ba)))
-          (thaw (org.iq80.snappy.Snappy/uncompress   xerial-ba  0 (alength xerial-ba)))))
-     "Snappy lib compatibility (for legacy versions of Nippy)")
+   (is (enc/throws? Exception (thaw (freeze test-data {:password [:salted "p"]}))))
+   (is (enc/throws? Exception (thaw (freeze test-data {:password [:salted "p"]}))))
 
    (is
      (= "payload"
@@ -383,6 +372,20 @@
 
    (let [ex (enc/throws :default (binding [nippy/*thaw-xform* (map (fn [x] (/ 1 0)))] (thaw (freeze [:a :b]))))]
      (is (= (-> ex enc/ex-cause enc/ex-cause ex-data :call) '(rf acc in)) "Error thrown via `*thaw-xform*`"))])
+
+;;;; Compressors
+
+(deftest _compressors
+  (doseq [c [compr/zstd-compressor
+             compr/lz4-compressor
+             compr/lzo-compressor
+             compr/snappy-compressor
+             compr/lzma2-compressor]]
+
+    (dotimes [_ 100]
+      (is
+        (nil? (enc/catching (compr/decompress c (crypto/rand-bytes 1024))))
+        "Decompression never core dumps, even against invalid data"))))
 
 ;;;; Benchmarks
 

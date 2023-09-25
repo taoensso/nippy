@@ -10,9 +10,7 @@
   :dependencies
   [[org.clojure/tools.reader "1.3.6"]
    [com.taoensso/encore      "3.68.0"]
-   [org.iq80.snappy/snappy   "0.4"]
    [org.tukaani/xz           "1.9"]
-   [org.lz4/lz4-java         "1.8.0"]
    [io.airlift/aircompressor "0.25"]]
 
   :profiles
@@ -36,9 +34,8 @@
      *unchecked-math*     false #_:warn-on-boxed}
 
     :dependencies
-    [[org.clojure/test.check        "1.1.1"]
-     [org.clojure/data.fressian     "1.0.0"]
-     [org.xerial.snappy/snappy-java "1.1.10.4"]]}
+    [[org.clojure/test.check    "1.1.1"]
+     [org.clojure/data.fressian "1.0.0"]]}
 
    :graal-tests
    {:dependencies [[org.clojure/clojure "1.11.1"]
