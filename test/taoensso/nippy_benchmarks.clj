@@ -1,5 +1,4 @@
-(ns taoensso.nippy.benchmarks
-  "Nippy benchmarks."
+(ns taoensso.nippy-benchmarks
   (:require
    [clojure.data.fressian      :as fress]
    [taoensso.encore            :as enc]
@@ -100,7 +99,7 @@
     (swap! results_ assoc :nippy/default (bench1 {:laps laps, :warmup warmup} nippy/freeze      nippy/thaw      count))
 
     (println "- Benching Nippy/fast...")
-    (swap! results_ assoc :nippy/fast (bench1 {:laps laps, :warmup warmup} nippy/fast-freeze nippy/fast-thaw count))
+    (swap! results_ assoc :nippy/fast    (bench1 {:laps laps, :warmup warmup} nippy/fast-freeze nippy/fast-thaw count))
 
     (println "- Benchmarks complete! (Time for cake?)")
 

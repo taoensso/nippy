@@ -167,7 +167,7 @@
     - Decompression speed: `B` (400  msecs on reference benchmark).
 
   Good general-purpose compressor, balances ratio & speed.
-  See `taoensso.nippy.benchmarks` for detailed comparative benchmarks."
+  See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
   (ZstdCompressor. false))
 
 (def lz4-compressor
@@ -177,7 +177,7 @@
     - Decompression speed: `A+` (31  msecs on reference benchmark).
 
   Good general-purpose compressor, favours speed.
-  See `taoensso.nippy.benchmarks` for detailed comparative benchmarks."
+  See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
   (LZ4Compressor.))
 
 (def lzo-compressor
@@ -187,7 +187,7 @@
     - Decompression speed: `A` (43  msecs on reference benchmark).
 
   Good general-purpose compressor, favours speed.
-  See `taoensso.nippy.benchmarks` for detailed comparative benchmarks."
+  See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
   (LZOCompressor.))
 
 (def snappy-compressor
@@ -197,7 +197,7 @@
     - Decompression speed: `B`  (134 msecs on reference benchmark).
 
   Good general-purpose compressor, favours speed.
-  See `taoensso.nippy.benchmarks` for detailed comparative benchmarks."
+  See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
   (SnappyCompressor. false))
 
 (def lzma2-compressor
@@ -207,7 +207,7 @@
     - Decompression speed: `D`  (11.8 secs on reference benchmark).
 
   Specialized compressor, strongly favours ratio.
-  See `taoensso.nippy.benchmarks` for detailed comparative benchmarks."
+  See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
   (LZMA2Compressor. 0))
 
 (enc/def* ^:no-doc lz4hc-compressor

@@ -8,7 +8,7 @@
    [taoensso.nippy                :as nippy :refer [freeze thaw]]
    [taoensso.nippy.compression    :as compr]
    [taoensso.nippy.crypto         :as crypto]
-   [taoensso.nippy.benchmarks     :as benchmarks]))
+   [taoensso.nippy-benchmarks     :as benchmarks]))
 
 (comment
   (remove-ns      'taoensso.nippy-tests)
