@@ -113,17 +113,17 @@
     (set! *unchecked-math* false)
     (bench {:all? true}))
 
-  ;; 2023 Aug 1, 2020 Apple MBP M1
+  ;; 2023 Sep 25, 2020 Apple MBP M1
   ;; [com.taoensso/nippy        "3.2.0"]
   ;; [org.clojure/tools.reader  "1.3.6"]
   ;; [org.clojure/data.fressian "1.0.0"]
 
-  {:reader          {:round 35041, :freeze 5942,  :thaw 29099, :size 39389}
-   :fressian        {:round 6241,  :freeze 3429,  :thaw 2812,  :size 22850}
-   :nippy/lzma2     {:round 33561, :freeze 20530, :thaw 13031, :size 11444}
-   :nippy/encrypted {:round 3390,  :freeze 1807,  :thaw 1583,  :size 16468}
-   :nippy/default   {:round 2845,  :freeze 1513,  :thaw 1332,  :size 16440}
-   :nippy/fast      {:round 2634,  :freeze 1338,  :thaw 1296,  :size 28454}})
+  {:reader          {:round 36756, :freeze 6567,  :thaw 30189, :size 39374}
+   :fressian        {:round 6579,  :freeze 3720,  :thaw 2859,  :size 22850}
+   :nippy/lzma2     {:round 33645, :freeze 20411, :thaw 13234, :size 11420}
+   :nippy/encrypted {:round 3894,  :freeze 2260,  :thaw 1634,  :size 16717}
+   :nippy/default   {:round 2796,  :freeze 1467,  :thaw 1329,  :size 16689}
+   :nippy/fast      {:round 2516,  :freeze 1271,  :thaw 1245,  :size 28454}})
 
 ;;;; Compressors
 
