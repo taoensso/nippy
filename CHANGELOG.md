@@ -2,6 +2,19 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.3.0-RC2` (2023-09-25)
+
+> 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.3.3-RC2)
+
+Identical to `v3.3.0-RC1` except:
+
+- Improves some docstrings
+- Improves generative unit tests
+- Updates internal dependencies
+
+If no unexpected problems come up, `v3.3.0` final is planned for release by the end of September.
+
+
 # `v3.3.0-RC1` (2023-08-02)
 
 > 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.3.3-RC1)
