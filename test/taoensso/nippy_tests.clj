@@ -354,6 +354,20 @@
 
      "Don't try to preserve metadata on vars")])
 
+;;;; Freezable?
+
+(deftest _freezable?
+  [(is (= (nippy/freezable? :foo)                      :native))
+   (is (= (nippy/freezable? [:a :b])                   :native))
+   (is (= (nippy/freezable? [:a (fn [])])                  nil))
+   (is (= (nippy/freezable? [:a (byte-array [1 2 3])]) :native))
+   (is (= (nippy/freezable? [:a (java.util.Date.)])    :native))
+   (is (= (nippy/freezable? (Exception.))                  nil))
+   (is (= (nippy/freezable? (MyType. "a" "b"))         :native))
+   (is (= (nippy/freezable? (MyRec.  "a" "b"))         :native))
+   (is (= (nippy/freezable? (Exception.) {:allow-java-serializable? true})
+         :maybe-java-serializable))])
+
 ;;;; thaw-xform
 
 (deftest _thaw-xform

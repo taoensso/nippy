@@ -6,7 +6,7 @@
    [clojure.java.io :as jio]
    [taoensso.encore :as enc]
    [taoensso.nippy
-    [utils       :as utils]
+    [impl        :as impl]
     [compression :as compression]
     [encryption  :as encryption]])
 
@@ -47,7 +47,7 @@
 ;;   * Supports :auto freeze compressor (since this depends on :auto thaw
 ;;     compressor)
 ;;
-;; [2] See `IFreezable1` protocol for type-specific payload formats,
+;; [2] See `IFreezable` protocol for type-specific payload formats,
 ;;     `thaw-from-in!` for reference type-specific thaw implementations
 ;;
 (def ^:private head-sig "First 3 bytes of Nippy header" (.getBytes "NPY" StandardCharsets/UTF_8))
@@ -347,9 +347,7 @@
   encryption/aes128-gcm-encryptor
   encryption/aes128-cbc-encryptor
   encryption/aes128-gcm-encryptor
-  {:src encryption/aes128-gcm-encryptor, :alias aes128-encryptor}
-
-  utils/freezable?)
+  {:src encryption/aes128-gcm-encryptor, :alias aes128-encryptor})
 
 ;;;; Dynamic config
 ;; See also `nippy.tools` ns for further dynamic config support
@@ -695,6 +693,49 @@
   (binding [*freeze-serializable-allowlist* #{"foo.*" "bar"}]
     (freeze-serializable-allowed? "foo.bar")))
 
+;;;; Freezing interface
+
+;; We extend `IFreezable` to supported types:
+(defprotocol  IFreezable
+  (-freezable?           [_])
+  (-freeze-without-meta! [_ data-output]))
+
+(defprotocol IFreezableWithMeta ; Must be a separate protocol
+  (-freeze-with-meta! [_ data-output]))
+
+(defmacro write-id [out id] `(.writeByte ~out ~id))
+
+(extend-protocol IFreezableWithMeta
+  clojure.lang.IObj ; IMeta => `meta` will work, IObj => `with-meta` will work
+  (-freeze-with-meta! [x ^DataOutput data-output]
+    (when-let [m (when *incl-metadata?* (meta x))]
+      (write-id data-output id-meta)
+      (-freeze-without-meta! m data-output))
+    (-freeze-without-meta!   x data-output))
+
+  nil    (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output))
+  Object (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output)))
+
+(defmacro ^:private freezer [type & body]
+  `(extend-type ~type
+     IFreezable
+     (~'-freezable?           [~'x] true)
+     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})] ~@body)))
+
+(defmacro ^:private freezer* [type & body]
+  `(extend-type ~type
+     IFreezable
+     (~'-freezable?           [~'x] nil)
+     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})] ~@body)))
+
+(defmacro ^:private id-freezer [type id & body]
+  `(extend-type ~type
+     IFreezable
+     (~'-freezable?           [~'x] true)
+     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})]
+      (write-id ~'out ~id)
+      ~@body)))
+
 ;;;; Freezing
 
 (do
@@ -703,8 +744,6 @@
   (def ^:private ^:const range-uint   (- Integer/MAX_VALUE Integer/MIN_VALUE)))
 
 (do
-  (defmacro write-id [out id] `(.writeByte ~out ~id))
-
   (defmacro ^:private sm-count?* [n] `(<= ~n     range-ubyte)) ; Unsigned
   (defmacro ^:private sm-count?  [n] `(<= ~n  Byte/MAX_VALUE))
   (defmacro ^:private md-count?  [n] `(<= ~n Short/MAX_VALUE))
@@ -718,21 +757,6 @@
   (defmacro ^:private read-sm-count  [in]    `(.readByte  ~in))
   (defmacro ^:private read-md-count  [in]    `(.readShort ~in))
   (defmacro ^:private read-lg-count  [in]    `(.readInt   ~in)))
-
- ; We extend `IFreezable1` to supported types:
-(defprotocol     IFreezable1 (-freeze-without-meta! [x data-output]))
-(defprotocol     IFreezable2 (-freeze-with-meta!    [x data-output]))
-(extend-protocol IFreezable2 ; Must be a separate protocol
-  clojure.lang.IObj ; IMeta => `meta` will work, IObj => `with-meta` will work
-  (-freeze-with-meta! [x ^DataOutput data-output]
-    (let [m (when *incl-metadata?* (meta x))]
-      (when m
-        (write-id data-output id-meta)
-        (-freeze-without-meta! m data-output)))
-    (-freeze-without-meta!     x data-output))
-
-  nil    (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output))
-  Object (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output)))
 
 (defn- write-bytes-sm* [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-sm-count* out len) (.write out ba 0 len)))
 (defn- write-bytes-sm  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-sm-count  out len) (.write out ba 0 len)))
@@ -998,7 +1022,7 @@
       (catch Throwable _ nil))))
 
 (defn try-write-readable [out x]
-  (when (utils/readable? x)
+  (when (impl/seems-readable? x)
     (try
       (write-readable out x)
       true
@@ -1032,17 +1056,6 @@
   "Serializes arg (any Clojure data type) to a DataOutput.
   This is a low-level util: in most cases you'll want `freeze` instead."
   [^DataOutput data-output x] (-freeze-with-meta! x data-output))
-
-(defmacro ^:private freezer [type & body]
-  `(extend-type ~type IFreezable1
-     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})]
-       ~@body)))
-
-(defmacro ^:private id-freezer [type id & body]
-  `(extend-type ~type IFreezable1
-     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})]
-      (write-id ~'out ~id)
-      ~@body)))
 
 ;;;; Caching ; Experimental
 
@@ -1194,7 +1207,7 @@
 (freezer APersistentMap       (write-map            out                  x))
 (freezer PersistentList       (write-counted-coll   out id-list-0 id-list-sm id-list-md id-list-lg x))
 (freezer LazySeq              (write-uncounted-coll out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
-(freezer ISeq                 (write-coll           out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
+(freezer* ISeq                (write-coll           out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
 (freezer IRecord
   (let [class-name    (.getName (class x)) ; Reflect
         class-name-ba (.getBytes class-name StandardCharsets/UTF_8)
@@ -1246,7 +1259,7 @@
     (.writeInt  out (.getDays   x)))
   nil)
 
-(freezer Object
+(freezer* Object
   (when-debug (println (str "freeze-fallback: " (type x))))
   (if-let [ff *freeze-fallback*]
     (if-not (identical? ff :write-unfreezable)
@@ -2015,10 +2028,10 @@
           ;; Unprefixed [cust byte id][payload]:
           `(write-id ~out ~(coerce-custom-type-id custom-type-id)))]
 
-    `(extend-type ~type IFreezable1
-       (~'-freeze-without-meta! [~x ~(with-meta out {:tag 'java.io.DataOutput})]
-        ~write-id-form
-        ~@body))))
+    `(extend-type ~type
+       IFreezable
+       (~'-freezable?           [~'x] true)
+       (~'-freeze-without-meta! [~x ~(with-meta out {:tag 'java.io.DataOutput})] ~write-id-form ~@body))))
 
 (defmacro extend-thaw
   "Extends Nippy to support thawing of a custom type with given id:
@@ -2149,6 +2162,41 @@
     :byte :uri))
 
 ;;;; Tools
+
+(defn freezable?
+  "Alpha, subject to change.
+  Returns ∈ #{:native :maybe-clojure-reader :maybe-java-serializable nil},
+  truthy iff Nippy seems to support freezing for the given argument.
+
+  Important: result can be inaccurate in some cases. To be completely sure you
+  unfortunately need to try freeze then thaw the argument, and check the thawed
+  value.
+
+  Options include:
+    `recursive?`               - Check recursively into given arg?
+    `allow-clojure-reader?`    - Allow freezing with Clojure's reader?
+    `allow-java-serializable?` - Allow freezing with Java's `Serializable`?"
+
+  ([x] (freezable? x nil))
+  ([x
+    {:as opts
+     :keys [recursive? allow-clojure-reader? allow-java-serializable?]
+     :or   {recursive? true}}]
+
+   (or
+     (and
+       (-freezable? x)
+       (and
+         (or
+           (not recursive?) (not (coll? x))
+           (enc/revery? #(freezable? % opts) x)))
+       :native)
+
+     (and allow-clojure-reader?    (impl/seems-readable?     x) :maybe-clojure-reader)
+     (and allow-java-serializable? (impl/seems-serializable? x) :maybe-java-serializable)
+     nil)))
+
+(comment (enc/qb 1e6 (freezable? "hello"))) ; 49.76
 
 (defn inspect-ba
   "Experimental, subject to change. Feedback welcome."
