@@ -23,7 +23,7 @@
     APersistentMap APersistentVector APersistentSet
     IPersistentMap ; IPersistentVector IPersistentSet IPersistentList
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
-    LazySeq IRecord ISeq IType]))
+    MapEntry LazySeq IRecord ISeq IType]))
 
 (enc/assert-min-encore-version [3 67 0])
 
@@ -169,6 +169,8 @@
    99  [:map-sm*   [[:elements {:read 1 :multiplier 2 :unsigned? true}]]]
    33  [:map-md    [[:elements {:read 2 :multiplier 2}]]]
    30  [:map-lg    [[:elements {:read 4 :multiplier 2}]]]
+
+   103 [:map-entry [[:elements 2]]]
 
    35  [:list-0    []]
    36  [:list-sm   [[:elements {:read 1}]]]
@@ -1177,6 +1179,10 @@
   (write-biginteger out (.numerator   x))
   (write-biginteger out (.denominator x)))
 
+(id-freezer MapEntry id-map-entry
+  (-freeze-with-meta! (key x) out)
+  (-freeze-with-meta! (val x) out))
+
 (id-freezer java.util.Date id-util-date (.writeLong out (.getTime x)))
 (id-freezer java.sql.Date  id-sql-date  (.writeLong out (.getTime x)))
 
@@ -1748,6 +1754,10 @@
                          (read-biginteger in)
                          (read-biginteger in))
 
+        id-map-entry   (clojure.lang.MapEntry.
+                         (thaw-from-in! in)
+                         (thaw-from-in! in))
+
         id-util-date   (java.util.Date. (.readLong in))
         id-sql-date    (java.sql.Date.  (.readLong in))
         id-uuid        (UUID. (.readLong in) (.readLong in))
@@ -2105,6 +2115,7 @@
    :vector       [1 2 3 4 5 [6 7 8 [9 10 [[]]]]]
    :subvec       (subvec [1 2 3 4 5 6 7 8] 2 8)
    :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7 :j {{} {}}}}}
+   :map-entry    (clojure.lang.MapEntry. "key" "val")
    :set          #{1 2 3 4 5 #{6 7 8 #{9 10 #{#{}}}}}
    :meta         (with-meta {:a :A} {:metakey :metaval})
    :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}

@@ -58,6 +58,7 @@ nippy/stress-data
  :vector       [1 2 3 4 5 [6 7 8 [9 10 [[]]]]]
  :subvec       (subvec [1 2 3 4 5 6 7 8] 2 8)
  :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7 :j {{} {}}}}}
+ :map-entry    (clojure.lang.MapEntry. "key" "val")
  :set          #{1 2 3 4 5 #{6 7 8 #{9 10 #{#{}}}}}
  :meta         (with-meta {:a :A} {:metakey :metaval})
  :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}
