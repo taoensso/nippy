@@ -35,15 +35,38 @@ Please test carefully and report any unexpected problems, thank you! 🙏
 
 ---
 
+# `v3.4.0-beta1` (2023-09-26)
+
+> 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.0-beta1)
+
+This is a non-breaking **feature** pre-release.  
+Please **test carefully and report any unexpected problems**, thank you! 🙏
+
+## New since `v3.3.0-RC2`
+
+* 6ad5aeb [new] Add `:zstd` compressor, new (faster) compressor backend, better docstrings
+* fb6f75e [new] Smarter, faster, protocol-based `freezable?` util
+* f3ff7ae [new] Add native `MapEntry` freezer
+* fef079d [new] Add subvec to stress data
+* Misc internal improvements
+
+## Other improvements since `v3.3.0-RC2`
+
+* e0cd003 [nop] Update docs
+* 99970d5 [nop] Update benchmark results
+* bcf7673 [nop] Move benchmarks ns under tests dir
+
+---
+
 # `v3.3.0-RC2` (2023-09-25)
 
-> 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.3.3-RC2)
+> 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.3.0-RC2)
 
 Identical to `v3.3.0-RC1` except:
 
-- Improves some docstrings
-- Improves generative unit tests
-- Updates internal dependencies
+* Improves some docstrings
+* Improves generative unit tests
+* Updates internal dependencies
 
 If no unexpected problems come up, `v3.3.0` final is planned for release by the end of September.
 
@@ -51,10 +74,10 @@ If no unexpected problems come up, `v3.3.0` final is planned for release by the 
 
 # `v3.3.0-RC1` (2023-08-02)
 
-> 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.3.3-RC1)
+> 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.3.0-RC1)
 
 This is a non-breaking **feature and maintenance** pre-release.  
-Please test carefully and report any unexpected problems, thank you! 🙏
+Please **test carefully and report any unexpected problems**, thank you! 🙏
 
 ## Fixes since `v3.2.0`
 

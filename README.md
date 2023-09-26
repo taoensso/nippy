@@ -14,7 +14,8 @@ Used by [Carmine](https://www.taoensso.com/carmine), [Faraday](https://www.taoen
 
 ## Latest release/s
 
-- `2023-09-25` `3.3.0` (stable): [changes](../../releases/tag/v3.3.0)
+- `2023-10-11` `3.3.0` (stable): [changes](../../releases/tag/v3.3.0)
+- `2023-09-26` `3.4.0-beta1` (dev): [changes](../../releases/tag/v3.4.0-beta1)
 
 [![Main tests][Main tests SVG]][Main tests URL]
 [![Graal tests][Graal tests SVG]][Graal tests URL]
@@ -30,7 +31,7 @@ See [here][GitHub releases] for earlier releases.
 - **Robust test suite**, incl. full coverage for every supported type
 - Auto fallback to Java Serializable when available
 - Auto fallback to Clojure Reader for all other types (including tagged literals
-- Pluggable **compression** with built-in [LZ4](https://code.google.com/p/lz4/)
+- Pluggable **compression** with built-in [LZ4](https://code.google.com/p/lz4/), [Zstandard](https://facebook.github.io/zstd/), etc.
 - Pluggable [encryption](../../wiki/1-Getting-started#encryption) with built-in AES128
 - [Tools](https://taoensso.github.io/nippy/taoensso.nippy.tools.html) for easy + robust **integration into 3rd-party libraries**, etc.
 - Powerful [thaw transducer](https://taoensso.github.io/nippy/taoensso.nippy.html#var-*thaw-xform*) for flexible data inspection and transformation
