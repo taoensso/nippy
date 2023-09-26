@@ -25,15 +25,12 @@
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
     MapEntry LazySeq IRecord ISeq IType]))
 
-(enc/assert-min-encore-version [3 67 0])
+(enc/assert-min-encore-version [3 68 0])
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
   (set! *unchecked-math* false)
   (thaw (freeze stress-data)))
-
-;;;; TODO
-;; - Performance would benefit from ^:static support / direct linking / etc.
 
 ;;;; Nippy data format
 ;; * 4-byte header (Nippy v2.x+) (may be disabled but incl. by default) [1]
@@ -55,7 +52,7 @@
 (def ^:private ^:const head-meta
   "Final byte of 4-byte Nippy header stores version-dependent metadata"
 
-  ;; Currently
+  ;; Currently:
   ;;   - 6x compressors: #{nil :zstd :lz4 #_:lzo :lzma2 :snappy :else}
   ;;   - 4x encryptors:  #{nil :aes128-cbc-sha512 :aes128-gcm-sha512 :else}
 
@@ -223,14 +220,14 @@
    ;;; DEPRECATED (only support thawing)
    ;; Desc-sorted by deprecation date
 
-   105 [:str-sm_  [[:bytes    {:read 1}]]]               ; [2023-mm-dd v3.3.3] Switch to unsigned sm*
-   110 [:vec-sm_  [[:elements {:read 1}]]]               ; [2023-mm-dd v3.3.3] Switch to unsigned sm*
-   111 [:set-sm_  [[:elements {:read 1}]]]               ; [2023-mm-dd v3.3.3] Switch to unsigned sm*
-   112 [:map-sm_  [[:elements {:read 1 :multiplier 2}]]] ; [2023-mm-dd v3.3.3] Switch to unsigned sm*
+   105 [:str-sm_  [[:bytes    {:read 1}]]]               ; [2023-08-02 v3.3.0] Switch to unsigned sm*
+   110 [:vec-sm_  [[:elements {:read 1}]]]               ; [2023-08-02 v3.3.0] Switch to unsigned sm*
+   111 [:set-sm_  [[:elements {:read 1}]]]               ; [2023-08-02 v3.3.0] Switch to unsigned sm*
+   112 [:map-sm_  [[:elements {:read 1 :multiplier 2}]]] ; [2023-08-02 v3.3.0] Switch to unsigned sm*
 
-   100 [:long-sm_ [[:bytes 1]]] ; [2023-mm-dd v3.3.3] Switch to 2x pos/neg ids
-   101 [:long-md_ [[:bytes 2]]] ; [2023-mm-dd v3.3.3] Switch to 2x pos/neg ids
-   102 [:long-lg_ [[:bytes 4]]] ; [2023-mm-dd v3.3.3] Switch to 2x pos/neg ids
+   100 [:long-sm_ [[:bytes 1]]] ; [2023-08-02 v3.3.0] Switch to 2x pos/neg ids
+   101 [:long-md_ [[:bytes 2]]] ; [2023-08-02 v3.3.0] Switch to 2x pos/neg ids
+   102 [:long-lg_ [[:bytes 4]]] ; [2023-08-02 v3.3.0] Switch to 2x pos/neg ids
 
    78  [:sym-md_ [[:bytes {:read 4}]]] ; [2020-11-18 v3.1.1] Buggy size field, Ref. #138
    77  [:kw-md_  [[:bytes {:read 4}]]] ; [2020-11-18 v3.1.1] Buggy size field, Ref. #138
@@ -354,8 +351,8 @@
 ;;;; Dynamic config
 ;; See also `nippy.tools` ns for further dynamic config support
 
-;; For back compatibility (nb Timbre's Carmine appender)
-(enc/defonce ^:dynamic ^:no-doc ^:deprecated *final-freeze-fallback* "DEPRECATED: prefer `*freeze-fallback`."       nil)
+;; For back compatibility (incl. Timbre's Carmine appender)
+(enc/defonce ^:dynamic ^:no-doc ^:deprecated *final-freeze-fallback* "Prefer `*freeze-fallback`.")
 (enc/defonce ^:dynamic                             *freeze-fallback*
   "Controls Nippy's behaviour when trying to freeze an item for which Nippy
   doesn't currently have a native freeze/thaw implementation.
@@ -388,7 +385,7 @@
 (enc/defonce ^:dynamic *incl-metadata?* "Include metadata when freezing/thawing?" true)
 
 (enc/defonce ^:dynamic *thaw-xform*
-  "Experimental, subject to change. Feedback welcome.
+  "Experimental, subject to change. Feedback welcome!
 
   Transducer to use when thawing standard Clojure collection types
   (vectors, maps, sets, lists, etc.).
@@ -432,14 +429,14 @@
 ;; Unfortunately quite a bit of complexity to do this safely
 
 (def default-freeze-serializable-allowlist
-  "Allows *any* class-name to be frozen using Java's Serializable interface.
+  "Allows *any* class-name to be frozen using Java's `Serializable` interface.
   This is generally safe since RCE risk is present only when thawing.
   See also `*freeze-serializable-allowlist*`."
   #{"*"})
 
-(def   default-thaw-serializable-allowlist
+(def default-thaw-serializable-allowlist
   "A set of common safe class-names to allow to be frozen using Java's
-  Serializable interface. PRs welcome for additions.
+  `Serializable` interface. PRs welcome for additions.
   See also `*thaw-serializable-allowlist*`."
   #{"[I" "[F" "[Z" "[B" "[C" "[D" "[S" "[J"
 
@@ -477,58 +474,19 @@
     "clojure.lang.ExceptionInfo"
     "clojure.lang.ArityException"})
 
-(defn- allow-and-record?     [s] (= s "allow-and-record"))
-(defn- split-class-names>set [s] (when (string? s) (if (= s "") #{} (set (mapv str/trim (str/split s #"[,:]"))))))
-(comment
-  (split-class-names>set "")
-  (split-class-names>set "foo, bar:baz"))
-
-(comment (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
-
-(let [ids
-      {:legacy {:base {:prop        "taoensso.nippy.serializable-whitelist-base" :env        "TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_BASE"}
-                :add  {:prop        "taoensso.nippy.serializable-whitelist-add"  :env        "TAOENSSO_NIPPY_SERIALIZABLE_WHITELIST_ADD"}}
-       :freeze {:base {:prop "taoensso.nippy.freeze-serializable-allowlist-base" :env "TAOENSSO_NIPPY_FREEZE_SERIALIZABLE_ALLOWLIST_BASE"}
-                :add  {:prop "taoensso.nippy.freeze-serializable-allowlist-add"  :env "TAOENSSO_NIPPY_FREEZE_SERIALIZABLE_ALLOWLIST_ADD"}}
-       :thaw   {:base {:prop   "taoensso.nippy.thaw-serializable-allowlist-base" :env   "TAOENSSO_NIPPY_THAW_SERIALIZABLE_ALLOWLIST_BASE"}
-                :add  {:prop   "taoensso.nippy.thaw-serializable-allowlist-add"  :env   "TAOENSSO_NIPPY_THAW_SERIALIZABLE_ALLOWLIST_ADD"}}}]
-
-  (defn- init-allowlist [action default incl-legacy?]
-    (let [allowlist-base
-          (or
-            (when-let [s
-                       (or
-                         (do                (enc/get-sys-val* (get-in ids [action  :base :prop]) (get-in ids [action  :base :env])))
-                         (when incl-legacy? (enc/get-sys-val* (get-in ids [:legacy :base :prop]) (get-in ids [:legacy :base :env]))))]
-
-              (if (allow-and-record? s) s (split-class-names>set s)))
-            default)
-
-          allowlist-add
-          (when-let [s
-                     (or
-                       (do                (enc/get-sys-val* (get-in ids [action  :add :prop]) (get-in ids [action  :add :env])))
-                       (when incl-legacy? (enc/get-sys-val* (get-in ids [:legacy :add :prop]) (get-in ids [:legacy :add :env]))))]
-
-            (if (allow-and-record? s) s (split-class-names>set s)))]
-
-      (if (and allowlist-base allowlist-add)
-        (into (enc/have set? allowlist-base) allowlist-add)
-        (do                  allowlist-base)))))
-
 (let [doc
       "Used when attempting to <freeze/thaw> an object that:
-    - Does NOT implement Nippy's Freezable    protocol.
-    - DOES     implement Java's  Serializable interface.
+    - Does NOT implement Nippy's `Freezable`    protocol.
+    - DOES     implement Java's  `Serializable` interface.
 
   In this case, the allowlist will be checked to see if Java's
-  Serializable interface may be used.
+  `Serializable` interface may be used.
 
   This is a security measure to prevent possible Remote Code Execution
   (RCE) when thawing malicious payloads. See [1] for details.
 
-  If `freeze` encounters a disallowed Serialized class, it will throw.
-  If `thaw`   encounters a disallowed Serialized class, it will:
+  If `freeze` encounters a disallowed `Serializable` class, it will throw.
+  If `thaw`   encounters a disallowed `Serializable` class, it will:
 
     - Throw if it's not possible to safely quarantine the object
       (object was frozen with Nippy < v2.15.0-final).
@@ -572,7 +530,7 @@
   The special `\"allow-and-record\"` value is also possible, see [2].
 
   Upgrading from an older version of Nippy and unsure whether you've been
-  using Nippy's Serializable support, or which classes to allow? See [2].
+  using Nippy's `Serializable` support, or which classes to allow? See [2].
 
   See also `taoensso.encore/name-filter` for a util to help easily build
   more advanced predicate functions.
@@ -583,115 +541,22 @@
   [1] https://github.com/ptaoussanis/nippy/issues/130
   [2] See `allow-and-record-any-serializable-class-unsafe`."]
 
-  (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (init-allowlist :freeze default-freeze-serializable-allowlist false))
-  (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (init-allowlist :thaw     default-thaw-serializable-allowlist true)))
+  (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (impl/init-serializable-allowlist :freeze default-freeze-serializable-allowlist false))
+  (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (impl/init-serializable-allowlist :thaw     default-thaw-serializable-allowlist true)))
 
 (enc/defonce ^:dynamic ^:no-doc ^:deprecated *serializable-whitelist*
-  ;; Mostly retained for https://github.com/juxt/crux/releases/tag/20.09-1.11.0
-  "DEPRECATED, now called `*thaw-serializable-allowlist*`" nil)
+  ;; Retained for https://github.com/juxt/crux/releases/tag/20.09-1.11.0
+  "Prefer `*thaw-serializable-allowlist*`." nil)
 
-(let [nmax    1000
-      ngc     16000
-      state_  (atom {})  ; {<class-name> <frequency>}
-      lock_   (atom nil) ; ?promise
-      trim    (fn [nmax state]
-                (persistent!
-                  (enc/reduce-top nmax val enc/rcompare conj!
-                    (transient {}) state)))]
+(enc/defaliases
+  impl/allow-and-record-any-serializable-class-unsafe
+  impl/get-recorded-serializable-classes)
 
-  ;; Note: trim strategy isn't perfect: it can be tough for new
-  ;; classes to break into the top set since frequencies are being
-  ;; reset only for classes outside the top set.
-  ;;
-  ;; In practice this is probably good enough since the main objective
-  ;; is to discard one-off anonymous classes to protect state from
-  ;; endlessly growing. Also `gc-rate` allows state to temporarily grow
-  ;; significantly beyond `nmax` size, which helps to give new classes
-  ;; some chance to accumulate a competitive frequency before next GC.
-
-  (defn ^{:-state_ state_} ; Undocumented
-    allow-and-record-any-serializable-class-unsafe
-    "A predicate (fn allow-class? [class-name]) fn that can be assigned
-    to `*freeze-serializable-allowlist*` and/or
-         `*thaw-serializable-allowlist*` that:
-
-      - Will allow ANY class to use Nippy's Serializable support (unsafe).
-      - And will record {<class-name> <frequency-allowed>} for the <=1000
-        classes that ~most frequently made use of this support.
-
-    `get-recorded-serializable-classes` returns the recorded state.
-
-    This predicate is provided as a convenience for users upgrading from
-    previous versions of Nippy that allowed the use of Serializable for all
-    classes by default.
-
-    While transitioning from an unsafe->safe configuration, you can use
-    this predicate (unsafe) to record information about which classes have
-    been using Nippy's Serializable support in your environment.
-
-    Once some time has passed, you can check the recorded state. If you're
-    satisfied that all recorded classes are safely Serializable, you can
-    then merge the recorded classes into Nippy's default allowlist/s, e.g.:
-
-    (alter-var-root #'thaw-serializable-allowlist*
-      (fn [_] (into default-thaw-serializable-allowlist
-                (keys (get-recorded-serializable-classes)))))"
-
-    [class-name]
-    (when-let [p @lock_] @p)
-
-    (let [n (count
-              (swap! state_
-                (fn [m] (assoc m class-name
-                          (inc (long (or (get m class-name) 0)))))))]
-
-      ;; Garbage collection (GC): may be serializing anonymous classes, etc.
-      ;; so input domain could be infinite
-      (when (> n ngc) ; Too many classes recorded, uncommon
-        (let [p (promise)]
-          (when (compare-and-set! lock_ nil p) ; Acquired GC lock
-            (try
-              (do      (reset! state_ (trim nmax @state_))) ; GC state
-              (finally (reset! lock_  nil) (deliver p nil))))))
-
-      n))
-
-  (defn get-recorded-serializable-classes
-    "Returns {<class-name> <frequency>} of the <=1000 classes that ~most
-    frequently made use of Nippy's Serializable support via
-    `allow-and-record-any-serializable-class-unsafe`.
-
-    See that function's docstring for more info."
-    [] (trim nmax @state_)))
+(defn- freeze-serializable-allowed? [x] (impl/serializable-allowed?                            *freeze-serializable-allowlist*  x))
+(defn-   thaw-serializable-allowed? [x] (impl/serializable-allowed? (or *serializable-whitelist* *thaw-serializable-allowlist*) x))
 
 (comment
-  (count (get-recorded-serializable-classes))
-  (enc/reduce-n
-    (fn [_ n] (allow-and-record-any-serializable-class-unsafe (str n)))
-    nil 0 1e5))
-
-(let [fn? fn?
-      compile
-      (enc/fmemoize
-        (fn [x]
-          (if (allow-and-record? x)
-            allow-and-record-any-serializable-class-unsafe
-            (enc/name-filter x))))
-
-      conform?* (fn [x cn] ((compile x) cn)) ; Uncached because input domain possibly infinite
-      conform?
-      (fn [x cn]
-        (if (fn? x)
-          (x cn) ; Intentionally uncached, can be handy
-          (conform?* x cn)))]
-
-  (defn- freeze-serializable-allowed? [class-name] (conform? *freeze-serializable-allowlist* class-name))
-  (defn-   thaw-serializable-allowed? [class-name]
-    (conform? (or *serializable-whitelist* *thaw-serializable-allowlist*)
-      class-name)))
-
-(comment
-  (enc/qb 1e6 (freeze-serializable-allowed? "foo")) ; 119.92
+  (enc/qb 1e6 (freeze-serializable-allowed? "foo")) ; 65.63
   (binding [*freeze-serializable-allowlist* #{"foo.*" "bar"}]
     (freeze-serializable-allowed? "foo.bar")))
 
@@ -743,9 +608,8 @@
 (do
   (def ^:private ^:const range-ubyte  (-    Byte/MAX_VALUE    Byte/MIN_VALUE))
   (def ^:private ^:const range-ushort (-   Short/MAX_VALUE   Short/MIN_VALUE))
-  (def ^:private ^:const range-uint   (- Integer/MAX_VALUE Integer/MIN_VALUE)))
-
-(do
+  (def ^:private ^:const range-uint   (- Integer/MAX_VALUE Integer/MIN_VALUE))
+  
   (defmacro ^:private sm-count?* [n] `(<= ~n     range-ubyte)) ; Unsigned
   (defmacro ^:private sm-count?  [n] `(<= ~n  Byte/MAX_VALUE))
   (defmacro ^:private md-count?  [n] `(<= ~n Short/MAX_VALUE))
@@ -1083,7 +947,7 @@
 
 (deftype Cached [val])
 (defn cache
-  "Experimental, subject to change. Feedback welcome.
+  "Experimental, subject to change. Feedback welcome!
 
   Wraps value so that future writes of the same wrapped value with same
   metadata will be efficiently encoded as references to this one.
@@ -1098,13 +962,14 @@
 (freezer Cached
   (let [x-val (.-val x)]
     (if-let [cache_ (.get -cache-proxy)]
-      (let [cache    @cache_
-            k        #_x-val [x-val (meta x-val)] ; Also check meta for equality
-            ?idx     (get cache k)
-            ^int idx (or ?idx
-                       (let [idx (count cache)]
-                         (vswap! cache_ assoc k idx)
-                         idx))
+      (let [cache @cache_
+            k     #_x-val [x-val (meta x-val)] ; Also check meta for equality
+            ?idx  (get cache k)
+            ^int idx
+            (or ?idx
+              (let [idx (count cache)]
+                (vswap! cache_ assoc k idx)
+                idx))
 
             first-occurance? (nil? ?idx)]
 
@@ -2210,7 +2075,7 @@
 (comment (enc/qb 1e6 (freezable? "hello"))) ; 49.76
 
 (defn inspect-ba
-  "Experimental, subject to change. Feedback welcome."
+  "Experimental, subject to change. Feedback welcome!"
   ([ba          ] (inspect-ba ba nil))
   ([ba thaw-opts]
    (when (enc/bytes? ba)
@@ -2300,14 +2165,14 @@
 ;;;; Deprecated
 
 (enc/deprecated
-  (def  ^:deprecated freeze-fallback-as-str      "DEPRECATED, use `write-unfreezable`"   write-unfreezable)
-  (defn ^:deprecated set-freeze-fallback!        "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
-  (defn ^:deprecated set-auto-freeze-compressor! "DEPRECATED, just use `alter-var-root`" [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
-  (defn ^:deprecated swap-custom-readers!        "DEPRECATED, just use `alter-var-root`" [f] (alter-var-root #'*custom-readers* f))
-  (defn ^:deprecated swap-serializable-whitelist!
-    "DEPRECATED, just use
-    (alter-var-root *thaw-serializable-allowlist*    f) and/or
-    (alter-var-root *freeze-serializable-allow-list* f) instead."
+  (def  ^:no-doc ^:deprecated freeze-fallback-as-str      "Prefer `write-unfreezable`."  write-unfreezable)
+  (defn ^:no-doc ^:deprecated set-freeze-fallback!        "Prefer `alter-var-root`." [x] (alter-var-root #'*freeze-fallback*        (constantly x)))
+  (defn ^:no-doc ^:deprecated set-auto-freeze-compressor! "Prefer `alter-var-root`." [x] (alter-var-root #'*auto-freeze-compressor* (constantly x)))
+  (defn ^:no-doc ^:deprecated swap-custom-readers!        "Prefer `alter-var-root`." [f] (alter-var-root #'*custom-readers* f))
+  (defn ^:no-doc ^:deprecated swap-serializable-whitelist!
+    "Prefer:
+      (alter-var-root *thaw-serializable-allowlist*    f) and/or
+      (alter-var-root *freeze-serializable-allow-list* f) instead."
     [f]
     (alter-var-root *freeze-serializable-allowlist* (fn [old] (f (enc/have set? old))))
     (alter-var-root *thaw-serializable-allowlist*   (fn [old] (f (enc/have set? old))))))

@@ -58,9 +58,9 @@
 ;;;;
 
 (defn- is-coll?
-  "Checks for _explicit_ IPersistentCollection types with Nippy support.
-  Checking for explicit concrete types is tedious but preferable since a
-  `freezable?` false positive would be much worse than a false negative."
+  "Checks for explicit `IPersistentCollection` types with Nippy support.
+  Tedious but preferable since a `freezable?` false positive would be much
+  worse than a false negative."
   [x]
   (let [is? #(when (instance? % x) %)]
     (or

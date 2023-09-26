@@ -4,10 +4,9 @@
    [taoensso.encore       :as enc]
    [taoensso.nippy.crypto :as crypto]))
 
-(def standard-header-ids
-  "These'll support `:auto` thaw."
-  #{:aes128-cbc-sha512
-    :aes128-gcm-sha512})
+(def ^:const standard-header-ids
+  "These support `:auto` thaw."
+  #{:aes128-cbc-sha512 :aes128-gcm-sha512})
 
 (defprotocol IEncryptor
   (header-id      [encryptor])
