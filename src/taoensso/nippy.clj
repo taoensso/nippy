@@ -1,5 +1,5 @@
 (ns taoensso.nippy
-  "High-performance serialization library for Clojure"
+  "High-performance serialization library for Clojure."
   {:author "Peter Taoussanis (@ptaoussanis)"}
   (:require
    [clojure.string  :as str]
@@ -545,7 +545,7 @@
   (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (impl/init-serializable-allowlist :thaw     default-thaw-serializable-allowlist true)))
 
 (enc/defonce ^:dynamic ^:no-doc ^:deprecated *serializable-whitelist*
-  ;; Retained for https://github.com/juxt/crux/releases/tag/20.09-1.11.0
+  ;; Back compatibility for Crux, Ref. <https://github.com/juxt/crux/releases/tag/20.09-1.11.0>
   "Prefer `*thaw-serializable-allowlist*`." nil)
 
 (enc/defaliases
@@ -666,7 +666,7 @@
       (sm-count? len) (do (write-id out id-kw-sm) (write-sm-count out len))
       (md-count? len) (do (write-id out id-kw-md) (write-md-count out len))
       ;; :else        (do (write-id out id-kw-lg) (write-lg-count out len)) ; Unrealistic
-      :else (throw (ex-info "Keyword too long" {:full-name s})))
+      :else           (throw (ex-info "Keyword too long" {:name s})))
 
     (.write out ba 0 len)))
 
@@ -678,7 +678,7 @@
       (sm-count? len) (do (write-id out id-sym-sm) (write-sm-count out len))
       (md-count? len) (do (write-id out id-sym-md) (write-md-count out len))
       ;; :else        (do (write-id out id-sym-lg) (write-lg-count out len)) ; Unrealistic
-      :else (throw (ex-info "Symbol too long" {:full-name s})))
+      :else           (throw (ex-info "Symbol too long" {:name s})))
 
     (.write out ba 0 len)))
 
@@ -854,10 +854,7 @@
       (sm-count? len) (do (write-id out id-sz-quarantined-sm) (write-bytes-sm out class-name-ba))
       (md-count? len) (do (write-id out id-sz-quarantined-md) (write-bytes-md out class-name-ba))
       ;; :else        (do (write-id out id-sz-quarantined-lg) (write-bytes-md out class-name-ba)) ; Unrealistic
-      :else
-      (throw
-        (ex-info "Serializable class name too long"
-          {:class-name class-name})))
+      :else           (throw (ex-info "Serializable class name too long" {:name class-name})))
 
     ;; Legacy: write object directly to out.
     ;; (.writeObject (ObjectOutputStream. out) x)
@@ -1014,8 +1011,7 @@
               (vswap! cache_ assoc idx x)
               x)
             v))
-        (throw (ex-info "No cache_ established, can't thaw. See `with-cache`."
-                 {}))))))
+        (throw (ex-info "No cache_ established, can't thaw. See `with-cache`." {}))))))
 
 (comment
   (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")]))
@@ -1027,7 +1023,7 @@
 ;;;;
 
 (id-freezer nil        id-nil)
-(id-freezer (type '()) id-list-0)
+(id-freezer (type ())  id-list-0)
 (id-freezer Character  id-char       (.writeChar       out (int x)))
 (id-freezer Byte       id-byte       (.writeByte       out x))
 (id-freezer Short      id-short      (.writeShort      out x))
@@ -1087,10 +1083,7 @@
       (sm-count? len) (do (write-id out id-record-sm) (write-bytes-sm out class-name-ba))
       (md-count? len) (do (write-id out id-record-md) (write-bytes-md out class-name-ba))
       ;; :else        (do (write-id out id-record-lg) (write-bytes-md out class-name-ba)) ; Unrealistic
-      :else
-      (throw
-        (ex-info "Record class name too long"
-          {:class-name class-name})))
+      :else           (throw (ex-info "Record class name too long" {:name class-name})))
 
     (-freeze-without-meta! (into {} x) out)))
 
@@ -1161,8 +1154,9 @@
 (defn- wrap-header [data-ba head-meta]
   (if-let [head-ba (get-head-ba head-meta)]
     (enc/ba-concat head-ba data-ba)
-    (throw (ex-info (str "Unrecognized header meta: " head-meta)
-             {:head-meta head-meta}))))
+    (throw
+      (ex-info (str "Unrecognized header meta: " head-meta)
+        {:head-meta head-meta}))))
 
 (comment (wrap-header (.getBytes "foo") {:compressor-id :lz4
                                          :encryptor-id  nil}))
@@ -1182,6 +1176,7 @@
           bindings
           (-> nil
             (opt->bindings :freeze-fallback        #'*freeze-fallback*)
+            (opt->bindings :final-freeze-fallback  #'*final-freeze-fallback*)
             (opt->bindings :auto-freeze-compressor #'*auto-freeze-compressor*)
             (opt->bindings :custom-readers         #'*custom-readers*)
             (opt->bindings :incl-metadata?         #'*incl-metadata?*)
@@ -1223,7 +1218,6 @@
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array.
   To freeze custom types, extend the Clojure reader or see `extend-freeze`."
-
   ([x] (freeze x nil))
   ([x {:as   opts
        :keys [compressor encryptor password serializable-allowlist incl-metadata?]
@@ -1232,9 +1226,7 @@
 
    (call-with-bindings :freeze opts
      (fn []
-       (let [;; Intentionally undocumented:
-             no-header? (or (get opts :no-header?)
-                            (get opts :skip-header?))
+       (let [no-header? (or (get opts :no-header?) (get opts :skip-header?)) ; Undocumented
              encryptor  (when password encryptor)
              baos (ByteArrayOutputStream. 64)
              dos  (DataOutputStream. baos)]
@@ -1470,7 +1462,7 @@
         nil nbasis)
 
       (let [ctors (.getConstructors aclass)
-            ^Constructor ctor (aget ctors 0) ; Impl. detail? Ref. https://goo.gl/XWmckR
+            ^Constructor ctor (aget ctors 0) ; Impl. detail? Ref. <https://goo.gl/XWmckR>
             ]
         (.newInstance ctor cvalues)))
 
@@ -1576,14 +1568,14 @@
         id-map-md      (read-kvs-into {} in (read-md-count  in))
         id-map-lg      (read-kvs-into {} in (read-lg-count  in))
 
-        id-queue-lg      (read-into (PersistentQueue/EMPTY) in (read-lg-count in))
-        id-sorted-set-lg (read-into     (sorted-set)        in (read-lg-count in))
-        id-sorted-map-lg (read-kvs-into (sorted-map)        in (read-lg-count in))
+        id-queue-lg      (read-into     PersistentQueue/EMPTY in (read-lg-count in))
+        id-sorted-set-lg (read-into     (sorted-set)          in (read-lg-count in))
+        id-sorted-map-lg (read-kvs-into (sorted-map)          in (read-lg-count in))
 
-        id-list-0            '()
-        id-list-sm     (into '() (rseq (read-into [] in (read-sm-count in))))
-        id-list-md     (into '() (rseq (read-into [] in (read-md-count in))))
-        id-list-lg     (into '() (rseq (read-into [] in (read-lg-count in))))
+        id-list-0            ()
+        id-list-sm     (into () (rseq (read-into [] in (read-sm-count in))))
+        id-list-md     (into () (rseq (read-into [] in (read-md-count in))))
+        id-list-lg     (into () (rseq (read-into [] in (read-lg-count in))))
 
         id-seq-0       (lazy-seq nil)
         id-seq-sm      (or (seq (read-into [] in (read-sm-count in))) (lazy-seq nil))
@@ -1613,15 +1605,11 @@
         id-float       (.readFloat  in)
         id-double-0    0.0
         id-double      (.readDouble in)
-        id-bigdec      (BigDecimal. ^BigInteger (read-biginteger in) (.readInt in))
 
-        id-ratio       (clojure.lang.Ratio.
-                         (read-biginteger in)
-                         (read-biginteger in))
+        id-bigdec      (BigDecimal. ^BigInteger (read-biginteger in) (.readInt        in))
+        id-ratio       (clojure.lang.Ratio.     (read-biginteger in) (read-biginteger in))
 
-        id-map-entry   (clojure.lang.MapEntry.
-                         (thaw-from-in! in)
-                         (thaw-from-in! in))
+        id-map-entry   (clojure.lang.MapEntry/create (thaw-from-in! in) (thaw-from-in! in))
 
         id-util-date   (java.util.Date. (.readLong in))
         id-sql-date    (java.sql.Date.  (.readLong in))
@@ -1738,7 +1726,6 @@
     - :compressor nil
     - :encryptor  nil
     - :no-header? true"
-
   [^bytes ba]
   (let [dis (DataInputStream. (ByteArrayInputStream. ba))]
     (with-cache (thaw-from-in! dis))))
@@ -1755,7 +1742,6 @@
     :v1-compatibility? - support data frozen by legacy versions of Nippy?
     :compressor - :auto (checks header, default)  an ICompressor, or nil
     :encryptor  - :auto (checks header, default), an IEncryptor,  or nil"
-
   ([ba] (thaw ba nil))
   ([^bytes ba
     {:as   opts
@@ -1785,6 +1771,7 @@
                      :bindings
                      (enc/assoc-some {}
                        '*freeze-fallback*             *freeze-fallback*
+                       '*final-freeze-fallback*       *final-freeze-fallback*
                        '*auto-freeze-compressor*      *auto-freeze-compressor*
                        '*custom-readers*              *custom-readers*
                        '*incl-metadata?*              *incl-metadata?*
@@ -1812,7 +1799,7 @@
                    (catch Exception e (ex-fn e)))))
 
              ;; Hackish + can actually segfault JVM due to Snappy bug,
-             ;; Ref. http://goo.gl/mh7Rpy - no better alternatives, unfortunately
+             ;; Ref. <http://goo.gl/mh7Rpy> - no better alternatives, unfortunately
              thaw-v1-data
              (fn [data-ba ex-fn]
                (thaw-data data-ba :snappy nil
@@ -1884,7 +1871,7 @@
     * Keyword    - 2 byte overhead, keywords hashed to 16 bit id
     * ℕ∈[1, 128] - 0 byte overhead
 
-  NB: be careful about extending to interfaces, Ref. http://goo.gl/6gGRlU.
+  NB: be careful about extending to interfaces, Ref. <http://goo.gl/6gGRlU>.
 
   (defrecord MyRec [data])
   (extend-freeze MyRec :foo/my-type [x data-output] ; Keyword id

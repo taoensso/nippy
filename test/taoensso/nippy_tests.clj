@@ -78,7 +78,7 @@
          (do                   {:password [:salted "pwd"]})))
      "CBC auto-encryptor compatibility")
 
-   (testing "Signed long types"
+   (testing "Unsigned long types"
      (let [range-ushort+ (+ (long @#'nippy/range-ushort) 128)
            range-uint+   (+ (long @#'nippy/range-uint)   128)]
 

@@ -5,8 +5,8 @@
   (:require [taoensso.encore :as enc]))
 
 ;; Note that AES128 may be preferable to AES256 due to known attack
-;; vectors specific to AES256, Ref. https://goo.gl/qU4CCV
-;;  or for a counter argument, Ref. https://goo.gl/9LA9Yb
+;; vectors specific to AES256, Ref. <https://goo.gl/qU4CCV>
+;;  or for a counter argument, Ref. <https://goo.gl/9LA9Yb>
 
 ;;;; Randomness
 
@@ -70,7 +70,7 @@
   (get-key-spec   ^javax.crypto.spec.SecretKeySpec           [_    ba] "Returns a `javax.crypto.spec.SecretKeySpec`.")
   (get-param-spec ^java.security.spec.AlgorithmParameterSpec [_ iv-ba] "Returns a `java.security.spec.AlgorithmParameters`."))
 
-;; Prefer GCM > CBC, Ref. https://goo.gl/jpZoj8
+;; Prefer GCM > CBC, Ref. <https://goo.gl/jpZoj8>
 (def ^:private gcm-cipher* (enc/thread-local-proxy (javax.crypto.Cipher/getInstance "AES/GCM/NoPadding")))
 (def ^:private cbc-cipher* (enc/thread-local-proxy (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
 

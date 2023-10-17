@@ -67,7 +67,8 @@
 (defn- airlift-decompress
   ^bytes [^io.airlift.compress.Decompressor d ^bytes ba max-out-len]
   (if max-out-len
-    (let [ba-max-out (byte-array (int max-out-len))
+    (let [max-out-len (int        max-out-len)
+          ba-max-out  (byte-array max-out-len)
           out-len
           (.decompress d
             ba         0 (alength ba)
