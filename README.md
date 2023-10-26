@@ -29,8 +29,8 @@ See [here][GitHub releases] for earlier releases.
 - Comprehensive support for [all standard data types](../../wiki/1-Getting-started#deserializing)
 - Easily extendable to [custom data types](../../wiki/1-Getting-started#custom-types)
 - **Robust test suite**, incl. full coverage for every supported type
-- Auto fallback to Java Serializable when available
-- Auto fallback to Clojure Reader for all other types (including tagged literals
+- Auto fallback to [Java Serializable](https://taoensso.github.io/nippy/taoensso.nippy.html#var-*freeze-serializable-allowlist*) when available
+- Auto fallback to Clojure Reader for all other types (including tagged literals)
 - Pluggable **compression** with built-in [LZ4](https://code.google.com/p/lz4/), [Zstandard](https://facebook.github.io/zstd/), etc.
 - Pluggable [encryption](../../wiki/1-Getting-started#encryption) with built-in AES128
 - [Tools](https://taoensso.github.io/nippy/taoensso.nippy.tools.html) for easy + robust **integration into 3rd-party libraries**, etc.
@@ -49,8 +49,8 @@ The [benchmark code](../../blob/master/test/taoensso/nippy_benchmarks.clj) can b
 
 ## Documentation
 
-- [Full documentation][GitHub wiki] (**getting started** and more)
-- Auto-generated API reference: [Codox][Codox docs], [clj-doc][clj-doc docs]
+- [Wiki][GitHub wiki] (getting started, usage, etc.)
+- API reference: [Codox][Codox docs], [clj-doc][clj-doc docs]
 
 ## Funding
 
@@ -58,7 +58,7 @@ You can [help support][sponsor] continued work on this project, thank you!! 🙏
 
 ## License
 
-Copyright &copy; 2012-2023 [Peter Taoussanis][].  
+Copyright &copy; 2012-2024 [Peter Taoussanis][].  
 Licensed under [EPL 1.0](LICENSE.txt) (same as Clojure).
 
 <!-- Common -->
