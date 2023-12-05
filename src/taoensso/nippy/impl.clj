@@ -6,54 +6,51 @@
 
 ;;;; Fallback type tests
 
-(defn- memoize-type-test
-  "Unfortunately the only ~reliable way we can tell if something's
-  really serializable/readable is to actually try a full roundtrip."
-  [test-fn]
-  (let [cache_ (enc/latom {})] ; {<type> <type-okay?>}
+(defn cache-by-type [f]
+  (let [cache_ (enc/latom {})] ; {<type> <result_>}
     (fn [x]
-      (let [t          (type x)
-            gensym?    (re-find #"__\d+" (str t))
-            cacheable? (not gensym?) ; Hack, but no obviously better solutions
-            test       (fn [] (try (test-fn x) (catch Exception _ false)))]
+      (let [t (if (fn? x) ::fn (type x))]
+        (if-let [result_ (get (cache_) t)]
+          @result_
+          (if-let [uncacheable-type? (re-find #"\d" (str t))]
+            (do                      (f x))
+            @(cache_ t #(or % (delay (f x))))))))))
 
-        (if cacheable?
-          @(cache_ t #(if % % (delay (test))))
-          (do                        (test)))))))
+(def seems-readable?
+  (cache-by-type
+    (fn [x]
+      (try
+        (enc/read-edn (enc/pr-edn x))
+        true
+        (catch Throwable _ false)))))
 
-(def seems-readable? (memoize-type-test (fn [x] (-> x enc/pr-edn enc/read-edn) true)))
 (def seems-serializable?
-  (let [mtt
-        (memoize-type-test
-          (fn [x]
-            (let [class-name (.getName (class x))
-                  c   (Class/forName class-name) ; Try 1st (fail fast)
-                  bas (java.io.ByteArrayOutputStream.)
-                  _   (.writeObject (java.io.ObjectOutputStream. bas) x)
-                  ba  (.toByteArray bas)]
-
-              #_
-              (cast c
-                (.readObject ; Unsafe + usu. unnecessary to check
-                  (ObjectInputStream.
-                    (ByteArrayInputStream. ba))))
-
-              true)))]
-
+  (cache-by-type
     (fn [x]
-      (if (instance? java.io.Serializable x)
-        (if (fn? x)
-          false ; Reports as true but is unreliable
-          (mtt x))
-       false))))
+      (enc/cond
+        (fn? x) false ; Falsely reports as Serializable
+
+        (instance? java.io.Serializable x)
+        (try
+          (let [c   (Class/forName (.getName (class x))) ; Try 1st (fail fast)
+                bas (java.io.ByteArrayOutputStream.)
+                _   (.writeObject (java.io.ObjectOutputStream. bas) x)
+                ba  (.toByteArray bas)]
+            #_
+            (cast c
+              (.readObject ; Unsafe + usu. unnecessary to check
+                (ObjectInputStream. (ByteArrayInputStream. ba))))
+            true)
+          (catch Throwable _ false))
+
+        :else false))))
 
 (comment
-  (enc/qb 1e4 ; [2.52 2.53 521.34 0.63]
-    (seems-readable?     "Hello world") ; Cacheable
-    (seems-serializable? "Hello world") ; Cacheable
-    (seems-readable?     (fn []))       ; Uncacheable
-    (seems-serializable? (fn []))       ; Uncacheable
-    ))
+  (enc/qb 1e6 ; [60.83 61.16 59.86 57.37]
+    (seems-readable?     "Hello world")
+    (seems-serializable? "Hello world")
+    (seems-readable?     (fn []))
+    (seems-serializable? (fn []))))
 
 ;;;; Java Serializable
 
