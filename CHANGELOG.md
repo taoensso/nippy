@@ -11,6 +11,10 @@ Identical to `v3.3.0-RC2`.
 This is a non-breaking **feature and maintenance** release.  
 Please test carefully and report any unexpected problems, thank you! 🙏
 
+## Changes since `v3.2.0`
+
+* [mod] Due to micro-optimizations of some elementary types, Nippy v3.3 may produce **different serialized output** to earlier versions of Nippy. Most users won't care about this, but you could be affected if you depend on specific serialized byte values (for example by comparing serialized output between different versions of Nippy).
+
 ## Fixes since `v3.2.0`
 
 * fa1cc66 [fix] [#143] Don't freeze meta info for types that don't support `with-meta`
