@@ -27,30 +27,29 @@
 
 ;;;; Benchable data
 
-(def data
-  "Map of data suitable for benching, a subset of
-  `nippy/stress-data-comparable`."
-  (reduce-kv
-    (fn [m k v]
-      (try
-        (-> v freeze-reader thaw-reader)
-        (-> v freeze-fress  thaw-fress)
-        m
-        (catch Throwable _ (dissoc m k))))
-    nippy/stress-data-comparable
-    nippy/stress-data-comparable))
+(def bench-data
+  "Subset of stress data suitable for benching."
+  (let [sd (nippy/stress-data {:comparable? true})]
+    (reduce-kv
+      (fn [m k v]
+        (try
+          (-> v freeze-reader thaw-reader)
+          (-> v freeze-fress  thaw-fress)
+          m
+          (catch Throwable _ (dissoc m k))))
+      sd sd)))
 
 (comment
   (clojure.set/difference
-    (set (keys nippy/stress-data-comparable))
-    (set (keys data))))
+    (set (keys (nippy/stress-data {:comparable? true})))
+    (set (keys         bench-data))))
 
 ;;;;
 
 (defn- bench1
   [{:keys [laps warmup] :or {laps 1e4, warmup 25e3}} freezer thawer sizer]
-  (let [data-frozen (freezer data)
-        time-freeze (enc/bench laps {:warmup-laps warmup} (freezer data))
+  (let [data-frozen                                       (freezer bench-data)
+        time-freeze (enc/bench laps {:warmup-laps warmup} (freezer bench-data))
         time-thaw   (enc/bench laps {:warmup-laps warmup} (thawer  data-frozen))
         data-size   (sizer data-frozen)]
 
@@ -127,19 +126,18 @@
 
 ;;;; Compressors
 
-(let [_    (require '[taoensso.nippy :as nippy])
-      data (nippy/freeze nippy/stress-data-comparable {:compressor nil})]
+(let [bench-data (nippy/freeze (nippy/stress-data {:comparable? true}) {:compressor nil})]
 
   (defn bench1-compressor
     [{:keys [laps warmup] :or {laps 1e4, warmup 2e4}} compressor]
-    (let [data-compressed                                       (compr/compress   compressor data)
-          time-compress   (enc/bench laps {:warmup-laps warmup} (compr/compress   compressor data))
+    (let [data-compressed                                       (compr/compress   compressor bench-data)
+          time-compress   (enc/bench laps {:warmup-laps warmup} (compr/compress   compressor bench-data))
           time-decompress (enc/bench laps {:warmup-laps warmup} (compr/decompress compressor data-compressed))]
 
       {:round (+ time-compress time-decompress)
        :compress   time-compress
        :decompress time-decompress
-       :ratio      (enc/round2 (/ (count data-compressed) (count data)))}))
+       :ratio      (enc/round2 (/ (count data-compressed) (count bench-data)))}))
 
   (defn bench-compressors [bench1-opts lzma-opts]
     (merge

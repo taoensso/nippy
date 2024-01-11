@@ -1928,101 +1928,88 @@
 (deftype   StressType   [my-data]
   Object (equals [a b] (= (.-my-data a) (.-my-data ^StressType b))))
 
-(def stress-data "Reference data used for tests & benchmarks"
-  {:nil                   nil
-   :true                  true
-   :false                 false
-   :boxed-false (Boolean. false)
+(defn stress-data
+  "Returns map of reference stress data for use by tests, benchmarks, etc."
+  [{:keys [comparable?] :as opts}]
+  (let [rng      (java.util.Random. 123456) ; Seeded for determinism
+        rand-nth (fn [coll] (nth coll (.nextInt rng (count coll))))
+        all
+        {:nil                   nil
+         :true                  true
+         :false                 false
+         :false-boxed (Boolean. false)
 
-   :char      \ಬ
-   :str-short "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
-   :str-long  (apply str (range 1000))
-   :kw        :keyword
-   :kw-ns     ::keyword
-   :kw-long   (keyword
-                (apply str "kw" (range 1000))
-                (apply str "kw" (range 1000)))
+         :char      \ಬ
+         :str-short "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
+         :str-long  (reduce str (range 1024))
+         :kw        :keyword
+         :kw-ns     ::keyword
+         :sym       'foo
+         :sym-ns    'foo/bar
+         :kw-long   (keyword (reduce str "_" (range 128)) (reduce str "_" (range 128)))
+         :sym-long  (symbol  (reduce str "_" (range 128)) (reduce str "_" (range 128)))
 
-   :sym       'foo
-   :sym-ns    'foo/bar
-   :sym-long   (symbol
-                 (apply str "sym" (range 1000))
-                 (apply str "sym" (range 1000)))
+         :byte      (byte   16)
+         :short     (short  42)
+         :integer   (int    3)
+         :long      (long   3)
+         :float     (float  3.1415926535897932384626433832795)
+         :double    (double 3.1415926535897932384626433832795)
+         :bigdec    (bigdec 3.1415926535897932384626433832795)
+         :bigint    (bigint  31415926535897932384626433832795)
+         :ratio     22/7
 
-   :regex     #"^(https?:)?//(www\?|\?)?"
+         :list      (list 1 2 3 4 5 (list 6 7 8 (list 9 10 (list) ())))
+         :vector    [1 2 3 4 5 [6 7 8 [9 10 [[]]]]]
+         :subvec    (subvec [1 2 3 4 5 6 7 8] 2 8)
+         :map       {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7 :j {{} {}}}}}
+         :map-entry (clojure.lang.MapEntry/create "key" "val")
+         :set       #{1 2 3 4 5 #{6 7 8 #{9 10 #{#{}}}}}
+         :meta      (with-meta {:a :A} {:metakey :metaval})
+         :nested    [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{[] ()}}] #{:a :b}}
+                     #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{[] ()}}] #{:a :b}}
+                     [1 [1 2 [1 2 3 [1 2 3 4 [1 2 3 4 5 "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"] {} #{} [] ()]]]]]
 
-   ;;; Try reflect real-world data:
-   :many-small-numbers  (vec (range 200))
-   :many-small-keywords (->> (java.util.Locale/getISOLanguages)
-                             (mapv keyword))
-   :many-small-strings  (->> (java.util.Locale/getISOCountries)
-                             (mapv #(.getDisplayCountry (java.util.Locale. "en" %))))
+         :regex          #"^(https?:)?//(www\?|\?)?"
+         :sorted-set     (sorted-set 1 2 3 4 5)
+         :sorted-map     (sorted-map :b 2 :a 1 :d 4 :c 3)
+         :lazy-seq-empty (map identity ())
+         :lazy-seq       (repeatedly 64 #(do nil))
+         :queue          (into clojure.lang.PersistentQueue/EMPTY [:a :b :c :d :e :f :g])
+         :queue-empty          clojure.lang.PersistentQueue/EMPTY
 
-   :queue        (enc/queue [:a :b :c :d :e :f :g])
-   :queue-empty  (enc/queue)
-   :sorted-set   (sorted-set 1 2 3 4 5)
-   :sorted-map   (sorted-map :b 2 :a 1 :d 4 :c 3)
+         :uuid       (java.util.UUID. 7232453380187312026 -7067939076204274491)
+         :uri        (java.net.URI. "https://clojure.org")
+         :defrecord  (StressRecord. "data")
+         :deftype    (StressType.   "data")
+         :bytes      (byte-array   [(byte 1) (byte 2) (byte 3)])
+         :objects    (object-array [1 "two" {:data "data"}])
 
-   :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10 '(()))))
-   :vector       [1 2 3 4 5 [6 7 8 [9 10 [[]]]]]
-   :subvec       (subvec [1 2 3 4 5 6 7 8] 2 8)
-   :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7 :j {{} {}}}}}
-   :map-entry    (clojure.lang.MapEntry. "key" "val")
-   :set          #{1 2 3 4 5 #{6 7 8 #{9 10 #{#{}}}}}
-   :meta         (with-meta {:a :A} {:metakey :metaval})
-   :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}
-                  #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}
-                  [1 [1 2 [1 2 3 [1 2 3 4 [1 2 3 4 5]]]]]]
+         :util-date (java.util.Date. 1577884455500)
+         :sql-date  (java.sql.Date.  1577884455500)
+         :instant   (enc/compile-if java.time.Instant  (java.time.Instant/parse "2020-01-01T13:14:15.50Z") ::skip)
+         :duration  (enc/compile-if java.time.Duration (java.time.Duration/ofSeconds 100 100)              ::skip)
+         :period    (enc/compile-if java.time.Period   (java.time.Period/of 1 1 1)                         ::skip)
 
-   :lazy-seq       (repeatedly 1000 rand)
-   :lazy-seq-empty (map identity '())
+         :throwable (Throwable. "Msg")
+         :exception (Exception. "Msg")
+         :ex-info   (ex-info    "Msg" {:data "data"})
 
-   :byte         (byte   16)
-   :short        (short  42)
-   :integer      (int    3)
-   :long         (long   3)
-   :bigint       (bigint 31415926535897932384626433832795)
+         :many-longs    (vec (repeatedly 512         #(rand-nth (range 10))))
+         :many-doubles  (vec (repeatedly 512 #(double (rand-nth (range 10)))))
+         :many-strings  (vec (repeatedly 512         #(rand-nth ["foo" "bar" "baz" "qux"])))
+         :many-keywords (vec (repeatedly 512
+                               #(keyword
+                                  (rand-nth ["foo" "bar" "baz" "qux" nil])
+                                  (rand-nth ["foo" "bar" "baz" "qux"    ]))))}]
 
-   :float        (float  3.14)
-   :double       (double 3.14)
-   :bigdec       (bigdec 3.1415926535897932384626433832795)
+    (if comparable?
+      (dissoc all :bytes :objects :throwable :exception :ex-info :regex)
+      (do     all))))
 
-   :ratio        22/7
-   :uri          (java.net.URI. "https://clojure.org/reference/data_structures")
-   :uuid         (java.util.UUID/randomUUID)
-   :util-date    (java.util.Date.)
-   :sql-date     (java.sql.Date/valueOf "2023-06-21")
-
-   ;;; JVM 8+
-   :time-instant  (enc/compile-if java.time.Instant  (java.time.Instant/now)                nil)
-   :time-duration (enc/compile-if java.time.Duration (java.time.Duration/ofSeconds 100 100) nil)
-   :time-period   (enc/compile-if java.time.Period   (java.time.Period/of 1 1 1)            nil)
-
-   :bytes         (byte-array [(byte 1) (byte 2) (byte 3)])
-   :objects       (object-array [1 "two" {:data "data"}])
-
-   :stress-record (StressRecord. "data")
-   :stress-type   (StressType.   "data")
-
-   ;; Serializable
-   :throwable    (Throwable. "Yolo")
-   :exception    (try (/ 1 0) (catch Exception e e))
-   :ex-info      (ex-info "ExInfo" {:data "data"})})
-
-(def stress-data-comparable
-  "Reference data with stuff removed that breaks roundtrip equality."
-  (dissoc stress-data :bytes :objects :throwable :exception :ex-info :regex))
-
-(comment (let [data stress-data-comparable] (= (thaw (freeze data)) data)))
-
-(def stress-data-benchable
-  "Reference data with stuff removed that breaks reader or other utils we'll
-  be benching with."
-  (dissoc stress-data-comparable
-    :queue :queue-empty
-    :stress-record :stress-type
-    :time-instant :time-duration :time-period
-    :byte :uri))
+(comment
+  [(=      (stress-data {:comparable? true}) (stress-data {:comparable? true}))
+   (let [d (stress-data {:comparable? true})] (= (thaw (freeze d)) d))])
 
 ;;;; Tools
 

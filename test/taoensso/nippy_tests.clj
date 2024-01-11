@@ -16,7 +16,7 @@
 
 ;;;; Config, etc.
 
-(def test-data nippy/stress-data-comparable)
+(def test-data (nippy/stress-data {:comparable? true}))
 (def tc-gen-recursive-any-equatable
   (tc-gens/recursive-gen tc-gens/container-type
     tc-gens/any-equatable))
@@ -35,7 +35,13 @@
 ;;;; Core
 
 (deftest _core
-  [(println (str "Clojure version: " *clojure-version*))
+  (println (str "Clojure version: " *clojure-version*))
+  [(is (= test-data test-data) "Test data is comparable")
+   (is (=
+         (nippy/stress-data {:comparable? true})
+         (nippy/stress-data {:comparable? true}))
+     "Stress data is deterministic")
+
    (is (= test-data ((comp thaw freeze) test-data)))
    (is (= test-data ((comp #(thaw   % {:no-header? true
                                        :compressor nippy/lz4-compressor
@@ -47,8 +53,9 @@
                            #(freeze % {:password [:salted "p"]}))
                      test-data)))
 
-   (is (= (vec (:objects nippy/stress-data))
-          ((comp vec thaw freeze) (:objects nippy/stress-data))))
+   (let [d (nippy/stress-data {})]
+     [(is (= (vec (:bytes   d)) ((comp vec thaw freeze) (:bytes   d))))
+      (is (= (vec (:objects d)) ((comp vec thaw freeze) (:objects d))))])
 
    (is (= test-data ((comp #(thaw   % {:compressor nippy/lzma2-compressor})
                            #(freeze % {:compressor nippy/lzma2-compressor}))
@@ -141,18 +148,15 @@
 ;;;; Caching
 
 (deftest _caching
-  (let [stress [nippy/stress-data-comparable
-                nippy/stress-data-comparable
-                nippy/stress-data-comparable
-                nippy/stress-data-comparable]
-        cached (mapv nippy/cache stress)
-        cached (mapv nippy/cache stress) ; <=1 wrap auto-enforced
+  (let [test-data* [test-data test-data test-data test-data] ; Data with duplicates
+        cached (mapv nippy/cache test-data*)
+        cached (mapv nippy/cache test-data*) ; <=1 wrap auto-enforced
         ]
 
-    [(is (= stress (thaw (freeze stress {:compressor nil}))))
-     (is (= stress (thaw (freeze cached {:compressor nil}))))
-     (let [size-stress (count (freeze stress {:compressor nil}))
-           size-cached (count (freeze cached {:compressor nil}))]
+    [(is (= test-data*  (thaw (freeze test-data* {:compressor nil}))))
+     (is (= test-data*  (thaw (freeze cached     {:compressor nil}))))
+     (let [size-stress (count (freeze test-data* {:compressor nil}))
+           size-cached (count (freeze cached     {:compressor nil}))]
        (is (>= size-stress (* 3 size-cached)))
        (is (<  size-stress (* 4 size-cached))))]))
 

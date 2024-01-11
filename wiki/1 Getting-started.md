@@ -15,96 +15,83 @@ And setup your namespace imports:
 
 # De/serializing
 
-As an example of what it can do, let's take a look at Nippy's own reference stress data:
+As an example of what it can do, let's take a look at Nippy's own reference [stress data](https://taoensso.github.io/nippy/taoensso.nippy.html#var-stress-data):
 
 ```clojure
-nippy/stress-data
-=>
 {:nil                   nil
  :true                  true
  :false                 false
- :boxed-false (Boolean. false)
+ :false-boxed (Boolean. false)
 
  :char      \ಬ
  :str-short "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"
- :str-long  (apply str (range 1000))
+ :str-long  (reduce str (range 1024))
  :kw        :keyword
  :kw-ns     ::keyword
- :kw-long   (keyword
-              (apply str "kw" (range 1000))
-              (apply str "kw" (range 1000)))
-
  :sym       'foo
  :sym-ns    'foo/bar
- :sym-long   (symbol
-               (apply str "sym" (range 1000))
-               (apply str "sym" (range 1000)))
+ :kw-long   (keyword (reduce str "_" (range 128)) (reduce str "_" (range 128)))
+ :sym-long  (symbol  (reduce str "_" (range 128)) (reduce str "_" (range 128)))
 
- :regex     #"^(https?:)?//(www\?|\?)?"
+ :byte      (byte   16)
+ :short     (short  42)
+ :integer   (int    3)
+ :long      (long   3)
+ :float     (float  3.1415926535897932384626433832795)
+ :double    (double 3.1415926535897932384626433832795)
+ :bigdec    (bigdec 3.1415926535897932384626433832795)
+ :bigint    (bigint  31415926535897932384626433832795)
+ :ratio     22/7
 
- ;;; Try reflect real-world data:
- :many-small-numbers  (vec (range 200))
- :many-small-keywords (->> (java.util.Locale/getISOLanguages)
-                           (mapv keyword))
- :many-small-strings  (->> (java.util.Locale/getISOCountries)
-                           (mapv #(.getDisplayCountry (java.util.Locale. "en" %))))
+ :list      (list 1 2 3 4 5 (list 6 7 8 (list 9 10 (list) ())))
+ :vector    [1 2 3 4 5 [6 7 8 [9 10 [[]]]]]
+ :subvec    (subvec [1 2 3 4 5 6 7 8] 2 8)
+ :map       {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7 :j {{} {}}}}}
+ :map-entry (clojure.lang.MapEntry/create "key" "val")
+ :set       #{1 2 3 4 5 #{6 7 8 #{9 10 #{#{}}}}}
+ :meta      (with-meta {:a :A} {:metakey :metaval})
+ :nested    [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{[] ()}}] #{:a :b}}
+             #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{[] ()}}] #{:a :b}}
+             [1 [1 2 [1 2 3 [1 2 3 4 [1 2 3 4 5 "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"] {} #{} [] ()]]]]]
 
- :queue        (enc/queue [:a :b :c :d :e :f :g])
- :queue-empty  (enc/queue)
- :sorted-set   (sorted-set 1 2 3 4 5)
- :sorted-map   (sorted-map :b 2 :a 1 :d 4 :c 3)
+ :regex          #"^(https?:)?//(www\?|\?)?"
+ :sorted-set     (sorted-set 1 2 3 4 5)
+ :sorted-map     (sorted-map :b 2 :a 1 :d 4 :c 3)
+ :lazy-seq-empty (map identity ())
+ :lazy-seq       (repeatedly 64 #(do nil))
+ :queue-empty    (into clojure.lang.PersistentQueue/EMPTY [:a :b :c :d :e :f :g])
+ :queue                clojure.lang.PersistentQueue/EMPTY
 
- :list         (list 1 2 3 4 5 (list 6 7 8 (list 9 10 '(()))))
- :vector       [1 2 3 4 5 [6 7 8 [9 10 [[]]]]]
- :subvec       (subvec [1 2 3 4 5 6 7 8] 2 8)
- :map          {:a 1 :b 2 :c 3 :d {:e 4 :f {:g 5 :h 6 :i 7 :j {{} {}}}}}
- :map-entry    (clojure.lang.MapEntry. "key" "val")
- :set          #{1 2 3 4 5 #{6 7 8 #{9 10 #{#{}}}}}
- :meta         (with-meta {:a :A} {:metakey :metaval})
- :nested       [#{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}
-                #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{}}] #{:a :b}}
-                  [1 [1 2 [1 2 3 [1 2 3 4 [1 2 3 4 5]]]]]]
+ :uuid       (java.util.UUID. 7232453380187312026 -7067939076204274491)
+ :uri        (java.net.URI. "https://clojure.org")
+ :defrecord  (nippy/StressRecord. "data")
+ :deftype    (nippy/StressType.   "data")
+ :bytes      (byte-array   [(byte 1) (byte 2) (byte 3)])
+ :objects    (object-array [1 "two" {:data "data"}])
 
- :lazy-seq       (repeatedly 1000 rand)
- :lazy-seq-empty (map identity '())
+ :util-date (java.util.Date. 1577884455500)
+ :sql-date  (java.sql.Date.  1577884455500)
+ :instant   (java.time.Instant/parse "2020-01-01T13:14:15.50Z")
+ :duration  (java.time.Duration/ofSeconds 100 100)
+ :period    (java.time.Period/of 1 1 1)
 
- :byte         (byte   16)
- :short        (short  42)
- :integer      (int    3)
- :long         (long   3)
- :bigint       (bigint 31415926535897932384626433832795)
+ :throwable (Throwable. "Msg")
+ :exception (Exception. "Msg")
+ :ex-info   (ex-info    "Msg" {:data "data"})
 
- :float        (float  3.14)
- :double       (double 3.14)
- :bigdec       (bigdec 3.1415926535897932384626433832795)
-
- :ratio        22/7
- :uri          (java.net.URI. "https://clojure.org/reference/data_structures")
- :uuid         (java.util.UUID/randomUUID)
- :util-date    (java.util.Date.)
- :sql-date     (java.sql.Date/valueOf "2023-06-21")
-
- ;;; JVM 8+
- :time-instant  (enc/compile-if java.time.Instant  (java.time.Instant/now)                nil)
- :time-duration (enc/compile-if java.time.Duration (java.time.Duration/ofSeconds 100 100) nil)
- :time-period   (enc/compile-if java.time.Period   (java.time.Period/of 1 1 1)            nil)
-
- :bytes         (byte-array [(byte 1) (byte 2) (byte 3)])
- :objects       (object-array [1 "two" {:data "data"}])
-
- :stress-record (StressRecord. "data")
- :stress-type   (StressType.   "data")
-
- ;; Serializable
- :throwable    (Throwable. "Yolo")
- :exception    (try (/ 1 0) (catch Exception e e))
- :ex-info      (ex-info "ExInfo" {:data "data"})}
+ :many-longs    (vec (repeatedly 512         #(rand-nth (range 10))))
+ :many-doubles  (vec (repeatedly 512 #(double (rand-nth (range 10)))))
+ :many-strings  (vec (repeatedly 512         #(rand-nth ["foo" "bar" "baz" "qux"])))
+ :many-keywords (vec (repeatedly 512
+                       #(keyword
+                          (rand-nth ["foo" "bar" "baz" "qux" nil])
+                          (rand-nth ["foo" "bar" "baz" "qux"    ]))))}
 ```
 
 Serialize it:
 
 ```clojure
-(def frozen-stress-data (nippy/freeze nippy/stress-data))
+(def frozen-stress-data (nippy/freeze (nippy/stress-data {})))
 => #<byte[] [B@3253bcf3>
 ```
 
@@ -130,8 +117,8 @@ Nippy also gives you **dead simple data encryption**.
 Add a single option to your usual freeze/thaw calls like so:
 
 ```clojure
-(nippy/freeze nippy/stress-data {:password [:salted "my-password"]}) ; Encrypt
-(nippy/thaw   <encrypted-data>  {:password [:salted "my-password"]}) ; Decrypt
+(nippy/freeze (nippy/stress-data {}) {:password [:salted "my-password"]}) ; Encrypt
+(nippy/thaw   <encrypted-data>       {:password [:salted "my-password"]}) ; Decrypt
 ```
 
 There's two default forms of encryption on offer: `:salted` and `:cached`. Each of these makes carefully-chosen trade-offs and is suited to one of two common use cases. See [`aes128-encryptor`](https://taoensso.github.io/nippy/taoensso.nippy.html#var-aes128-encryptor) for a detailed explanation of why/when you'd want one or the other.
