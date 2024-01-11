@@ -401,6 +401,35 @@
         (nil? (enc/catching (compr/decompress c (crypto/rand-bytes 1024))))
         "Decompression never core dumps, even against invalid data"))))
 
+;;;; Stable output format
+
+(defn b64-encode [^bytes ba]
+  (String. ^bytes (.encode (java.util.Base64/getEncoder) ba) "UTF-8"))
+
+(defn md5-hash ^String [^bytes ba]
+  (.digest (java.security.MessageDigest/getInstance "MD5") ba))
+
+(def freeze-and-hash (comp b64-encode md5-hash nippy/freeze))
+
+(deftest _stable-output-format
+  (testing "Stable output format of vals"
+    (let [;; Fixed version of Reference data used for consistency tests between Nippy implementations and Java runtime
+          stable-test-data (-> test-data
+                               (assoc :lazy-seq (lazy-seq '(0.19671559947161366 0.2438222579118563 0.45156117728435397 0.34058300699753474 0.1808929679060426 0.11636995743908862 0.14424150003786507 0.30750948264879463 0.4649144815628935 0.667767499541767))
+                                      :uuid (java.util.UUID/fromString "80f7e434-496d-4127-af05-cae4ff184113")
+
+                                      :util-date #inst"2024-01-11T09:35:58.686-00:00" ;; (instance? java.util.Date #inst"2024-01-11T09:35:58.686-00:00") => true)
+                                      :time-instant (enc/compile-if java.time.Instant (java.time.Instant/parse "2024-01-11T09:35:58.686-00:00") nil)
+                                      ;; generated using JDK 21.0.1
+                                      :many-small-keywords [:aa :ab :ae :af :ak :am :an :ar :as :av :ay :az :ba :be :bg :bh :bi :bm :bn :bo :br :bs :ca :ce :ch :co :cr :cs :cu :cv :cy :da :de :dv :dz :ee :el :en :eo :es :et :eu :fa :ff :fi :fj :fo :fr :fy :ga :gd :gl :gn :gu :gv :ha :he :hi :ho :hr :ht :hu :hy :hz :ia :id :ie :ig :ii :ik :in :io :is :it :iu :iw :ja :ji :jv :ka :kg :ki :kj :kk :kl :km :kn :ko :kr :ks :ku :kv :kw :ky :la :lb :lg :li :ln :lo :lt :lu :lv :mg :mh :mi :mk :ml :mn :mo :mr :ms :mt :my :na :nb :nd :ne :ng :nl :nn :no :nr :nv :ny :oc :oj :om :or :os :pa :pi :pl :ps :pt :qu :rm :rn :ro :ru :rw :sa :sc :sd :se :sg :si :sk :sl :sm :sn :so :sq :sr :ss :st :su :sv :sw :ta :te :tg :th :ti :tk :tl :tn :to :tr :ts :tt :tw :ty :ug :uk :ur :uz :ve :vi :vo :wa :wo :xh :yi :yo :za :zh :zu]
+                                      :many-small-strings "[\"Andorra\" \"United Arab Emirates\" \"Afghanistan\" \"Antigua & Barbuda\" \"Anguilla\" \"Albania\" \"Armenia\" \"Angola\" \"Antarctica\" \"Argentina\" \"American Samoa\" \"Austria\" \"Australia\" \"Aruba\" \"Åland Islands\" \"Azerbaijan\" \"Bosnia & Herzegovina\" \"Barbados\" \"Bangladesh\" \"Belgium\" \"Burkina Faso\" \"Bulgaria\" \"Bahrain\" \"Burundi\" \"Benin\" \"St Barthélemy\" \"Bermuda\" \"Brunei\" \"Bolivia\" \"Caribbean Netherlands\" \"Brazil\" \"Bahamas\" \"Bhutan\" \"Bouvet Island\" \"Botswana\" \"Belarus\" \"Belize\" \"Canada\" \"Cocos (Keeling) Islands\" \"Congo - Kinshasa\" \"Central African Republic\" \"Congo - Brazzaville\" \"Switzerland\" \"Côte d’Ivoire\" \"Cook Islands\" \"Chile\" \"Cameroon\" \"China\" \"Colombia\" \"Costa Rica\" \"Cuba\" \"Cape Verde\" \"Curaçao\" \"Christmas Island\" \"Cyprus\" \"Czechia\" \"Germany\" \"Djibouti\" \"Denmark\" \"Dominica\" \"Dominican Republic\" \"Algeria\" \"Ecuador\" \"Estonia\" \"Egypt\" \"Western Sahara\" \"Eritrea\" \"Spain\" \"Ethiopia\" \"Finland\" \"Fiji\" \"Falkland Islands\" \"Micronesia\" \"Faroe Islands\" \"France\" \"Gabon\" \"United Kingdom\" \"Grenada\" \"Georgia\" \"French Guiana\" \"Guernsey\" \"Ghana\" \"Gibraltar\" \"Greenland\" \"Gambia\" \"Guinea\" \"Guadeloupe\" \"Equatorial Guinea\" \"Greece\" \"South Georgia & South Sandwich Islands\" \"Guatemala\" \"Guam\" \"Guinea-Bissau\" \"Guyana\" \"Hong Kong SAR China\" \"Heard & McDonald Islands\" \"Honduras\" \"Croatia\" \"Haiti\" \"Hungary\" \"Indonesia\" \"Ireland\" \"Israel\" \"Isle of Man\" \"India\" \"British Indian Ocean Territory\" \"Iraq\" \"Iran\" \"Iceland\" \"Italy\" \"Jersey\" \"Jamaica\" \"Jordan\" \"Japan\" \"Kenya\" \"Kyrgyzstan\" \"Cambodia\" \"Kiribati\" \"Comoros\" \"St Kitts & Nevis\" \"North Korea\" \"South Korea\" \"Kuwait\" \"Cayman Islands\" \"Kazakhstan\" \"Laos\" \"Lebanon\" \"St Lucia\" \"Liechtenstein\" \"Sri Lanka\" \"Liberia\" \"Lesotho\" \"Lithuania\" \"Luxembourg\" \"Latvia\" \"Libya\" \"Morocco\" \"Monaco\" \"Moldova\" \"Montenegro\" \"St Martin\" \"Madagascar\" \"Marshall Islands\" \"North Macedonia\" \"Mali\" \"Myanmar (Burma)\" \"Mongolia\" \"Macao SAR China\" \"Northern Mariana Islands\" \"Martinique\" \"Mauritania\" \"Montserrat\" \"Malta\" \"Mauritius\" \"Maldives\" \"Malawi\" \"Mexico\" \"Malaysia\" \"Mozambique\" \"Namibia\" \"New Caledonia\" \"Niger\" \"Norfolk Island\" \"Nigeria\" \"Nicaragua\" \"Netherlands\" \"Norway\" \"Nepal\" \"Nauru\" \"Niue\" \"New Zealand\" \"Oman\" \"Panama\" \"Peru\" \"French Polynesia\" \"Papua New Guinea\" \"Philippines\" \"Pakistan\" \"Poland\" \"St Pierre & Miquelon\" \"Pitcairn Islands\" \"Puerto Rico\" \"Palestinian Territories\" \"Portugal\" \"Palau\" \"Paraguay\" \"Qatar\" \"Réunion\" \"Romania\" \"Serbia\" \"Russia\" \"Rwanda\" \"Saudi Arabia\" \"Solomon Islands\" \"Seychelles\" \"Sudan\" \"Sweden\" \"Singapore\" \"St Helena\" \"Slovenia\" \"Svalbard & Jan Mayen\" \"Slovakia\" \"Sierra Leone\" \"San Marino\" \"Senegal\" \"Somalia\" \"Suriname\" \"South Sudan\" \"São Tomé & Príncipe\" \"El Salvador\" \"Sint Maarten\" \"Syria\" \"Eswatini\" \"Turks & Caicos Islands\" \"Chad\" \"French Southern Territories\" \"Togo\" \"Thailand\" \"Tajikistan\" \"Tokelau\" \"Timor-Leste\" \"Turkmenistan\" \"Tunisia\" \"Tonga\" \"Türkiye\" \"Trinidad & Tobago\" \"Tuvalu\" \"Taiwan\" \"Tanzania\" \"Ukraine\" \"Uganda\" \"US Outlying Islands\" \"United States\" \"Uruguay\" \"Uzbekistan\" \"Vatican City\" \"St Vincent & the Grenadines\" \"Venezuela\" \"British Virgin Islands\" \"US Virgin Islands\" \"Vietnam\" \"Vanuatu\" \"Wallis & Futuna\" \"Samoa\" \"Yemen\" \"Mayotte\" \"South Africa\" \"Zambia\" \"Zimbabwe\"]"))]
+
+      (testing "assert assumptions"
+        (is (true? (instance? java.util.Date #inst"2024-01-11T09:35:58.686-00:00"))))
+
+      (testing "canary test for stress test"
+        (is (= (freeze-and-hash stable-test-data) "LAVZGhT5YKbN56y99aVvMg=="))))))
+
 ;;;; Benchmarks
 
 (deftest _benchmarks (is (benchmarks/bench {})))
