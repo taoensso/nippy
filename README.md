@@ -38,14 +38,9 @@ See [here][GitHub releases] for earlier releases.
 
 ## Performance
 
-Since its earliest versions, Nippy has consistently been the **fastest serialization library for Clojure** that I'm aware of. It offers:
-
-- Roundtrip times **>12x faster** than `tools.reader` with **60% smaller** data size.
-- Roundtrip times **>2x faster** than `data.fressian` with **30% smaller** data size.
+Since its earliest versions, Nippy has consistently been the **fastest serialization library for Clojure** that I'm aware of. Latest [benchmark](../../blob/master/test/taoensso/nippy_benchmarks.clj) results:
 
 ![benchmarks-png](../../raw/master/benchmarks.png)
-
-The [benchmark code](../../blob/master/test/taoensso/nippy_benchmarks.clj) can be easily run in your own environment.
 
 ## Documentation
 

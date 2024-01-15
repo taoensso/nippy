@@ -25,9 +25,9 @@
 
 (comment (-> data freeze-fress thaw-fress))
 
-;;;; Benchable data
+;;;; Bench data
 
-(def bench-data
+(def default-bench-data
   "Subset of stress data suitable for benching."
   (let [sd (nippy/stress-data {:comparable? true})]
     (reduce-kv
@@ -42,12 +42,18 @@
 (comment
   (clojure.set/difference
     (set (keys (nippy/stress-data {:comparable? true})))
-    (set (keys         bench-data))))
+    (set (keys default-bench-data))))
 
-;;;;
+;;;;  Serialization
 
-(defn- bench1
-  [{:keys [laps warmup] :or {laps 1e4, warmup 25e3}} freezer thawer sizer]
+(defn- bench1-serialization
+  [freezer thawer sizer
+   {:keys [laps warmup bench-data]
+    :or
+    {laps       1e4
+     warmup     25e3
+     bench-data default-bench-data}}]
+
   (let [data-frozen                                       (freezer bench-data)
         time-freeze (enc/bench laps {:warmup-laps warmup} (freezer bench-data))
         time-thaw   (enc/bench laps {:warmup-laps warmup} (thawer  data-frozen))
@@ -58,90 +64,90 @@
      :thaw                 time-thaw
      :size  data-size}))
 
-(comment (bench1 {} nippy/freeze nippy/thaw count))
+(comment (bench1-serialization nippy/freeze nippy/thaw count {}))
 
-(defn bench
-  [{:keys [all? reader? fressian? fressian? lzma2? laps warmup]
-    :or   {laps      1e4
-           warmup    25e3}}]
+(defn- printed-results [results]
+  (println "\nBenchmark results:")
+  (doseq [[k v] results] (println k " " v))
+  (do           results))
+
+(defn bench-serialization
+  [{:keys [all? reader? fressian? fressian? lzma2? laps warmup bench-data]
+    :as   opts
+    :or
+    {laps   1e4
+     warmup 25e3}}]
 
   (println "\nStarting benchmarks")
 
   (let [results_ (atom {})]
     (when (or all? reader?)
-      (println "Benching Reader...")
+      (println "- Benching Reader...")
       (swap! results_ assoc :reader
-        (bench1 {:laps laps, :warmup warmup}
-          freeze-reader thaw-reader
-          (fn [^String s] (count (.getBytes s "UTF-8"))))))
+        (bench1-serialization freeze-reader thaw-reader
+          (fn [^String s] (count (.getBytes s "UTF-8")))
+          (assoc opts :laps laps, :warmup warmup))))
 
     (when (or all? fressian?)
       (println "- Benching Fressian...")
-      (swap! results_ assoc :fressian (bench1 {:laps laps, :warmup warmup} freeze-fress thaw-fress count)))
+      (swap! results_ assoc :fressian
+        (bench1-serialization freeze-fress thaw-fress count
+          (assoc opts :laps laps, :warmup warmup))))
 
     (when (or all? lzma2?)
       (println "- Benching Nippy/LZMA2...")
       (swap! results_ assoc :nippy/lzma2
-        (bench1 {:laps laps, :warmup warmup}
+        (bench1-serialization
           #(nippy/freeze % {:compressor nippy/lzma2-compressor})
           #(nippy/thaw   % {:compressor nippy/lzma2-compressor})
-          count)))
+          count
+          (assoc opts :laps laps, :warmup warmup))))
 
     (println "- Benching Nippy/encrypted...")
     (swap! results_ assoc :nippy/encrypted
-      (bench1 {:laps laps, :warmup warmup}
+      (bench1-serialization
         #(nippy/freeze % {:password [:cached "p"]})
         #(nippy/thaw   % {:password [:cached "p"]})
-        count))
+        count
+        (assoc opts :laps laps, :warmup warmup)))
 
     (println "- Benching Nippy/default...")
-    (swap! results_ assoc :nippy/default (bench1 {:laps laps, :warmup warmup} nippy/freeze      nippy/thaw      count))
+    (swap! results_ assoc :nippy/default
+      (bench1-serialization nippy/freeze nippy/thaw count
+        (assoc opts :laps laps, :warmup warmup)))
 
     (println "- Benching Nippy/fast...")
-    (swap! results_ assoc :nippy/fast    (bench1 {:laps laps, :warmup warmup} nippy/fast-freeze nippy/fast-thaw count))
+    (swap! results_ assoc :nippy/fast
+      (bench1-serialization nippy/fast-freeze nippy/fast-thaw count
+        (assoc opts :laps laps, :warmup warmup)))
 
     (println "- Benchmarks complete! (Time for cake?)")
+    (printed-results @results_)))
 
-    (let [results @results_]
-      (println "\nBenchmark results:")
-      (doseq [[k v] results] (println k " " v))
-      (do           results))))
+;;;; Compression
 
-(comment
-  (do
-    (set! *unchecked-math* false)
-    (bench {:all? true}))
+(defn- bench1-compressor
+  [compressor
+   {:keys [laps warmup bench-data]
+    :or
+    {laps       1e4
+     warmup     2e4
+     bench-data default-bench-data}}]
 
-  ;; 2023 Sep 25, 2020 Apple MBP M1
-  ;; [com.taoensso/nippy        "3.2.0"]
-  ;; [org.clojure/tools.reader  "1.3.6"]
-  ;; [org.clojure/data.fressian "1.0.0"]
+  (let [data-frozen     (nippy/freeze bench-data {:compressor nil})
+        data-compressed                                       (compr/compress   compressor data-frozen)
+        time-compress   (enc/bench laps {:warmup-laps warmup} (compr/compress   compressor data-frozen))
+        time-decompress (enc/bench laps {:warmup-laps warmup} (compr/decompress compressor data-compressed))]
 
-  {:reader          {:round 36756, :freeze 6567,  :thaw 30189, :size 39374}
-   :fressian        {:round 6579,  :freeze 3720,  :thaw 2859,  :size 22850}
-   :nippy/lzma2     {:round 33645, :freeze 20411, :thaw 13234, :size 11420}
-   :nippy/encrypted {:round 3894,  :freeze 2260,  :thaw 1634,  :size 16717}
-   :nippy/default   {:round 2796,  :freeze 1467,  :thaw 1329,  :size 16689}
-   :nippy/fast      {:round 2516,  :freeze 1271,  :thaw 1245,  :size 28454}})
+    {:round   (+ time-compress time-decompress)
+     :compress   time-compress
+     :decompress time-decompress
+     :ratio      (enc/round2 (/ (count data-compressed) (count data-frozen)))}))
 
-;;;; Compressors
-
-(let [bench-data (nippy/freeze (nippy/stress-data {:comparable? true}) {:compressor nil})]
-
-  (defn bench1-compressor
-    [{:keys [laps warmup] :or {laps 1e4, warmup 2e4}} compressor]
-    (let [data-compressed                                       (compr/compress   compressor bench-data)
-          time-compress   (enc/bench laps {:warmup-laps warmup} (compr/compress   compressor bench-data))
-          time-decompress (enc/bench laps {:warmup-laps warmup} (compr/decompress compressor data-compressed))]
-
-      {:round (+ time-compress time-decompress)
-       :compress   time-compress
-       :decompress time-decompress
-       :ratio      (enc/round2 (/ (count data-compressed) (count bench-data)))}))
-
-  (defn bench-compressors [bench1-opts lzma-opts]
+(defn bench-compressors [opts lzma-opts]
+  (printed-results
     (merge
-      (let [bench1 #(bench1-compressor bench1-opts %)]
+      (let [bench1 #(bench1-compressor % opts)]
         {:zstd/prepended     (bench1 (compr/->ZstdCompressor true))
          :zstd/unprepended   (bench1 (compr/->ZstdCompressor false))
          :lz4                (bench1 (compr/->LZ4Compressor))
@@ -149,28 +155,52 @@
          :snappy/prepended   (bench1 (compr/->SnappyCompressor true))
          :snappy/unprepended (bench1 (compr/->SnappyCompressor false))})
 
-      (let [bench1 #(bench1-compressor (merge bench1-opts lzma-opts) %)]
+      (let [bench1 #(bench1-compressor % (merge opts lzma-opts))]
         {:lzma2/level0 (bench1 (compr/->LZMA2Compressor 0))
          :lzma2/level3 (bench1 (compr/->LZMA2Compressor 3))
          :lzma2/level6 (bench1 (compr/->LZMA2Compressor 6))
          :lzma2/level9 (bench1 (compr/->LZMA2Compressor 9))}))))
 
+;;;; Results
+
 (comment
+  {:last-updated    "2024-01-16"
+   :clojure-version "1.11.1"
+   :java-version    "OpenJDK 21"
+   :deps
+   '[[com.taoensso/nippy        "3.4.0-beta1"]
+     [org.clojure/tools.reader  "1.3.7"]
+     [org.clojure/data.fressian "1.0.0"]
+     [org.tukaani/xz            "1.9"]
+     [io.airlift/aircompressor  "0.25"]]}
+
+  (bench-serialization {:all? true})
+
+  {:reader          {:round 13496, :freeze 5088, :thaw 8408, :size 15880}
+   :fressian        {:round 3898,  :freeze 2350, :thaw 1548, :size 12222}
+   :nippy/lzma2     {:round 12341, :freeze 7809, :thaw 4532, :size 3916}
+   :nippy/encrypted {:round 2939,  :freeze 1505, :thaw 1434, :size 8547}
+   :nippy/default   {:round 2704,  :freeze 1330, :thaw 1374, :size 8519}
+   :nippy/fast      {:round 2425,  :freeze 1117, :thaw 1308, :size 17088}}
+
+  (enc/round2 (/ 2704 13496)) ; 0.20 of reader   roundtrip time
+  (enc/round2 (/ 2704  3898)) ; 0.69 of fressian roundtrip time
+
+  (enc/round2 (/ 8519 15880)) ; 0.54 of reader   output size
+  (enc/round2 (/ 8519 12222)) ; 0.70 of fressian output size
+
   (bench-compressors
     {:laps 1e4 :warmup 2e4}
     {:laps 1e2 :warmup 2e2})
 
-  ;; 2023 Aug 1, 2020 Apple MBP M1
-  ;; [org.tukaani/xz           "1.9"]
-  ;; [io.airlift/aircompressor "0.25"]
-
-  {:zstd/prepended     {:round 1672,   :compress 1279,   :decompress 393,   :ratio 0.53}
-   :zstd/unprepended   {:round 1668,   :compress 1271,   :decompress 397,   :ratio 0.53}
-   :lz4                {:round 269,    :compress 238,    :decompress 31,    :ratio 0.58}
-   :lzo                {:round 259,    :compress 216,    :decompress 43,    :ratio 0.58}
-   :snappy/prepended   {:round 339,    :compress 205,    :decompress 134,   :ratio 0.58}
-   :snappy/unprepended {:round 340,    :compress 206,    :decompress 134,   :ratio 0.58}
-   :lzma2/level0       {:round 30300,  :compress 18500,  :decompress 11800, :ratio 0.4}
-   :lzma2/level3       {:round 49200,  :compress 35700,  :decompress 13500, :ratio 0.4}
-   :lzma2/level6       {:round 102600, :compress 86700,  :decompress 15900, :ratio 0.41}
-   :lzma2/level9       {:round 434800, :compress 394700, :decompress 40100, :ratio 0.41}})
+  ;; Note that ratio depends on compressibility of stress data
+  {:lz4                {:round 293,  :compress 234,  :decompress 59,  :ratio 0.5}
+   :lzo                {:round 483,  :compress 349,  :decompress 134, :ratio 0.46}
+   :snappy/prepended   {:round 472,  :compress 296,  :decompress 176, :ratio 0.43}
+   :snappy/unprepended {:round 420,  :compress 260,  :decompress 160, :ratio 0.43}
+   :zstd/prepended     {:round 2105, :compress 1419, :decompress 686, :ratio 0.3}
+   :zstd/unprepended   {:round 1261, :compress 921,  :decompress 340, :ratio 0.3}
+   :lzma2/level0       {:round 158,  :compress 121,  :decompress 37,  :ratio 0.24}
+   :lzma2/level3       {:round 536,  :compress 436,  :decompress 100, :ratio 0.22}
+   :lzma2/level6       {:round 1136, :compress 1075, :decompress 61,  :ratio 0.21}
+   :lzma2/level9       {:round 2391, :compress 2096, :decompress 295, :ratio 0.21}})

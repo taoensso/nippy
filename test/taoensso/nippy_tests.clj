@@ -436,4 +436,5 @@
 
 ;;;; Benchmarks
 
-(deftest _benchmarks (is (benchmarks/bench {})))
+(deftest _benchmarks
+  (is (benchmarks/bench-serialization {:all? true})))
