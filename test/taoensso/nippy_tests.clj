@@ -4,7 +4,7 @@
    [clojure.test.check            :as tc]
    [clojure.test.check.generators :as tc-gens]
    [clojure.test.check.properties :as tc-props]
-   [taoensso.encore               :as enc   :refer []]
+   [taoensso.encore               :as enc   :refer [ba=]]
    [taoensso.nippy                :as nippy :refer [freeze thaw]]
    [taoensso.nippy.compression    :as compr]
    [taoensso.nippy.crypto         :as crypto]
@@ -180,52 +180,81 @@
      (is (= (mapv meta (thaw frozen-with-caching))
             [{:id :v1} {:id :v2} {:id :v1} {:id :v2}]))]))
 
-;;;; Stable binary representation of vals
+;;;; Serialized output
 
-(deftest _stable-bin
-  (testing "Stable binary representation of vals"
+(defn ba-hash [^bytes ba] (hash (seq ba)))
 
-    (testing "x=y !=> f(x)=f(y)"
-      ;; `x=y => f(x)=f(y)` is unfortunately NOT true in general
-      ;; Be careful to never assume the above relationship!
-      [(is (not= (vec (freeze {:a 1 :b 1})) (vec (freeze {:b 1 :a 1}))) "Small (array) map (not= (seq {:a 1 :b 1}) (seq {:b 1 :a 1}))")
-       (is (not= (vec (freeze [[]]))        (vec (freeze ['()])))       "(= [] '()) is true")
-       (is (= (vec (freeze (sorted-map :a 1 :b 1)))
-              (vec (freeze (sorted-map :b 1 :a 1)))) "Sorted structures are immune")])
+(deftest _stable-serialized-output
+  (testing "Stable serialized output"
+
+    (testing "x=y => f(x)=f(y) for SOME inputs, SOMETIMES"
+      ;; `x=y => f(x)=f(y)` is unfortunately NOT true in general, and NOT something we
+      ;; promise. Still, we do unofficially try our best to maintain this property when
+      ;; possible - and to warn when it'll be violated for common/elementary types.
+      [(is (not (ba= (freeze {:a 1 :b 1}) (freeze {:b 1 :a 1}))) "Small (array) map (not= (seq {:a 1 :b 1}) (seq {:b 1 :a 1}))")
+       (is (not (ba= (freeze [[]])        (freeze ['()])))       "(= [] '()) is true")
+       (is      (ba= (freeze (sorted-map :a 1 :b 1))
+                     (freeze (sorted-map :b 1 :a 1))) "Sorted structures are generally safe")
+
+       ;; Track serialized output of stress data so that we can at least be aware of
+       ;; (and warn about) unintended changes for common/elementary types, etc. Note that
+       ;; reference hashes will need to be recalculated on changes to stress data.
+       (let [reference-hashes ; (enc/map-vals (fn [v] (ba-hash (freeze v))) test-data)
+             {:deftype 1529147805, :lazy-seq-empty 1277437598, :true -1809580601, :long 219451189, :double -454270428, :lazy-seq -1039619789, :short 1152993378, :meta 352218350, :str-long -1970041891, :instant -1401948864, :many-keywords 665654816, :bigint 2033662230, :sym-ns 769802402, :queue 447747779, :float 603100813, :sorted-set 1443292905, :many-strings 1777678883, :nested -1590473924, :queue-empty 1760934486, :duration -775528642, :false 1506926383, :vector 89425525, :util-date 1326218051, :kw 389651898, :sym -1742024487, :str-short -1097575232, :subvec -2047667173, :kw-long 852232872, :integer 624865727, :sym-long -1535730190, :list -1113199651, :ratio 1186850097, :byte -1041979678, :bigdec -1846988137, :nil 2005042235, :defrecord 287634761, :sorted-map 1464032648, :sql-date 80018667, :map-entry -1353323498, :false-boxed 1506926383, :uri -1374752165, :period -2043530540, :many-longs 759118414, :uuid -338331115, :set -1515144175, :kw-ns 1050084331, :map 358912619, :many-doubles -827569787, :char 858269588}
+
+             failures ; #{{:keys [k v]}}
+             (reduce-kv
+               (fn [failures k v]
+                 (or
+                   (when (not= v :taoensso.nippy/skip)
+                     (let [frozen (freeze v)
+                           actual (ba-hash frozen)
+                           ref    (get reference-hashes k)]
+                       (when (not= actual ref)
+                         (conj failures
+                           {:k k,
+                            :v {:type (type v), :value v}
+                            :actual actual
+                            :ref    ref
+                            :frozen (vec frozen)}))))
+                   failures))
+               #{}
+               test-data)]
+
+         (is (empty? failures)))])
 
     (testing "x==y => f(x)=f(y)"
       ;; This weaker version of `x=y => f(x)=f(y)` does hold
-      [(is (= (vec (freeze test-data))
-              (vec (freeze test-data))))
+      [(is (ba= (freeze test-data)
+                (freeze test-data)))
 
-       (is (every? true? (repeatedly 1000 (fn [] (= (vec (freeze test-data))
-                                                    (vec (freeze test-data))))))
+       (is (every? true? (repeatedly 1000 (fn [] (ba= (freeze test-data)
+                                                      (freeze test-data)))))
          "Try repeatedly to catch possible protocol interface races")
 
        (is (gen-test 400 [gen-data]
-              (= (vec (freeze gen-data))
-                 (vec (freeze gen-data)))) "Generative")])
+              (ba= (freeze gen-data)
+                   (freeze gen-data))) "Generative")])
 
     (testing "f(x)=f(f-1(f(x)))"
-      [(is (= (vec (-> test-data freeze))
-              (vec (-> test-data freeze thaw freeze))))
+      [(is (ba= (-> test-data freeze)
+                (-> test-data freeze thaw freeze)))
 
-       (is (= (seq (freeze test-data))
-              (seq (reduce (fn [frozen _] (freeze (thaw frozen)))
-                     (freeze test-data) (range 1000))))
+       (is (ba= (freeze test-data)
+                (reduce (fn [frozen _] (freeze (thaw frozen))) (freeze test-data) (range 1000)))
          "Try repeatedly to catch possible protocol interface races")
 
        (is (gen-test 400 [gen-data]
-             (= (vec (-> gen-data freeze))
-                (vec (-> gen-data freeze thaw freeze)))) "Generative")])
+             (ba= (-> gen-data freeze)
+                  (-> gen-data freeze thaw freeze))) "Generative")])
 
     (testing "f(x)=f(y) => x=y"
       (let [vals_ (atom {})]
         (gen-test 400 [gen-data]
-          (let [bin (freeze     gen-data)
+          (let [out (freeze     gen-data)
                 ref (get @vals_ gen-data ::nx)]
-            (swap! vals_ assoc bin gen-data)
-            (or (= ref ::nx) (= ref bin))))))))
+            (swap! vals_ assoc out gen-data)
+            (or (= ref ::nx) (= ref out))))))))
 
 ;;;; Thread safety
 

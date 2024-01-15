@@ -1926,7 +1926,8 @@
 
 (defrecord StressRecord [my-data])
 (deftype   StressType   [my-data]
-  Object (equals [a b] (= (.-my-data a) (.-my-data ^StressType b))))
+  Object (equals [a b] (and (instance? StressType b) (= (.-my-data             a)
+                                                        (.-my-data ^StressType b)))))
 
 (defn stress-data
   "Returns map of reference stress data for use by tests, benchmarks, etc."
