@@ -1298,33 +1298,33 @@
 
 (defn- xform* [xform] (enc/catching-xform {:error/msg "Error thrown via `*thaw-xform*`"} xform))
 
-(defn- transduce-thaw1 [^DataInput in xform n init rf]
-  (let [rf (if xform ((xform* xform) rf) rf)]
-    (rf (enc/reduce-n (fn [acc _] (rf acc (thaw-from-in! in))) init n))))
+(let [rf! (fn rf! ([x] (persistent! x)) ([acc x] (conj! acc x)))
+      rf* (fn rf* ([x]              x)  ([acc x] (conj  acc x)))]
 
-(defn- transduce-thaw2 [^DataInput in xform n init rf2 rf1]
-  (if xform
-    (let [rf ((xform* xform) rf1)] (rf (enc/reduce-n (fn [acc _] (rf acc (clojure.lang.MapEntry/create (thaw-from-in! in) (thaw-from-in! in)))) init n)))
-    (let [rf                 rf2 ] (rf (enc/reduce-n (fn [acc _] (rf acc                               (thaw-from-in! in) (thaw-from-in! in)))  init n)))))
+  (defn- read-into [to ^DataInput in ^long n]
+    (let [transient? (and (editable? to) (> n 10))
+          init       (if transient? (transient to) to)
+          rf         (if transient? rf! rf*)
+          rf         (if-let [xf *thaw-xform*] ((xform* xf) rf) rf)]
 
-(defn- read-into [to ^DataInput in ^long n]
-  (if (and (editable? to) (> n 10))
-    (transduce-thaw1 in *thaw-xform* n (transient to) (fn rf ([x] (persistent! x)) ([acc x] (conj! acc x))))
-    (transduce-thaw1 in *thaw-xform* n            to  (fn rf ([x]              x)  ([acc x] (conj  acc x))))))
+      (rf (enc/reduce-n (fn [acc _] (rf acc (thaw-from-in! in))) init n)))))
 
-(declare ^:private read-kvs-into)
+(let [rf1! (fn rf1! ([x] (persistent! x)) ([acc kv ] (assoc! acc (key kv) (val kv))))
+      rf2! (fn rf2! ([x] (persistent! x)) ([acc k v] (assoc! acc      k         v)))
+      rf1* (fn rf1* ([x]              x)  ([acc kv ] (assoc  acc (key kv) (val kv))))
+      rf2* (fn rf2* ([x]              x)  ([acc k v] (assoc  acc      k         v)))]
+
+  (defn- read-kvs-into [to ^DataInput in ^long n]
+    (let [transient? (and (editable? to) (> n 10))
+          init       (if transient? (transient to) to)
+          rf1        (if transient? rf1! rf1*)
+          rf2        (if transient? rf2! rf2*)]
+
+      (if-let [xf *thaw-xform*]
+        (let [rf ((xform* xf) rf1)] (rf (enc/reduce-n (fn [acc _] (rf acc (clojure.lang.MapEntry/create (thaw-from-in! in) (thaw-from-in! in)))) init n)))
+        (let [rf              rf2 ] (rf (enc/reduce-n (fn [acc _] (rf acc                               (thaw-from-in! in) (thaw-from-in! in)))  init n)))))))
+
 (defn- read-kvs-depr [to ^DataInput in] (read-kvs-into to in (quot (.readInt in) 2)))
-(defn- read-kvs-into [to ^DataInput in ^long n]
-  (if (and (editable? to) (> n 10))
-
-    (transduce-thaw2 in *thaw-xform* n (transient to)
-      (fn rf2 ([x] (persistent! x)) ([acc k v] (assoc! acc      k         v)))
-      (fn rf1 ([x] (persistent! x)) ([acc  kv] (assoc! acc (key kv) (val kv)))))
-
-    (transduce-thaw2 in *thaw-xform* n to
-      (fn rf2 ([x] x) ([acc k v] (assoc acc      k         v)))
-      (fn rf1 ([x] x) ([acc  kv] (assoc acc (key kv) (val kv)))))))
-
 (defn- read-objects [^objects ary ^DataInput in]
   (enc/reduce-n
     (fn [^objects ary i]
