@@ -562,12 +562,16 @@
 
 ;;;; Freezing interface
 
-;; We extend `IFreezable` to supported types:
 (defprotocol  IFreezable
+  "Private implementation detail.
+  Protocol that types must implement to support native freezing by Nippy.
+  Don't use this directly, instead see `extend-freeze`."
   (-freezable?           [_])
   (-freeze-without-meta! [_ data-output]))
 
-(defprotocol IFreezableWithMeta ; Must be a separate protocol
+(defprotocol IFreezableWithMeta
+  "Private implementation detail.
+  Wrapper protocol around `IFreezable` used to handle possible metadata."
   (-freeze-with-meta! [_ data-output]))
 
 (defmacro write-id [out id] `(.writeByte ~out ~id))
@@ -583,25 +587,14 @@
   nil    (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output))
   Object (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output)))
 
-(defmacro ^:private freezer [type & body]
-  `(extend-type ~type
-     IFreezable
-     (~'-freezable?           [~'x] true)
-     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})] ~@body)))
-
-(defmacro ^:private freezer* [type & body]
-  `(extend-type ~type
-     IFreezable
-     (~'-freezable?           [~'x] nil)
-     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})] ~@body)))
-
-(defmacro ^:private id-freezer [type id & body]
-  `(extend-type ~type
-     IFreezable
-     (~'-freezable?           [~'x] true)
-     (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})]
-      (write-id ~'out ~id)
-      ~@body)))
+(defmacro ^:private freezer
+  [type id freezable? form]
+  (let [id-form (when id `(write-id ~'out ~id))]
+    `(extend-type ~type
+       IFreezable
+       (~'-freezable?           [~'x] ~freezable?)
+       (~'-freeze-without-meta! [~'x ~(with-meta 'out {:tag 'DataOutput})]
+        ~id-form ~form))))
 
 ;;;; Freezing
 
@@ -956,7 +949,7 @@
 
 (comment (cache "foo"))
 
-(freezer Cached
+(freezer Cached nil true
   (let [x-val (.-val x)]
     (if-let [cache_ (.get -cache-proxy)]
       (let [cache @cache_
@@ -1022,60 +1015,61 @@
 
 ;;;;
 
-(id-freezer nil        id-nil)
-(id-freezer (type ())  id-list-0)
-(id-freezer Character  id-char       (.writeChar       out (int x)))
-(id-freezer Byte       id-byte       (.writeByte       out x))
-(id-freezer Short      id-short      (.writeShort      out x))
-(id-freezer Integer    id-integer    (.writeInt        out x))
-(id-freezer BigInt     id-bigint     (write-biginteger out (.toBigInteger x)))
-(id-freezer BigInteger id-biginteger (write-biginteger out x))
-(id-freezer Pattern    id-regex      (write-str        out (str x)))
-(id-freezer Float      id-float      (.writeFloat      out x))
-(id-freezer BigDecimal id-bigdec
-  (write-biginteger out (.unscaledValue x))
-  (.writeInt        out (.scale         x)))
+(freezer nil        id-nil        true nil)
+(freezer (type ())  id-list-0     true nil)
+(freezer Character  id-char       true (.writeChar       out (int x)))
+(freezer Byte       id-byte       true (.writeByte       out x))
+(freezer Short      id-short      true (.writeShort      out x))
+(freezer Integer    id-integer    true (.writeInt        out x))
+(freezer BigInt     id-bigint     true (write-biginteger out (.toBigInteger x)))
+(freezer BigInteger id-biginteger true (write-biginteger out x))
+(freezer Pattern    id-regex      true (write-str        out (str x)))
+(freezer Float      id-float      true (.writeFloat      out x))
+(freezer BigDecimal id-bigdec     true
+  (do
+    (write-biginteger out (.unscaledValue x))
+    (.writeInt        out (.scale         x))))
 
-(id-freezer Ratio id-ratio
-  (write-biginteger out (.numerator   x))
-  (write-biginteger out (.denominator x)))
+(freezer Ratio id-ratio true
+  (do
+    (write-biginteger out (.numerator   x))
+    (write-biginteger out (.denominator x))))
 
-(id-freezer MapEntry id-map-entry
-  (-freeze-with-meta! (key x) out)
-  (-freeze-with-meta! (val x) out))
+(freezer MapEntry id-map-entry true
+  (do
+    (-freeze-with-meta! (key x) out)
+    (-freeze-with-meta! (val x) out)))
 
-(id-freezer java.util.Date id-util-date (.writeLong out (.getTime x)))
-(id-freezer java.sql.Date  id-sql-date  (.writeLong out (.getTime x)))
+(freezer java.util.Date id-util-date true (.writeLong out (.getTime  x)))
+(freezer java.sql.Date  id-sql-date  true (.writeLong out (.getTime  x)))
+(freezer URI            id-uri       true (write-str  out (.toString x)))
+(freezer UUID           id-uuid      true
+  (do
+    (.writeLong out (.getMostSignificantBits  x))
+    (.writeLong out (.getLeastSignificantBits x))))
 
-(id-freezer URI id-uri
-  (write-str out (.toString x)))
-
-(id-freezer UUID id-uuid
-  (.writeLong out (.getMostSignificantBits  x))
-  (.writeLong out (.getLeastSignificantBits x)))
-
-(freezer Boolean              (if (boolean x) (write-id out id-true) (write-id out id-false)))
-(freezer (Class/forName "[B")                  (write-bytes   out x))
-(freezer (Class/forName "[Ljava.lang.Object;") (write-objects out x))
-(freezer String               (write-str   out x))
-(freezer Keyword              (write-kw    out x))
-(freezer Symbol               (write-sym   out x))
-(freezer Long                 (write-long  out x))
-(freezer Double
+(freezer Boolean                               nil true (if (boolean x) (write-id out id-true) (write-id out id-false)))
+(freezer (Class/forName "[B")                  nil true (write-bytes   out x))
+(freezer (Class/forName "[Ljava.lang.Object;") nil true (write-objects out x))
+(freezer String                                nil true (write-str   out x))
+(freezer Keyword                               nil true (write-kw    out x))
+(freezer Symbol                                nil true (write-sym   out x))
+(freezer Long                                  nil true (write-long  out x))
+(freezer Double                                nil true
   (if (zero? ^double x)
     (do (write-id out id-double-0))
     (do (write-id out id-double) (.writeDouble out x))))
 
-(freezer PersistentQueue      (write-counted-coll   out id-queue-lg      x))
-(freezer PersistentTreeSet    (write-counted-coll   out id-sorted-set-lg x))
-(freezer PersistentTreeMap    (write-kvs            out id-sorted-map-lg x))
-(freezer APersistentVector    (write-vec            out                  x))
-(freezer APersistentSet       (write-set            out                  x))
-(freezer APersistentMap       (write-map            out                  x))
-(freezer PersistentList       (write-counted-coll   out id-list-0 id-list-sm id-list-md id-list-lg x))
-(freezer LazySeq              (write-uncounted-coll out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
-(freezer* ISeq                (write-coll           out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
-(freezer IRecord
+(freezer PersistentQueue    nil true (write-counted-coll   out id-queue-lg      x))
+(freezer PersistentTreeSet  nil true (write-counted-coll   out id-sorted-set-lg x))
+(freezer PersistentTreeMap  nil true (write-kvs            out id-sorted-map-lg x))
+(freezer APersistentVector  nil true (write-vec            out                  x))
+(freezer APersistentSet     nil true (write-set            out                  x))
+(freezer APersistentMap     nil true (write-map            out                  x))
+(freezer PersistentList     nil true (write-counted-coll   out id-list-0 id-list-sm id-list-md id-list-lg x))
+(freezer LazySeq            nil true (write-uncounted-coll out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
+(freezer ISeq               nil true (write-coll           out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
+(freezer IRecord            nil true
   (let [class-name    (.getName (class x)) ; Reflect
         class-name-ba (.getBytes class-name StandardCharsets/UTF_8)
         len           (alength   class-name-ba)]
@@ -1088,7 +1082,7 @@
     (-freeze-without-meta! (into {} x) out)))
 
 (let [munge-cached (enc/fmemoize munge)]
-  (freezer IType
+  (freezer IType nil true
     (let [aclass     (class x)
           class-name (.getName aclass)]
       (write-id  out id-type)
@@ -1105,42 +1099,43 @@
           basis)))))
 
 (enc/compile-if java.time.Instant
-  (id-freezer java.time.Instant id-time-instant
-    (.writeLong out (.getEpochSecond x))
-    (.writeInt  out (.getNano        x)))
-  nil)
+  (freezer      java.time.Instant id-time-instant true
+    (do
+      (.writeLong out (.getEpochSecond x))
+      (.writeInt  out (.getNano        x)))))
 
 (enc/compile-if java.time.Duration
-  (id-freezer java.time.Duration id-time-duration
-    (.writeLong out (.getSeconds x))
-    (.writeInt  out (.getNano    x)))
-  nil)
+  (freezer      java.time.Duration id-time-duration true
+    (do
+      (.writeLong out (.getSeconds x))
+      (.writeInt  out (.getNano    x)))))
 
 (enc/compile-if java.time.Period
-  (id-freezer java.time.Period id-time-period
-    (.writeInt  out (.getYears  x))
-    (.writeInt  out (.getMonths x))
-    (.writeInt  out (.getDays   x)))
-  nil)
+  (freezer      java.time.Period id-time-period true
+    (do
+      (.writeInt  out (.getYears  x))
+      (.writeInt  out (.getMonths x))
+      (.writeInt  out (.getDays   x)))))
 
-(freezer* Object
-  (when-debug (println (str "freeze-fallback: " (type x))))
-  (if-let [ff *freeze-fallback*]
-    (if-not (identical? ff :write-unfreezable)
-      (ff out x) ; Modern approach with ff
-      (or        ; Legacy approach with ff
+(freezer Object nil nil
+  (do
+    (when-debug (println (str "freeze-fallback: " (type x))))
+    (if-let [ff *freeze-fallback*]
+      (if-not (identical? ff :write-unfreezable)
+        (ff out x) ; Modern approach with ff
+        (or        ; Legacy approach with ff
+          (try-write-serializable out x)
+          (try-write-readable     out x)
+          (write-unfreezable      out x)))
+
+      ;; Without ff
+      (or
         (try-write-serializable out x)
         (try-write-readable     out x)
-        (write-unfreezable      out x)))
 
-    ;; Without ff
-    (or
-      (try-write-serializable out x)
-      (try-write-readable     out x)
+        (when-let [fff *final-freeze-fallback*] (fff out x) true) ; Deprecated
 
-      (when-let [fff *final-freeze-fallback*] (fff out x) true) ; Deprecated
-
-      (throw-unfreezable x))))
+        (throw-unfreezable x)))))
 
 ;;;;
 
