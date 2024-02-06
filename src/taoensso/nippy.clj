@@ -479,7 +479,7 @@
     - Does NOT implement Nippy's `Freezable`    protocol.
     - DOES     implement Java's  `Serializable` interface.
 
-  In this case, the allowlist will be checked to see if Java's
+  In this case, an allowlist will be checked to see if Java's
   `Serializable` interface may be used.
 
   This is a security measure to prevent possible Remote Code Execution
@@ -513,19 +513,19 @@
 
   Allowlist values may be overridden with `binding`, `alter-var-root`, or:
 
-    - `taoensso.nippy.<freeze/thaw>-serializable-allowlist-base` JVM property
-    - `taoensso.nippy.<freeze/thaw>-serializable-allowlist-add`  JVM property
+    - `taoensso.nippy.<freeze/thaw>-serializable-allowlist-base` JVM property value
+    - `taoensso.nippy.<freeze/thaw>-serializable-allowlist-add`  JVM property value
 
-    - `TAOENSSO_NIPPY_<FREEZE/THAW>_SERIALIZABLE_ALLOWLIST_BASE` env var
-    - `TAOENSSO_NIPPY_<FREEZE/THAW>_SERIALIZABLE_ALLOWLIST_ADD`  env var
+    - `TAOENSSO_NIPPY_<FREEZE/THAW>_SERIALIZABLE_ALLOWLIST_BASE` Environment variable value
+    - `TAOENSSO_NIPPY_<FREEZE/THAW>_SERIALIZABLE_ALLOWLIST_ADD`  Environment variable value
 
   If present, these will be read as comma-separated lists of class names
   and formed into sets. Each initial allowlist value will then be:
   (into (or <?base> <default>) <?additions>).
 
     I.e. you can use:
-      - The \"base\" property/var to replace Nippy's default allowlists.
-      - The \"add\"  property/var to add to  Nippy's default allowlists.
+      - The \"base\" property/var to REPLACE Nippy's default allowlists.
+      - The \"add\"  property/var to ADD TO  Nippy's default allowlists.
 
   The special `\"allow-and-record\"` value is also possible, see [2].
 
@@ -541,8 +541,21 @@
   [1] https://github.com/ptaoussanis/nippy/issues/130
   [2] See `allow-and-record-any-serializable-class-unsafe`."]
 
-  (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist* (impl/init-serializable-allowlist :freeze default-freeze-serializable-allowlist false))
-  (enc/defonce ^{:dynamic true :doc doc}   *thaw-serializable-allowlist* (impl/init-serializable-allowlist :thaw     default-thaw-serializable-allowlist true)))
+  (enc/defonce ^{:dynamic true :doc doc} *freeze-serializable-allowlist*
+    (impl/parse-allowlist default-freeze-serializable-allowlist
+      (enc/get-env :taoensso.nippy.freeze-serializable-allowlist-base)
+      (enc/get-env :taoensso.nippy.freeze-serializable-allowlist-add)))
+
+  (enc/defonce ^{:dynamic true :doc doc} *thaw-serializable-allowlist*
+    (impl/parse-allowlist default-thaw-serializable-allowlist
+      (enc/get-env
+        [:taoensso.nippy.thaw-serializable-allowlist-base
+         :taoensso.nippy.serializable-whitelist-base ; Back compatibility
+         ])
+      (enc/get-env
+        [:taoensso.nippy.thaw-serializable-allowlist-add
+         :taoensso.nippy.serializable-whitelist-add ; Back compatibility
+         ]))))
 
 (enc/defonce ^:dynamic ^:no-doc ^:deprecated *serializable-whitelist*
   ;; Back compatibility for Crux, Ref. <https://github.com/juxt/crux/releases/tag/20.09-1.11.0>
@@ -1321,8 +1334,8 @@
           rf2        (if transient? rf2! rf2*)]
 
       (if-let [xf *thaw-xform*]
-        (let [rf ((xform* xf) rf1)] (rf (enc/reduce-n (fn [acc _] (rf acc (clojure.lang.MapEntry/create (thaw-from-in! in) (thaw-from-in! in)))) init n)))
-        (let [rf              rf2 ] (rf (enc/reduce-n (fn [acc _] (rf acc                               (thaw-from-in! in) (thaw-from-in! in)))  init n)))))))
+        (let [rf ((xform* xf) rf1)] (rf (enc/reduce-n (fn [acc _] (rf acc (enc/map-entry (thaw-from-in! in) (thaw-from-in! in)))) init n)))
+        (let [rf              rf2 ] (rf (enc/reduce-n (fn [acc _] (rf acc                (thaw-from-in! in) (thaw-from-in! in)))  init n)))))))
 
 (defn- read-kvs-depr [to ^DataInput in] (read-kvs-into to in (quot (.readInt in) 2)))
 (defn- read-objects [^objects ary ^DataInput in]
@@ -1604,7 +1617,7 @@
         id-bigdec      (BigDecimal. ^BigInteger (read-biginteger in) (.readInt        in))
         id-ratio       (clojure.lang.Ratio.     (read-biginteger in) (read-biginteger in))
 
-        id-map-entry   (clojure.lang.MapEntry/create (thaw-from-in! in) (thaw-from-in! in))
+        id-map-entry   (enc/map-entry (thaw-from-in! in) (thaw-from-in! in))
 
         id-util-date   (java.util.Date. (.readLong in))
         id-sql-date    (java.sql.Date.  (.readLong in))

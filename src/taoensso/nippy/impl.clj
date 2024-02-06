@@ -54,47 +54,33 @@
 
 ;;;; Java Serializable
 
-(defn- allow-and-record?     [s] (= s "allow-and-record"))
-(defn- split-class-names>set [s] (when (string? s) (if (= s "") #{} (set (mapv str/trim (str/split s #"[,:]"))))))
+(def ^:const ^:private allow-and-record          "allow-and-record")
+(defn-                 allow-and-record? [x] (= x allow-and-record))
+
+(defn- classname-set
+  "Returns ?#{<classname>}."
+  [x]
+  (when x
+    (if (string? x)
+      (if (= x "") #{} (set (mapv str/trim (str/split x #"[,:]"))))
+      (enc/have set? x))))
+
 (comment
-  (split-class-names>set "")
-  (split-class-names>set "foo, bar:baz"))
+  (mapv classname-set [nil #{"foo"} "" "foo, bar:baz"])
+  (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
 
-(comment (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
+(defn parse-allowlist
+  "Returns #{<classname>}, or `allow-and-record`."
+  [default base add]
+  (if (or
+        (allow-and-record? base)
+        (allow-and-record? add))
+    allow-and-record
+    (into
+      (or (classname-set base) default)
+      (do (classname-set add)))))
 
-(let [ids
-      {:freeze {:base :taoensso.nippy.freeze-serializable-allowlist-base
-                :add  :taoensso.nippy.freeze-serializable-allowlist-add}
-       :thaw   {:base :taoensso.nippy.thaw-serializable-allowlist-base
-                :add  :taoensso.nippy.thaw-serializable-allowlist-add}
-       :legacy {:base :taoensso.nippy.serializable-whitelist-base
-                :add  :taoensso.nippy.serializable-whitelist-add}}]
-
-  (defn init-serializable-allowlist
-    [action default incl-legacy?]
-    (let [allowlist-base
-          (or
-            (when-let [s
-                       (or
-                         (do                (enc/get-sys-val* (get-in ids [action  :base])))
-                         (when incl-legacy? (enc/get-sys-val* (get-in ids [:legacy :base]))))]
-
-              (if (allow-and-record? s) s (split-class-names>set s)))
-            default)
-
-          allowlist-add
-          (when-let [s
-                     (or
-                       (do                (enc/get-sys-val* (get-in ids [action  :add])))
-                       (when incl-legacy? (enc/get-sys-val* (get-in ids [:legacy :add]))))]
-
-            (if (allow-and-record? s) s (split-class-names>set s)))]
-
-      (if (and allowlist-base allowlist-add)
-        (into (enc/have set? allowlist-base) allowlist-add)
-        (do                  allowlist-base)))))
-
-;;;
+(comment (parse-allowlist #{"default"} "base1,base2" "add1"))
 
 (let [nmax    1000
       ngc     16000
