@@ -429,7 +429,7 @@
              compr/snappy-compressor
              compr/lzma2-compressor]]
 
-    (dotimes [_ 100]
+    (dotimes [_ 2e4]
       (is
         (nil? (enc/catching (compr/decompress c (crypto/rand-bytes 1024))))
         "Decompression never core dumps, even against invalid data"))))

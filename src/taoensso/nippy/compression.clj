@@ -116,6 +116,8 @@
     (compress   [_ ba] (airlift-compress   @airlift-lzo-compressor_   ba true))
     (decompress [_ ba] (airlift-decompress @airlift-lzo-decompressor_ ba nil))))
 
+;; Using `io.airlift/aircompressor`, vulnerable to https://github.com/airlift/aircompressor/issues/183
+#_
 (do
   (enc/def* ^:private airlift-snappy-compressor_   (enc/thread-local (io.airlift.compress.snappy.SnappyCompressor.)))
   (enc/def* ^:private airlift-snappy-decompressor_ (enc/thread-local (io.airlift.compress.snappy.SnappyDecompressor.)))
@@ -126,6 +128,21 @@
     (decompress [_ ba] (airlift-decompress @airlift-snappy-decompressor_ ba
                          (when-not prepend-size?
                            (io.airlift.compress.snappy.SnappyDecompressor/getUncompressedLength ba 0))))))
+
+;; Using `org.iq80.snappy/snappy`, vulnerable to https://github.com/airlift/aircompressor/issues/183
+#_
+(deftype SnappyCompressor [_]
+  ICompressor
+  (header-id  [_] :snappy)
+  (compress   [_ ba] (org.iq80.snappy.Snappy/compress   ba))
+  (decompress [_ ba] (org.iq80.snappy.Snappy/uncompress ba 0 (alength ^bytes ba))))
+
+;; Using `org.xerial.snappy/snappy-java`, some compatibility issues due to JNI
+(deftype SnappyCompressor [_]
+  ICompressor
+  (header-id  [_] :snappy)
+  (compress   [_ ba] (org.xerial.snappy.Snappy/compress   ba))
+  (decompress [_ ba] (org.xerial.snappy.Snappy/uncompress ba)))
 
 ;;;; LZMA2
 

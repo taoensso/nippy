@@ -11,7 +11,9 @@
   [[org.clojure/tools.reader "1.3.7"]
    [com.taoensso/encore      "3.77.0"]
    [org.tukaani/xz           "1.9"]
-   [io.airlift/aircompressor "0.25"]]
+   [io.airlift/aircompressor "0.25"]
+   [org.iq80.snappy/snappy   "0.4"]
+   [org.xerial.snappy/snappy-java "1.1.10.5"]]
 
   :profiles
   {;; :default [:base :system :user :provided :dev]
