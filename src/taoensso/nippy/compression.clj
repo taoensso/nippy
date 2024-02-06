@@ -203,11 +203,11 @@
 
 (enc/def* ^:no-doc lz4hc-compressor
   "Different LZ4 modes no longer supported, prefer `lz4-compressor`."
-  {:deprecated "vX.Y.Z (YYYY-MM-DD)"}
+  {:deprecated "v3.4.0-RC1 (2024-02-06)"}
   (LZ4Compressor.))
 
 (enc/def* ^:no-doc snappy-compressor
   "Snappy compressor no longer recommended, prefer `lz4-compressor`.
   Decompression can be unsafe against untrusted data!"
-  {:deprecated "vX.Y.Z (YYYY-MM-DD)"}
+  {:deprecated "v3.4.0-RC1 (2024-02-06)"}
   (SnappyCompressor. false))
