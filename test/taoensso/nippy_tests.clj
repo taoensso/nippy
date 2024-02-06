@@ -426,13 +426,13 @@
   (doseq [c [compr/zstd-compressor
              compr/lz4-compressor
              compr/lzo-compressor
-             compr/snappy-compressor
+             #_compr/snappy-compressor ; Ref. <https://github.com/airlift/aircompressor/issues/183>
              compr/lzma2-compressor]]
 
     (dotimes [_ 2e4]
       (is
         (nil? (enc/catching (compr/decompress c (crypto/rand-bytes 1024))))
-        "Decompression never core dumps, even against invalid data"))))
+        "Decompression never crashes JVM, even against invalid data"))))
 
 ;;;; Benchmarks
 

@@ -116,8 +116,6 @@
     (compress   [_ ba] (airlift-compress   @airlift-lzo-compressor_   ba true))
     (decompress [_ ba] (airlift-decompress @airlift-lzo-decompressor_ ba nil))))
 
-;; Using `io.airlift/aircompressor`, vulnerable to https://github.com/airlift/aircompressor/issues/183
-#_
 (do
   (enc/def* ^:private airlift-snappy-compressor_   (enc/thread-local (io.airlift.compress.snappy.SnappyCompressor.)))
   (enc/def* ^:private airlift-snappy-decompressor_ (enc/thread-local (io.airlift.compress.snappy.SnappyDecompressor.)))
@@ -128,21 +126,6 @@
     (decompress [_ ba] (airlift-decompress @airlift-snappy-decompressor_ ba
                          (when-not prepend-size?
                            (io.airlift.compress.snappy.SnappyDecompressor/getUncompressedLength ba 0))))))
-
-;; Using `org.iq80.snappy/snappy`, vulnerable to https://github.com/airlift/aircompressor/issues/183
-#_
-(deftype SnappyCompressor [_]
-  ICompressor
-  (header-id  [_] :snappy)
-  (compress   [_ ba] (org.iq80.snappy.Snappy/compress   ba))
-  (decompress [_ ba] (org.iq80.snappy.Snappy/uncompress ba 0 (alength ^bytes ba))))
-
-;; Using `org.xerial.snappy/snappy-java`, some compatibility issues due to JNI
-(deftype SnappyCompressor [_]
-  ICompressor
-  (header-id  [_] :snappy)
-  (compress   [_ ba] (org.xerial.snappy.Snappy/compress   ba))
-  (decompress [_ ba] (org.xerial.snappy.Snappy/uncompress ba)))
 
 ;;;; LZMA2
 
@@ -208,16 +191,6 @@
   See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
   (LZOCompressor.))
 
-(def snappy-compressor
-  "Default `Snappy` compressor:
-    -   Compression ratio: `C`  (0.58      on reference benchmark).
-    -   Compression speed: `A+` (206 msecs on reference benchmark).
-    - Decompression speed: `B`  (134 msecs on reference benchmark).
-
-  Good general-purpose compressor, favours speed.
-  See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
-  (SnappyCompressor. false))
-
 (def lzma2-compressor
   "Default `LZMA2` compressor:
     -   Compression ratio: `A+` (0.4       on reference benchmark).
@@ -232,3 +205,9 @@
   "Different LZ4 modes no longer supported, prefer `lz4-compressor`."
   {:deprecated "vX.Y.Z (YYYY-MM-DD)"}
   (LZ4Compressor.))
+
+(enc/def* ^:no-doc snappy-compressor
+  "Snappy compressor no longer recommended, prefer `lz4-compressor`.
+  Decompression can be unsafe against untrusted data!"
+  {:deprecated "vX.Y.Z (YYYY-MM-DD)"}
+  (SnappyCompressor. false))

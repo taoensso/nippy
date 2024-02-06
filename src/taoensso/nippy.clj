@@ -337,7 +337,7 @@
   compression/lz4-compressor
   compression/lz4hc-compressor
   #_compression/lzo-compressor
-  compression/snappy-compressor
+  #_compression/snappy-compressor ; Can be unsafe
   compression/lzma2-compressor
 
   encryption/encrypt
@@ -1704,7 +1704,7 @@
 (defn- get-auto-compressor [compressor-id]
   (case compressor-id
     nil        nil
-    :snappy    snappy-compressor
+    :snappy    compression/snappy-compressor
     :lzma2     lzma2-compressor
     :lz4       lz4-compressor
     :no-header (throw (ex-info ":auto not supported on headerless data." {}))
@@ -1806,7 +1806,7 @@
 
                    (catch Exception e (ex-fn e)))))
 
-             ;; Hackish + can actually segfault JVM due to Snappy bug,
+             ;; Hacky + can actually segfault JVM due to Snappy bug,
              ;; Ref. <http://goo.gl/mh7Rpy> - no better alternatives, unfortunately
              thaw-v1-data
              (fn [data-ba ex-fn]
