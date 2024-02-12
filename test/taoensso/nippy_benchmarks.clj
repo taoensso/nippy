@@ -78,24 +78,24 @@
     {laps   1e4
      warmup 25e3}}]
 
-  (println "\nStarting benchmarks")
+  (println "\nRunning benchmarks...")
 
   (let [results_ (atom {})]
     (when (or all? reader?)
-      (println "- Benching Reader...")
+      (println "  With Reader...")
       (swap! results_ assoc :reader
         (bench1-serialization freeze-reader thaw-reader
           (fn [^String s] (count (.getBytes s "UTF-8")))
           (assoc opts :laps laps, :warmup warmup))))
 
     (when (or all? fressian?)
-      (println "- Benching Fressian...")
+      (println "  With Fressian...")
       (swap! results_ assoc :fressian
         (bench1-serialization freeze-fress thaw-fress count
           (assoc opts :laps laps, :warmup warmup))))
 
     (when (or all? lzma2?)
-      (println "- Benching Nippy/LZMA2...")
+      (println "  With Nippy/LZMA2...")
       (swap! results_ assoc :nippy/lzma2
         (bench1-serialization
           #(nippy/freeze % {:compressor nippy/lzma2-compressor})
@@ -103,7 +103,7 @@
           count
           (assoc opts :laps laps, :warmup warmup))))
 
-    (println "- Benching Nippy/encrypted...")
+    (println "  With Nippy/encrypted...")
     (swap! results_ assoc :nippy/encrypted
       (bench1-serialization
         #(nippy/freeze % {:password [:cached "p"]})
@@ -111,17 +111,17 @@
         count
         (assoc opts :laps laps, :warmup warmup)))
 
-    (println "- Benching Nippy/default...")
+    (println "  With Nippy/default...")
     (swap! results_ assoc :nippy/default
       (bench1-serialization nippy/freeze nippy/thaw count
         (assoc opts :laps laps, :warmup warmup)))
 
-    (println "- Benching Nippy/fast...")
+    (println "  With Nippy/fast...")
     (swap! results_ assoc :nippy/fast
       (bench1-serialization nippy/fast-freeze nippy/fast-thaw count
         (assoc opts :laps laps, :warmup warmup)))
 
-    (println "- Benchmarks complete! (Time for cake?)")
+    (println "\nBenchmarks done:")
     (printed-results @results_)))
 
 ;;;; Compression
@@ -165,6 +165,7 @@
 
 (comment
   {:last-updated    "2024-01-16"
+   :system          "2020 Macbook Pro M1, 16 GB memory"
    :clojure-version "1.11.1"
    :java-version    "OpenJDK 21"
    :deps
