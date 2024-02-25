@@ -8,10 +8,10 @@
    :url  "https://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies
-  [[org.clojure/tools.reader "1.3.7"]
-   [com.taoensso/encore      "3.77.0"]
+  [[org.clojure/tools.reader "1.4.0"]
+   [com.taoensso/encore      "3.85.0"]
    [org.tukaani/xz           "1.9"]
-   [io.airlift/aircompressor "0.25"]]
+   [io.airlift/aircompressor "0.26"]]
 
   :test-paths ["test" #_"src"]
 
@@ -46,12 +46,12 @@
 
     :dependencies
     [[org.clojure/test.check    "1.1.1"]
-     [org.clojure/data.fressian "1.0.0"]]
+     [org.clojure/data.fressian "1.1.0"]]
 
     :plugins
     [[lein-pprint  "1.3.2"]
      [lein-ancient "0.7.0"]
-     [com.taoensso.forks/lein-codox "0.10.10"]]
+     [com.taoensso.forks/lein-codox "0.10.11"]]
 
     :codox
     {:language #{:clojure #_:clojurescript}
