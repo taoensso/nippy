@@ -337,7 +337,7 @@
   compression/lz4-compressor
   compression/lz4hc-compressor
   #_compression/lzo-compressor
-  #_compression/snappy-compressor ; Can be unsafe
+  compression/snappy-compressor
   compression/lzma2-compressor
 
   encryption/encrypt

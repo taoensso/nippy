@@ -201,13 +201,16 @@
   See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
   (LZMA2Compressor. 0))
 
+(enc/def* snappy-compressor
+  "Default `Snappy` compressor:
+    -   Compression ratio: `C`  (0.58      on reference benchmark).
+    -   Compression speed: `A+` (206 msecs on reference benchmark).
+    - Decompression speed: `B`  (134 msecs on reference benchmark).
+  Good general-purpose compressor, favours speed.
+  See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
+  (SnappyCompressor. false))
+
 (enc/def* ^:no-doc lz4hc-compressor
   "Different LZ4 modes no longer supported, prefer `lz4-compressor`."
   {:deprecated "v3.4.0-RC1 (2024-02-06)"}
   (LZ4Compressor.))
-
-(enc/def* ^:no-doc snappy-compressor
-  "Snappy compressor no longer recommended, prefer `lz4-compressor`.
-  Decompression can be unsafe against untrusted data!"
-  {:deprecated "v3.4.0-RC1 (2024-02-06)"}
-  (SnappyCompressor. false))

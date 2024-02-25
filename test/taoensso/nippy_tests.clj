@@ -423,16 +423,21 @@
 ;;;; Compressors
 
 (deftest _compressors
+  (println "\nTesting decompression of random data...")
   (doseq [c [compr/zstd-compressor
              compr/lz4-compressor
              compr/lzo-compressor
-             #_compr/snappy-compressor ; Ref. <https://github.com/airlift/aircompressor/issues/183>
+             compr/snappy-compressor
              compr/lzma2-compressor]]
 
-    (dotimes [_ 2e4]
-      (is
-        (nil? (enc/catching (compr/decompress c (crypto/rand-bytes 1024))))
-        "Decompression never crashes JVM, even against invalid data"))))
+    (print (str "  With " (name (compr/header-id c)))) (flush)
+    (dotimes [_ 5] ; Slow, a few k laps should be sufficient for CI
+      (print ".") (flush)
+      (dotimes [_ 1000]
+        (is
+          (nil? (enc/catching (compr/decompress c (crypto/rand-bytes 1024))))
+          "Decompression never crashes JVM, even against invalid data")))
+    (println)))
 
 ;;;; Benchmarks
 
