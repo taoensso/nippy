@@ -1707,6 +1707,7 @@
     :snappy    compression/snappy-compressor
     :lzma2     lzma2-compressor
     :lz4       lz4-compressor
+    :zstd      zstd-compressor
     :no-header (throw (ex-info ":auto not supported on headerless data." {}))
     :else      (throw (ex-info ":auto not supported for non-standard compressors." {}))
     (do        (throw (ex-info (str "Unrecognized :auto compressor id: " compressor-id)
