@@ -203,6 +203,8 @@
    48  [:record-sm         [[:bytes {:read 1}] [:elements 1]]]
    49  [:record-md         [[:bytes {:read 2}] [:elements 1]]]
 
+   104 [:meta-protocol-key []]
+
    ;; Necessarily without size information
    81  [:type               nil]
    82  [:prefixed-custom-md nil]
@@ -589,13 +591,15 @@
 
 (defmacro write-id [out id] `(.writeByte ~out ~id))
 
+(declare write-map)
+
 (extend-protocol IFreezableWithMeta
   clojure.lang.IObj ; IMeta => `meta` will work, IObj => `with-meta` will work
   (-freeze-with-meta! [x ^DataOutput data-output]
     (when-let [m (when *incl-metadata?* (meta x))]
-      (write-id data-output id-meta)
-      (-freeze-without-meta! m data-output))
-    (-freeze-without-meta!   x data-output))
+      (write-id  data-output id-meta)
+      (write-map data-output m :is-metadata))
+    (-freeze-without-meta! x data-output))
 
   nil    (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output))
   Object (-freeze-with-meta! [x data-output] (-freeze-without-meta! x data-output)))
@@ -815,7 +819,7 @@
 
 ;; Micro-optimization:
 ;; As (write-kvs out id-map-0 id-map-sm id-map-md id-map-lg x)
-(defn- write-map [^DataOutput out m]
+(defn- write-map [^DataOutput out m is-metadata?]
   (let [cnt (count m)]
     (if (zero? cnt)
       (write-id out id-map-0)
@@ -827,9 +831,18 @@
 
         (-run-kv!
           (fn [k v]
-            (-freeze-with-meta! k out)
-            (-freeze-with-meta! v out))
+            (if (and is-metadata? (fn? v) (qualified-symbol? k))
+              (do
+                ;; Strip Clojure v1.10+ metadata protocol extensions
+                ;; (used by defprotocol `:extend-via-metadata`)
+                (write-id out id-meta-protocol-key)
+                (write-id out id-nil))
+              (do
+                (-freeze-with-meta! k out)
+                (-freeze-with-meta! v out))))
           m)))))
+
+(comment (meta (thaw (freeze (with-meta [] {:a :A, 'b/c (fn [])})))))
 
 ;; Micro-optimization:
 ;; As (write-counted-coll out id-set-0 id-set-sm id-set-md id-set-lg x)
@@ -1078,7 +1091,7 @@
 (freezer PersistentTreeMap  nil true (write-kvs            out id-sorted-map-lg x))
 (freezer APersistentVector  nil true (write-vec            out                  x))
 (freezer APersistentSet     nil true (write-set            out                  x))
-(freezer APersistentMap     nil true (write-map            out                  x))
+(freezer APersistentMap     nil true (write-map            out                  x false))
 (freezer PersistentList     nil true (write-counted-coll   out id-list-0 id-list-sm id-list-md id-list-lg x))
 (freezer LazySeq            nil true (write-uncounted-coll out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
 (freezer ISeq               nil true (write-coll           out  id-seq-0  id-seq-sm  id-seq-md  id-seq-lg x))
@@ -1519,10 +1532,13 @@
         id-true        true
         id-false       false
         id-char        (.readChar in)
-        id-meta        (let [m (thaw-from-in! in)]
-                         (if *incl-metadata?*
-                           (with-meta (thaw-from-in! in) m)
-                           (do        (thaw-from-in! in))))
+
+        id-meta-protocol-key ::meta-protocol-key
+        id-meta
+        (let [m (thaw-from-in! in)]
+          (if *incl-metadata?*
+            (with-meta (thaw-from-in! in) (dissoc m ::meta-protocol-key))
+            (do        (thaw-from-in! in))))
 
         id-cached-0    (thaw-cached 0 in)
         id-cached-1    (thaw-cached 1 in)

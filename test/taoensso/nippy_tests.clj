@@ -96,6 +96,10 @@
 
    (is (enc/throws? :ex-info "Unfreezable type" (nippy/freeze (fn []))))
 
+   (testing "Clojure v1.10+ metadata protocol extensions"
+     [(is (=                     (meta (nippy/thaw (nippy/freeze (with-meta [] {:a :A, 'b/c (fn [])})))) {:a :A}))
+      (is (enc/throws? :ex-info "Unfreezable type" (nippy/freeze (with-meta [] {:a :A, 'b   (fn [])}))))])
+
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
 
 ;;;; Custom types & records
