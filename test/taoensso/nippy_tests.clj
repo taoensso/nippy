@@ -94,6 +94,8 @@
         (let [n    range-uint+]                          (= (thaw (freeze n)) n))
         (let [n (- range-uint+)]                         (= (thaw (freeze n)) n))]))
 
+   (is (enc/throws? :ex-info "Unfreezable type" (nippy/freeze (fn []))))
+
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
 
 ;;;; Custom types & records

@@ -352,7 +352,7 @@
 ;; See also `nippy.tools` ns for further dynamic config support
 
 ;; For back compatibility (incl. Timbre's Carmine appender)
-(enc/defonce ^:dynamic ^:no-doc ^:deprecated *final-freeze-fallback* "Prefer `*freeze-fallback`.")
+(enc/defonce ^:dynamic ^:no-doc ^:deprecated *final-freeze-fallback* "Prefer `*freeze-fallback`." nil)
 (enc/defonce ^:dynamic                             *freeze-fallback*
   "Controls Nippy's behaviour when trying to freeze an item for which Nippy
   doesn't currently have a native freeze/thaw implementation.
