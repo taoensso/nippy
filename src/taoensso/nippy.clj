@@ -596,7 +596,7 @@
 (extend-protocol IFreezableWithMeta
   clojure.lang.IObj ; IMeta => `meta` will work, IObj => `with-meta` will work
   (-freeze-with-meta! [x ^DataOutput data-output]
-    (when-let [m (when *incl-metadata?* (meta x))]
+    (when-let [m (when *incl-metadata?* (not-empty (meta x)))]
       (write-id  data-output id-meta)
       (write-map data-output m :is-metadata))
     (-freeze-without-meta! x data-output))
@@ -1535,10 +1535,11 @@
 
         id-meta-protocol-key ::meta-protocol-key
         id-meta
-        (let [m (thaw-from-in! in)]
-          (if *incl-metadata?*
-            (with-meta (thaw-from-in! in) (dissoc m ::meta-protocol-key))
-            (do        (thaw-from-in! in))))
+        (let [m (thaw-from-in! in) ; Always consume from stream
+              x (thaw-from-in! in)]
+          (if-let [m (when *incl-metadata?* (not-empty (dissoc m ::meta-protocol-key)))]
+            (with-meta x m)
+            (do        x)))
 
         id-cached-0    (thaw-cached 0 in)
         id-cached-1    (thaw-cached 1 in)
