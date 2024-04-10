@@ -19,7 +19,7 @@ Please **test carefully and report any unexpected problems**, thank you! 🙏
 * 37cf415 [new] [#171] Auto strip metadata protocol extensions
 * Misc internal improvements
 
-## Everthing since `v3.4.0-RC2`
+## Everything since `v3.4.0-RC2`
 
 * 82a050b [mod] Don't attach empty metadata
 * 92c4a83 [fix] Broken `*final-freeze-fallback*` default val
@@ -43,7 +43,7 @@ Please **test carefully and report any unexpected problems**, thank you! 🙏
 * f3ff7ae [new] Add native `MapEntry` freezer
 * Misc internal improvements
 
-## Everthing since `v3.4.0-RC1`
+## Everything since `v3.4.0-RC1`
 
 * cb5b7cf [fix] [#169] Can't auto-identify `:zstd` compressor when decompressing
 * cb0b871 Revert [mod] 578c585 (upstream fix now available)

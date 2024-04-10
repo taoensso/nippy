@@ -45,7 +45,7 @@ Since its earliest versions, Nippy has consistently been the **fastest serializa
 ## Documentation
 
 - [Wiki][GitHub wiki] (getting started, usage, etc.)
-- API reference: [Codox][Codox docs], [clj-doc][clj-doc docs]
+- API reference: [cljdoc][cljdoc docs], [Codox][Codox docs]
 
 ## Funding
 
@@ -68,7 +68,7 @@ Licensed under [EPL 1.0](LICENSE.txt) (same as Clojure).
 <!-- Project -->
 
 [Codox docs]:   https://taoensso.github.io/nippy/
-[clj-doc docs]: https://cljdoc.org/d/com.taoensso/nippy/
+[cljdoc docs]: https://cljdoc.org/d/com.taoensso/nippy/
 
 [Clojars SVG]: https://img.shields.io/clojars/v/com.taoensso/nippy.svg
 [Clojars URL]: https://clojars.org/com.taoensso/nippy
