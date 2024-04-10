@@ -2,6 +2,31 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.4.0-RC3` (2024-04-10)
+
+> 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.0-RC3), this project uses [Break Versioning](https://www.taoensso.com/break-versioning).
+
+This is a non-breaking **feature and maintenance** pre-release.  
+Please **test carefully and report any unexpected problems**, thank you! 🙏
+
+## New since `v3.3.0`
+
+* fb6f75e [new] Smarter, faster, protocol-based `freezable?` util
+* 6ad5aeb [new] Add `:zstd` compressor, new compressor backend
+* 9db09e1 [new] [#163] Track serialized output in tests
+* dcc6b08 [new] [#164] Update benchmarks
+* f3ff7ae [new] Add native `MapEntry` freezer
+* 37cf415 [new] [#171] Auto strip metadata protocol extensions
+* Misc internal improvements
+
+## Everthing since `v3.4.0-RC2`
+
+* 82a050b [mod] Don't attach empty metadata
+* 92c4a83 [fix] Broken `*final-freeze-fallback*` default val
+* 37cf415 [new] [#171] Auto strip metadata protocol extensions
+* Update dependencies
+
+
 # `v3.4.0-RC2` (2024-02-26)
 
 > 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.0-RC2), this project uses [Break Versioning](https://www.taoensso.com/break-versioning).
