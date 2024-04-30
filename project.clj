@@ -8,8 +8,8 @@
    :url  "https://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies
-  [[org.clojure/tools.reader "1.4.1"]
-   [com.taoensso/encore      "3.99.0"]
+  [[org.clojure/tools.reader "1.4.2"]
+   [com.taoensso/encore      "3.105.1"]
    [org.tukaani/xz           "1.9"]
    [io.airlift/aircompressor "0.26"]]
 
@@ -18,8 +18,8 @@
   :profiles
   {;; :default [:base :system :user :provided :dev]
    :provided {:dependencies [[org.clojure/clojure "1.11.1"]]}
-   :c1.12    {:dependencies [[org.clojure/clojure "1.12.0-alpha9"]]}
-   :c1.11    {:dependencies [[org.clojure/clojure "1.11.1"]]}
+   :c1.12    {:dependencies [[org.clojure/clojure "1.12.0-alpha10"]]}
+   :c1.11    {:dependencies [[org.clojure/clojure "1.11.3"]]}
    :c1.10    {:dependencies [[org.clojure/clojure "1.10.1"]]}
    :c1.9     {:dependencies [[org.clojure/clojure "1.9.0"]]}
 
@@ -29,7 +29,7 @@
     :aot [taoensso.graal-tests]
     :uberjar-name "graal-tests.jar"
     :dependencies
-    [[org.clojure/clojure                  "1.11.1"]
+    [[org.clojure/clojure                  "1.11.3"]
      [com.github.clj-easy/graal-build-time "1.0.5"]]}
 
    :dev
