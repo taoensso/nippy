@@ -2,6 +2,39 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.4.0` (2024-04-30)
+
+> **Dep**: Nippy is [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.0).  
+> **Versioning**: Nippy uses [Break Versioning](https://www.taoensso.com/break-versioning).
+
+This is a non-breaking **feature and maintenance** release and should be a safe upgrade for existing users. But as always, please **test carefully and report any unexpected problems**, thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## Changes since `v3.3.0` (2023-10-11)
+
+* 82a050b [mod] Don't attach empty metadata (meta will now be `nil` rather than `{}`)
+
+## Fixes since `v3.3.0` (2023-10-11)
+
+* 92c4a83 [fix] Broken `*final-freeze-fallback*` default val
+
+## New since `v3.3.0` (2023-10-11)
+
+* fb6f75e [new] Smarter, faster, protocol-based `freezable?` util
+* 6ad5aeb [new] Add `:zstd` compressor, new compressor backend
+* 9db09e1 [new] [#163] Track serialized output in tests
+* dcc6b08 [new] [#164] Update benchmarks
+* f3ff7ae [new] Add native `MapEntry` freezer
+* 37cf415 [new] [#171] Auto strip metadata protocol extensions
+* Misc internal improvements
+
+## Everything since `v3.4.0-RC3` (2024-04-10)
+
+* Update dependencies
+
+---
+
 # `v3.4.0-RC3` (2024-04-10)
 
 > 📦 [Available on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.0-RC3), this project uses [Break Versioning](https://www.taoensso.com/break-versioning).
