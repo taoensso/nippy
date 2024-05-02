@@ -2,6 +2,23 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.4.1` (2024-05-02)
+
+> **Dep**: Nippy is [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.1).  
+> **Versioning**: Nippy uses [Break Versioning](https://www.taoensso.com/break-versioning).
+
+Like [`v3.4.0`](https://github.com/taoensso/nippy/releases/tag/v3.4.0) but introduces an internal mechanism to help make it easier for some users that do **rolling updates** from earlier versions of Nippy.
+
+Still, the usual warning applies: data **frozen by Nippy version X** should ideally be **thawed by version >= X**, otherwise you run the risk of the thaw throwing when unfamiliar types are encountered. Please note that this can affect **rolling updates**, and can limit your ability to **revert a Nippy update**. Please ensure adequate testing in your environment before updating against production data!
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## Changes since `v3.4.0`
+
+* [mod]  Due to some internal format changes, Nippy `v3.4.1` may produce **different serialized output** to `v3.4.0` and earlier versions of Nippy. Most users won't care about this, but you could be affected if you depend on specific serialized byte values (for example by comparing serialized output between different versions of Nippy).
+
+---
+
 # `v3.4.0` (2024-04-30)
 
 > **Dep**: Nippy is [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.0).  
