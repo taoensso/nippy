@@ -192,6 +192,19 @@
 
 (defn ba-hash [^bytes ba] (hash (seq ba)))
 
+(defn gen-hashes [] (enc/map-vals (fn [v] (ba-hash (freeze v))) test-data))
+(defn cmp-hashes [new old] (vec (sort (reduce-kv (fn [s k v] (if (= (get old k) v) s (conj s k))) #{} new))))
+
+(def ref-hashes-v341
+  {:deftype -148586793, :lazy-seq-empty 1277437598, :true -1809580601, :long 598276629, :double -454270428, :lazy-seq -1039619789, :short 1152993378, :meta -858252893, :str-long -1970041891, :instant -1401948864, :many-keywords 665654816, :bigint 2033662230, :sym-ns 769802402, :queue 447747779, :float 603100813, :sorted-set 2005004017, :many-strings 1738215727, :nested -1350538572, :queue-empty 1760934486, :duration -775528642, :false 1506926383, :vector 813550992, :util-date 1326218051, :kw 389651898, :sym -1742024487, :str-short -921330463, :subvec 709331681, :kw-long 852232872, :integer 624865727, :sym-long -1535730190, :list -1207486853, :ratio 1186850097, :byte -1041979678, :bigdec -1846988137, :nil 2005042235, :defrecord -553848560, :sorted-map -1160380145, :sql-date 80018667, :map-entry 1219306839, :false-boxed 1506926383, :uri 870148616, :period -2043530540, :many-longs -1109794519, :uuid -338331115, :set 1649942133, :kw-ns 1050084331, :map 1989337680, :many-doubles -827569787, :char 858269588})
+
+(def ref-hashes-v340
+  {:deftype 1529147805, :lazy-seq-empty 1277437598, :true -1809580601, :long 219451189, :double -454270428, :lazy-seq -1039619789, :short 1152993378, :meta 352218350, :str-long -1970041891, :instant -1401948864, :many-keywords 665654816, :bigint 2033662230, :sym-ns 769802402, :queue 447747779, :float 603100813, :sorted-set 1443292905, :many-strings 1777678883, :nested -1590473924, :queue-empty 1760934486, :duration -775528642, :false 1506926383, :vector 89425525, :util-date 1326218051, :kw 389651898, :sym -1742024487, :str-short -1097575232, :subvec -2047667173, :kw-long 852232872, :integer 624865727, :sym-long -1535730190, :list -1113199651, :ratio 1186850097, :byte -1041979678, :bigdec -1846988137, :nil 2005042235, :defrecord 287634761, :sorted-map 1464032648, :sql-date 80018667, :map-entry -1353323498, :false-boxed 1506926383, :uri -1374752165, :period -2043530540, :many-longs 759118414, :uuid -338331115, :set -1515144175, :kw-ns 1050084331, :map 358912619, :many-doubles -827569787, :char 858269588})
+
+(comment
+  (cmp-hashes ref-hashes-v341 ref-hashes-v340)
+  [:defrecord :deftype :list :long :many-longs :many-strings :map :map-entry :meta :nested :set :sorted-map :sorted-set :str-short :subvec :uri :vector])
+
 (deftest _stable-serialized-output
   (testing "Stable serialized output"
 
@@ -204,12 +217,9 @@
        (is      (ba= (freeze (sorted-map :a 1 :b 1))
                      (freeze (sorted-map :b 1 :a 1))) "Sorted structures are generally safe")
 
-       ;; Track serialized output of stress data so that we can at least be aware of
-       ;; (and warn about) unintended changes for common/elementary types, etc. Note that
-       ;; reference hashes will need to be recalculated on changes to stress data.
-       (let [reference-hashes ; (enc/map-vals (fn [v] (ba-hash (freeze v))) test-data)
-             {:deftype 1529147805, :lazy-seq-empty 1277437598, :true -1809580601, :long 219451189, :double -454270428, :lazy-seq -1039619789, :short 1152993378, :meta 352218350, :str-long -1970041891, :instant -1401948864, :many-keywords 665654816, :bigint 2033662230, :sym-ns 769802402, :queue 447747779, :float 603100813, :sorted-set 1443292905, :many-strings 1777678883, :nested -1590473924, :queue-empty 1760934486, :duration -775528642, :false 1506926383, :vector 89425525, :util-date 1326218051, :kw 389651898, :sym -1742024487, :str-short -1097575232, :subvec -2047667173, :kw-long 852232872, :integer 624865727, :sym-long -1535730190, :list -1113199651, :ratio 1186850097, :byte -1041979678, :bigdec -1846988137, :nil 2005042235, :defrecord 287634761, :sorted-map 1464032648, :sql-date 80018667, :map-entry -1353323498, :false-boxed 1506926383, :uri -1374752165, :period -2043530540, :many-longs 759118414, :uuid -338331115, :set -1515144175, :kw-ns 1050084331, :map 358912619, :many-doubles -827569787, :char 858269588}
-
+       ;; Track serialized output of stress data so that we can detect unintentional changes,
+       ;; and warn about intended ones. Hashes will need to be recalculated on changes to stress data.
+       (let [reference-hashes ref-hashes-v341
              failures ; #{{:keys [k v]}}
              (reduce-kv
                (fn [failures k v]

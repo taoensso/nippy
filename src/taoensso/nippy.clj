@@ -662,9 +662,10 @@
     (let [ba  (.getBytes s StandardCharsets/UTF_8)
           len (alength ba)]
       (enc/cond
-        (sm-count?* len) (do (write-id out id-str-sm*) (write-sm-count* out len))
-        (md-count?  len) (do (write-id out id-str-md)  (write-md-count  out len))
-        :else            (do (write-id out id-str-lg)  (write-lg-count  out len)))
+        (and (impl/target-release>= 330) (sm-count?* len)) (do (write-id out id-str-sm*) (write-sm-count* out len))
+        (and (impl/target-release<  330) (sm-count?  len)) (do (write-id out id-str-sm_) (write-sm-count  out len))
+                                         (md-count?  len)  (do (write-id out id-str-md)  (write-md-count  out len))
+        :else                                              (do (write-id out id-str-lg)  (write-lg-count  out len)))
 
       (.write out ba 0 len))))
 
@@ -692,8 +693,26 @@
 
     (.write out ba 0 len)))
 
+(defn- write-long-legacy [^DataOutput out ^long n]
+  (enc/cond
+    (zero? n) (write-id out id-long-0)
+    (pos?  n)
+    (enc/cond
+      (<= n    Byte/MAX_VALUE) (do (write-id out id-long-sm_) (.writeByte  out n))
+      (<= n   Short/MAX_VALUE) (do (write-id out id-long-md_) (.writeShort out n))
+      (<= n Integer/MAX_VALUE) (do (write-id out id-long-lg_) (.writeInt   out n))
+      :else                    (do (write-id out id-long-xl)  (.writeLong  out n)))
+
+    :else
+    (enc/cond
+      (>= n    Byte/MIN_VALUE) (do (write-id out id-long-sm_) (.writeByte  out n))
+      (>= n   Short/MIN_VALUE) (do (write-id out id-long-md_) (.writeShort out n))
+      (>= n Integer/MIN_VALUE) (do (write-id out id-long-lg_) (.writeInt   out n))
+      :else                    (do (write-id out id-long-xl)  (.writeLong  out n)))))
+
 (defn- write-long [^DataOutput out ^long n]
   (enc/cond
+    (impl/target-release< 330) (write-long-legacy out n)
     (zero? n) (write-id out id-long-0)
     (pos?  n)
     (enc/cond
@@ -719,14 +738,10 @@
       (write-id out id-vec-0)
       (do
         (enc/cond
-          (sm-count?* cnt)
-          (enc/cond
-            (== cnt 2) (write-id out id-vec-2)
-            (== cnt 3) (write-id out id-vec-3)
-            :else  (do (write-id out id-vec-sm*) (write-sm-count* out cnt)))
-
-          (md-count? cnt) (do (write-id out id-vec-md) (write-md-count out cnt))
-          :else           (do (write-id out id-vec-lg) (write-lg-count out cnt)))
+          (and (impl/target-release>= 330) (sm-count?* cnt)) (do (write-id out id-vec-sm*) (write-sm-count* out cnt))
+          (and (impl/target-release<  330) (sm-count?  cnt)) (do (write-id out id-vec-sm_) (write-sm-count  out cnt))
+                                           (md-count?  cnt)  (do (write-id out id-vec-md)  (write-md-count  out cnt))
+          :else                                              (do (write-id out id-vec-lg)  (write-lg-count  out cnt)))
 
         (-run! (fn [in] (-freeze-with-meta! in out)) v)))))
 
@@ -817,6 +832,8 @@
      (write-counted-coll   out id-empty id-sm id-md id-lg coll)
      (write-uncounted-coll out id-empty id-sm id-md id-lg coll))))
 
+(def ^:private ^:const meta-protocol-key ::meta-protocol-key)
+
 ;; Micro-optimization:
 ;; As (write-kvs out id-map-0 id-map-sm id-map-md id-map-lg x)
 (defn- write-map [^DataOutput out m is-metadata?]
@@ -825,9 +842,10 @@
       (write-id out id-map-0)
       (do
         (enc/cond
-          (sm-count?* cnt) (do (write-id out id-map-sm*) (write-sm-count* out cnt))
-          (md-count?  cnt) (do (write-id out id-map-md)  (write-md-count  out cnt))
-          :else            (do (write-id out id-map-lg)  (write-lg-count  out cnt)))
+          (and (impl/target-release>= 330) (sm-count?* cnt)) (do (write-id out id-map-sm*) (write-sm-count* out cnt))
+          (and (impl/target-release<  330) (sm-count?  cnt)) (do (write-id out id-map-sm_) (write-sm-count  out cnt))
+                                           (md-count?  cnt)  (do (write-id out id-map-md)  (write-md-count  out cnt))
+          :else                                              (do (write-id out id-map-lg)  (write-lg-count  out cnt)))
 
         (-run-kv!
           (fn [k v]
@@ -835,7 +853,9 @@
               (do
                 ;; Strip Clojure v1.10+ metadata protocol extensions
                 ;; (used by defprotocol `:extend-via-metadata`)
-                (write-id out id-meta-protocol-key)
+                (if (impl/target-release>= 340)
+                  (write-id out       id-meta-protocol-key)
+                  (-freeze-without-meta! meta-protocol-key out))
                 (write-id out id-nil))
               (do
                 (-freeze-with-meta! k out)
@@ -852,9 +872,10 @@
       (write-id out id-set-0)
       (do
         (enc/cond
-          (sm-count?* cnt) (do (write-id out id-set-sm*) (write-sm-count* out cnt))
-          (md-count?  cnt) (do (write-id out id-set-md)  (write-md-count  out cnt))
-          :else            (do (write-id out id-set-lg)  (write-lg-count  out cnt)))
+          (and (impl/target-release>= 330) (sm-count?* cnt)) (do (write-id out id-set-sm*) (write-sm-count* out cnt))
+          (and (impl/target-release<  330) (sm-count?  cnt)) (do (write-id out id-set-sm_) (write-sm-count  out cnt))
+                                           (md-count?  cnt)  (do (write-id out id-set-md)  (write-md-count  out cnt))
+          :else                                              (do (write-id out id-set-lg)  (write-lg-count  out cnt)))
 
         (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
 
@@ -1533,11 +1554,11 @@
         id-false       false
         id-char        (.readChar in)
 
-        id-meta-protocol-key ::meta-protocol-key
+        id-meta-protocol-key meta-protocol-key
         id-meta
         (let [m (thaw-from-in! in) ; Always consume from stream
               x (thaw-from-in! in)]
-          (if-let [m (when *incl-metadata?* (not-empty (dissoc m ::meta-protocol-key)))]
+          (if-let [m (when *incl-metadata?* (not-empty (dissoc m meta-protocol-key)))]
             (with-meta x m)
             (do        x)))
 

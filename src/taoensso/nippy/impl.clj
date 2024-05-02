@@ -151,6 +151,96 @@
     See that function's docstring for more info."
     [] (trim nmax (state_))))
 
+;;;; Release targeting
+
+(comment
+  (set! *print-length* nil)
+  (vec (sort (keys taoensso.nippy/public-types-spec)))
+
+  ;; To help support release targeting, we keep track of when new type ids are added
+  (let [id-history ; {<release> #{type-ids}}
+        {340 ; v3.4.0 (2024-04-30), added 2
+         ;; New: map-entry meta-protocol-key
+         #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
+           29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
+           55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80
+           81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104
+           105 106 110 111 112 113 114 115}
+
+         330 ; v3.3.0 (2023-10-11), added 11
+         ;; New: long-pos-sm long-pos-md long-pos-lg long-neg-sm long-neg-md long-neg-lg
+         ;;      str-sm* vec-sm* set-sm* map-sm* sql-date
+         #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
+           29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
+           55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80
+           81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 105 106
+           110 111 112 113 114 115}
+
+         320 ; v3.2.0 (2022-07-18), added none
+         #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
+           29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
+           55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80
+           81 82 83 84 85 86 90 91 100 101 102 105 106 110 111 112 113 114 115}
+
+         313 ; v3.1.3 (2022-06-23), added 5
+         ;; New: time-instant time-duration time-period kw-md sym-md
+         #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
+           29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
+           55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80
+           81 82 83 84 85 86 90 91 100 101 102 105 106 110 111 112 113 114 115}
+
+         300 ; v3.0.0 (2020-09-20), baseline
+         #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
+           29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
+           55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 80
+           81 82 90 91 100 101 102 105 106 110 111 112 113 114 115}}]
+
+    (defn diff [new-release old-release]
+      (vec (sort (clojure.set/difference (id-history new-release) (id-history old-release))))))
+
+  (diff 340 330))
+
+(let [;; Initially target compatibility with v3.2.0 (2020-07-18)
+      ;; Next release will target v3.4.0 (2024-04-30), etc.
+      target-release
+      (enc/get-env {:as :edn, :default 320}
+        :taoensso.nippy.target-release)
+
+      target>=
+      (fn [min-release]
+        (if target-release
+          (>= (long target-release) (long min-release))
+          true))]
+
+  (defmacro target-release< [min-release] (not (target>= min-release)))
+  (defmacro target-release>=
+    "Returns true iff `target-release` is nil or >= given `min-release`.
+    Used to help ease data migration for changes to core data types.
+
+    When support is added for a new type in Nippy version X, it necessarily means
+    that data containing that new type and frozen with Nippy version X is unthawable
+    with Nippy versions < X.
+
+    Earlier versions of Nippy will throw an exception on thawing affected data:
+      \"Unrecognized type id (<n>). Data frozen with newer Nippy version?\"
+
+    This can present a challenge when updating to new versions of Nippy, e.g.:
+
+      - Rolling updates could lead to old and new versions of Nippy temporarily co-existing.
+      - Data written with new types could limit your ability to revert a Nippy update.
+
+    There's no easy solution to this in GENERAL, but we CAN at least help reduce the
+    burden related to CHANGES in core data types by introducing changes over 2 phases:
+
+      1. Nippy vX   reads  new (changed) type, writes old type
+      2. Nippy vX+1 writes new (changed) type
+
+    When relevant, we can then warn users in the CHANGELOG to not leapfrog
+    (e.g. Nippy vX -> Nippy vX+2) when doing rolling updates."
+    [min-release] (target>= min-release)))
+
+(comment (macroexpand '(target-release>= 340)))
+
 ;;;
 
 (comment
