@@ -7,7 +7,9 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 > **Dep**: Nippy is [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.0).  
 > **Versioning**: Nippy uses [Break Versioning](https://www.taoensso.com/break-versioning).
 
-This is a non-breaking **feature and maintenance** release and should be a safe upgrade for existing users. But as always, please **test carefully and report any unexpected problems**, thank you! 🙏
+This is a non-breaking **feature and maintenance** release and should be a safe update for existing users. But as always, please **test carefully and report any unexpected problems**, thank you! 🙏
+
+**IMPORTANT**: data **frozen by Nippy version X** should always be **thawed by version >= X**, otherwise you run the risk of the thaw throwing when encountering unfamiliar types. Please note that this can affect **rolling updates**, and can limit your ability to **revert a Nippy update**. Please ensure adequate testing in your environment before updating against production data.
 
 \- [Peter Taoussanis](https://www.taoensso.com)
 
