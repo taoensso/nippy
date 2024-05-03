@@ -1918,8 +1918,9 @@
   "Extends Nippy to support freezing of a custom type (ideally concrete) with
   given id of form:
 
-    * Keyword    - 2 byte overhead, keywords hashed to 16 bit id
-    * ℕ∈[1, 128] - 0 byte overhead
+    * ℕ∈[1, 128]           - 0 byte overhead. You are responsible for managing ids.
+    * (Namespaced) keyword - 2 byte overhead. Keyword will be hashed to 16 bit int,
+                             collisions will throw at compile-time.
 
   NB: be careful about extending to interfaces, Ref. <http://goo.gl/6gGRlU>.
 
