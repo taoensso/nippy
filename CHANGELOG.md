@@ -19,6 +19,8 @@ Notes:
 
 \- [Peter Taoussanis](https://www.taoensso.com)
 
+---
+
 # `v3.4.1` (2024-05-02)
 
 > **Dep**: Nippy is [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.1).  

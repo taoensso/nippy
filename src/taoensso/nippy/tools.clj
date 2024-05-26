@@ -11,10 +11,10 @@
 (def ^:dynamic *thaw-opts*   nil)
 
 (do
-  (defmacro with-freeze-opts  [opts & body] `(binding [*freeze-opts*                               ~opts ] ~@body))
-  (defmacro with-freeze-opts+ [opts & body] `(binding [*freeze-opts* (enc/fast-merge *freeze-opts* ~opts)] ~@body))
-  (defmacro with-thaw-opts    [opts & body] `(binding [*thaw-opts*                                 ~opts ] ~@body))
-  (defmacro with-thaw-opts+   [opts & body] `(binding [*thaw-opts*   (enc/fast-merge *thaw-opts*   ~opts)] ~@body)))
+  (defmacro with-freeze-opts  [opts & body] `(binding [*freeze-opts*                          ~opts ] ~@body))
+  (defmacro with-freeze-opts+ [opts & body] `(binding [*freeze-opts* (enc/merge *freeze-opts* ~opts)] ~@body))
+  (defmacro with-thaw-opts    [opts & body] `(binding [*thaw-opts*                            ~opts ] ~@body))
+  (defmacro with-thaw-opts+   [opts & body] `(binding [*thaw-opts*   (enc/merge *thaw-opts*   ~opts)] ~@body)))
 
 (deftype WrappedForFreezing [val opts])
 (defn wrapped-for-freezing? [x] (instance? WrappedForFreezing x))
@@ -27,7 +27,7 @@
     See also `tools/freeze`."
   ([x          ] (wrap-for-freezing x nil))
   ([x wrap-opts]
-   (let [captured-opts (enc/fast-merge *freeze-opts* wrap-opts)] ; wrap > dynamic
+   (let [captured-opts (enc/merge *freeze-opts* wrap-opts)] ; wrap > dynamic
      (if (instance? WrappedForFreezing x)
        (let [^WrappedForFreezing x x]
          (if (= (.-opts x) captured-opts)
@@ -46,13 +46,13 @@
     See also `tools/wrap-for-freezing`."
   ([x             ] (freeze x nil))
   ([x default-opts]
-   (let [default-opts (get default-opts :default-opts default-opts) ; Back compatibility
-         active-opts  (enc/fast-merge default-opts *freeze-opts*)] ; dynamic > default
+   (let [default-opts (get       default-opts :default-opts default-opts) ; Back compatibility
+         active-opts  (enc/merge default-opts *freeze-opts*)] ; dynamic > default
 
      (if (instance? WrappedForFreezing x)
        (let [^WrappedForFreezing x x]
-         (nippy/freeze (.-val x) (enc/fast-merge active-opts (.-opts x)))) ; captured > active!
-       (nippy/freeze          x                  active-opts)))))
+         (nippy/freeze (.-val x) (enc/merge active-opts (.-opts x)))) ; captured > active!
+       (nippy/freeze          x             active-opts)))))
 
 (defn thaw
   "Like `nippy/thaw` but uses as options the following, merged in
@@ -62,8 +62,8 @@
       2. `tools/*thaw-opts*` dynamic value (default nil)."
   ([ba             ] (thaw ba nil))
   ([ba default-opts]
-   (let [default-opts (get default-opts :default-opts default-opts) ; Back compatibility
-         active-opts  (enc/fast-merge default-opts *thaw-opts*)] ; dynamic > default
+   (let [default-opts (get       default-opts :default-opts default-opts) ; Back compatibility
+         active-opts  (enc/merge default-opts *thaw-opts*)] ; dynamic > default
 
      (nippy/thaw ba active-opts))))
 

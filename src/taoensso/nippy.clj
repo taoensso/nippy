@@ -25,7 +25,7 @@
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
     MapEntry LazySeq IRecord ISeq IType]))
 
-(enc/assert-min-encore-version [3 112 0])
+(enc/assert-min-encore-version [3 127 0])
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
@@ -300,14 +300,14 @@
     - `payload-spec` examples:
       - nil                        ; No spec available (e.g. unpredictable payload)
       - []                         ; Type has no payload
-      - [[:bytes 4]]               ; Type has a payload of exactly 4 bytes
-      - [[:bytes 2] [:elements 2]] ; Type has a payload of exactly 2 bytes, then
-                                   ; 2 elements
+      - [[:bytes 4]]               ; Type has    payload of exactly 4 bytes
+      - [[:bytes 2] [:elements 2]] ; Type has    payload of exactly 2 bytes,
+                                   ; followed by 2 elements
 
       - [[:bytes    {:read 2}]
          [:elements {:read 4 :multiplier 2 :unsigned? true}]]
 
-        ; Type has payload of <short-count> bytes, then
+        ; Type has payload of <short-count> bytes, followed by
         ; <unsigned-int-count>*2 (multiplier) elements
 
       Note that `payload-spec` can be handy for skipping over items in
@@ -1254,7 +1254,7 @@
     - :compressor nil
     - :encryptor  nil
     - :no-header? true"
-  [x]
+  ^bytes [x]
   (let [baos (ByteArrayOutputStream. 64)
         dos  (DataOutputStream. baos)]
     (with-cache (-freeze-with-meta! x dos))
@@ -1263,11 +1263,13 @@
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array.
   To freeze custom types, extend the Clojure reader or see `extend-freeze`."
-  ([x] (freeze x nil))
-  ([x {:as   opts
-       :keys [compressor encryptor password serializable-allowlist incl-metadata?]
-       :or   {compressor :auto
-              encryptor  aes128-gcm-encryptor}}]
+  (^bytes [x] (freeze x nil))
+  (^bytes
+   [x
+    {:as   opts
+     :keys [compressor encryptor password serializable-allowlist incl-metadata?]
+     :or   {compressor :auto
+            encryptor  aes128-gcm-encryptor}}]
 
    (call-with-bindings :freeze opts
      (fn []
