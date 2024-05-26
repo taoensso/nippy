@@ -14,7 +14,7 @@ Used by [Carmine](https://www.taoensso.com/carmine), [Faraday](https://www.taoen
 
 ## Latest release/s
 
-- `2024-05-02` `v3.4.1`: [release info](../../releases/tag/v3.4.1)
+- `2024-05-26` `v3.4.2`: [release info](../../releases/tag/v3.4.2)
 
 [![Main tests][Main tests SVG]][Main tests URL]
 [![Graal tests][Graal tests SVG]][Graal tests URL]

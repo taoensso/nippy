@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "3.4.1"
+(defproject com.taoensso/nippy "3.4.2"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "The fastest serialization library for Clojure"
   :url "https://www.taoensso.com/nippy"
