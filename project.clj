@@ -9,16 +9,16 @@
 
   :dependencies
   [[org.clojure/tools.reader "1.4.2"]
-   [com.taoensso/encore      "3.106.0"]
+   [com.taoensso/encore      "3.112.0"]
    [org.tukaani/xz           "1.9"]
-   [io.airlift/aircompressor "0.26"]]
+   [io.airlift/aircompressor "0.27"]]
 
   :test-paths ["test" #_"src"]
 
   :profiles
   {;; :default [:base :system :user :provided :dev]
-   :provided {:dependencies [[org.clojure/clojure "1.11.1"]]}
-   :c1.12    {:dependencies [[org.clojure/clojure "1.12.0-alpha11"]]}
+   :provided {:dependencies [[org.clojure/clojure "1.11.3"]]}
+   :c1.12    {:dependencies [[org.clojure/clojure "1.12.0-alpha12"]]}
    :c1.11    {:dependencies [[org.clojure/clojure "1.11.3"]]}
    :c1.10    {:dependencies [[org.clojure/clojure "1.10.1"]]}
    :c1.9     {:dependencies [[org.clojure/clojure "1.9.0"]]}
