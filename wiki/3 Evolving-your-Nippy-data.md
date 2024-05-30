@@ -1,4 +1,4 @@
-> This article was kindly contributed by a Nippy user (@Outrovurt)
+> This article is **community content** kindly contributed by a Nippy user (@Outrovurt)
 
 This article describes a number of use cases where you need to make changes to your code which will have some impact on data you have already frozen using Nippy, and how best to manage each specific case. We will also discuss custom freezing and thawing.
 

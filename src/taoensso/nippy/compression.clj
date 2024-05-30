@@ -174,8 +174,8 @@
 (def lz4-compressor
   "Default `LZ4` compressor:
     -   Compression ratio: `C`  (0.58      on reference benchmark).
-    -   Compression speed: `A`  (238 msecs on reference benchmark).
-    - Decompression speed: `A+` (31  msecs on reference benchmark).
+    -   Compression speed: `A`  (240 msecs on reference benchmark).
+    - Decompression speed: `A+` (30  msecs on reference benchmark).
 
   Good general-purpose compressor, favours speed.
   See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
@@ -184,8 +184,8 @@
 (def lzo-compressor
   "Default `LZO` compressor:
     -   Compression ratio: `C` (0.58      on reference benchmark).
-    -   Compression speed: `A` (216 msecs on reference benchmark).
-    - Decompression speed: `A` (43  msecs on reference benchmark).
+    -   Compression speed: `A` (220 msecs on reference benchmark).
+    - Decompression speed: `A` (40  msecs on reference benchmark).
 
   Good general-purpose compressor, favours speed.
   See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
@@ -195,7 +195,7 @@
   "Default `LZMA2` compressor:
     -   Compression ratio: `A+` (0.4       on reference benchmark).
     -   Compression speed: `E`  (18.5 secs on reference benchmark).
-    - Decompression speed: `D`  (11.8 secs on reference benchmark).
+    - Decompression speed: `D`  (12   secs on reference benchmark).
 
   Specialized compressor, strongly favours ratio.
   See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
@@ -204,8 +204,8 @@
 (enc/def* snappy-compressor
   "Default `Snappy` compressor:
     -   Compression ratio: `C`  (0.58      on reference benchmark).
-    -   Compression speed: `A+` (206 msecs on reference benchmark).
-    - Decompression speed: `B`  (134 msecs on reference benchmark).
+    -   Compression speed: `A+` (210 msecs on reference benchmark).
+    - Decompression speed: `B`  (130 msecs on reference benchmark).
   Good general-purpose compressor, favours speed.
   See `taoensso.nippy-benchmarks` for detailed comparative benchmarks."
   (SnappyCompressor. false))

@@ -7,14 +7,13 @@
 
 Clojure's rich data types are awesome. And its [reader](https://clojure.org/reference/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
-Nippy is an attempt to provide a reliable, high-performance **drop-in alternative to the reader**.
+Nippy is a mature, high-performance **drop-in alternative to the reader**.
 
-Used by [Carmine](https://www.taoensso.com/carmine), [Faraday](https://www.taoensso.com/faraday), [PigPen](https://github.com/Netflix/PigPen), [Onyx](https://github.com/onyx-platform/onyx), 
-[XTDB](https://github.com/xtdb/xtdb), [Datalevin](https://github.com/juji-io/datalevin), and others.
+It is used at scale by [Carmine](https://www.taoensso.com/carmine), [Faraday](https://www.taoensso.com/faraday), [PigPen](https://github.com/Netflix/PigPen), [Onyx](https://github.com/onyx-platform/onyx), [XTDB](https://github.com/xtdb/xtdb), [Datalevin](https://github.com/juji-io/datalevin), and others.
 
 ## Latest release/s
 
-- `2024-05-26` `v3.4.2`: [release info](../../releases/tag/v3.4.2)
+- `2024-05-26` `v3.4.2`: [release info](../../releases/tag/v3.4.2) (⚠️ contains [**security fix**](https://github.com/taoensso/nippy/security/advisories/GHSA-vw78-267v-588h))
 
 [![Main tests][Main tests SVG]][Main tests URL]
 [![Graal tests][Graal tests SVG]][Graal tests URL]
@@ -23,23 +22,75 @@ See [here][GitHub releases] for earlier releases.
 
 ## Why Nippy?
 
-- Small, simple **all-Clojure** library
+- Small, simple **pure-Clojure** library
 - **Terrific performance**: the [best](#performance) for Clojure that I'm aware of
 - Comprehensive support for [all standard data types](../../wiki/1-Getting-started#deserializing)
 - Easily extendable to [custom data types](../../wiki/1-Getting-started#custom-types)
-- **Robust test suite**, incl. full coverage for every supported type
-- Auto fallback to [Java Serializable](https://taoensso.github.io/nippy/taoensso.nippy.html#var-*freeze-serializable-allowlist*) when available
-- Auto fallback to Clojure Reader for all other types (including tagged literals)
-- Pluggable **compression** with built-in [LZ4](https://code.google.com/p/lz4/), [Zstandard](https://facebook.github.io/zstd/), etc.
-- Pluggable [encryption](../../wiki/1-Getting-started#encryption) with built-in AES128
+- **Robust test suite** incl. coverage of every supported type
+- **Mature** and widely used in production for 12+ years
+- Optional auto fallback to [Java Serializable](https://taoensso.github.io/nippy/taoensso.nippy.html#var-*freeze-serializable-allowlist*) for [safe](https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy#*freeze-serializable-allowlist*) types
+- Optional auto fallback to Clojure Reader (including tagged literals)
+- Optional smart **compression** with [LZ4](https://code.google.com/p/lz4/) or [Zstandard](https://facebook.github.io/zstd/)
+- Optional [encryption](../../wiki/1-Getting-started#encryption) with AES128
 - [Tools](https://taoensso.github.io/nippy/taoensso.nippy.tools.html) for easy + robust **integration into 3rd-party libraries**, etc.
 - Powerful [thaw transducer](https://taoensso.github.io/nippy/taoensso.nippy.html#var-*thaw-xform*) for flexible data inspection and transformation
 
+## Quick example
+
+Nippy's super easy to use:
+
+```clojure
+(require '[taoensso.nippy :as nippy])
+
+;; Freeze any Clojure value
+(nippy/freeze <my-value>) ; => Serialized byte[]
+
+;; Thaw the byte[] to get back the original value:
+(nippy/thaw (nippy/freeze <my-value>)) ; => <my-value>
+```
+
+See the [wiki](https://github.com/taoensso/nippy/wiki/1-Getting-started#deserializing) for more.
+
+## Operational considerations
+
+### Data longevity
+
+Nippy is widely used to store **long-lived** data and promises (as always) that **data serialized today should be readable by all future versions of Nippy**.
+
+But please note that the **converse is not generally true**:
+
+- Nippy `vX` **should** be able to read all data from Nippy `vY<=X` (backwards compatibility)
+- Nippy `vX` **may/not** be able to read all data from Nippy `vY>X` (forwards compatibility)
+
+### Rolling updates and rollback
+
+From time to time, Nippy may introduce:
+
+- Support for serializing **new types**
+- Optimizations to the serialization of **pre-existing types**
+
+To help ease **rolling updates** and to better support **rollback**, Nippy (since version v3.4) will always introduce such changes over **two version releases**:
+
+- Release 1: to add **read support** for the new types
+- Release 2: to add **write support** for the new types
+
+Starting from v3.4, Nippy's release notes will **always clearly indicate** if a particular update sequence is recommended.
+
+### Stability of byte output
+
+It has **never been an objective** of Nippy to offer **predictable byte output**, and I'd generally **recommend against** depending on specific byte output.
+
+However, I know that a small minority of users *do* have specialized needs in this area.
+
+So starting with Nippy v3.4, Nippy's release notes will **always clearly indicate** if any changes to byte output are expected.
+
 ## Performance
 
-Since its earliest versions, Nippy has consistently been the **fastest serialization library for Clojure** that I'm aware of. Latest [benchmark](../../blob/master/test/taoensso/nippy_benchmarks.clj) results:
+Since its earliest versions, Nippy has consistently been the **fastest serialization library for Clojure** that I'm aware of. Latest results:
 
 ![benchmarks-png](../../raw/master/benchmarks.png)
+
+PRs welcome to include other alternatives in the [benchmark suite](../../blob/master/test/taoensso/nippy_benchmarks.clj)!
 
 ## Documentation
 
