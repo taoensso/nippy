@@ -7,15 +7,25 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 > **Dep**: Nippy is [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.2).  
 > **Versioning**: Nippy uses [Break Versioning](https://www.taoensso.com/break-versioning).
 
-This release updates some internal dependencies and is **recommended for all existing users**.
+This release includes **important updates to internal dependencies** and is **recommended for all existing users**.
 
-It should be a **non-breaking update** for almost all users of Nippy `v3.4.x`, `v3.3.x`, and `v3.2.x`.
+It should be a **straight-forward and non-breaking update** for almost everyone:
 
-Notes:
+| Updating from Nippy version | API changes? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | New types                                       |
+| :-------------------------- | :----------- | :---------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------- |
+| `v3.4.1` (2024-05-02)       | -            | -                                                                                                                       | -                                               |
+| `v3.4.0` (2024-04-30)       | -            | Yes                                                                                                                     | `clojure.lang.MapEntry`                         |
+| `v3.3.0` (2023-10-11)       | -            | -                                                                                                                       | `java.lang.ClassCastException`, `java.sql.Date` |
+| `v3.2.0` (2022-07-18)       | -            | -                                                                                                                       | `org.joda.time.DateTime`                        |
+| `v3.1.3` (2022-06-23)       | -            | -                                                                                                                       | Several `java.time.X` types                     |
 
-- May produce **different serialized output** to `v3.4.0` and `v3.3.0`. Most users won't care about this, but you could be affected if you depend on specific serialized byte values (for example by comparing serialized output between different versions of Nippy).
-- When using Nippy version **X** to thaw data frozen by Nippy version **Y>X**, there is necessarily a risk of the thaw throwing when encountering unfamiliar types. This **can affect rolling updates** and/or **limit your ability to revert** a Nippy update - **so please ensure adequate testing** in your environment before updating against production data!
-- As always, **please report any unexpected problems** 🙏
+If updating from older versions of Nippy, please see the relevant release notes.
+
+As always:
+
+- See [operational considerations](https://github.com/taoensso/nippy/wiki/2-Operational-considerations) for info on: **data compatibility**, **rolling updates**, **rollback support**, etc.
+- It's always a good idea to **ensure adequate testing** in your environment before updating against production data!
+- **Please report any unexpected problems** 🙏
 
 \- [Peter Taoussanis](https://www.taoensso.com)
 
