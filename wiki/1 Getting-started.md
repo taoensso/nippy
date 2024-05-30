@@ -107,7 +107,10 @@ Deserialize it:
 
 Couldn't be simpler!
 
-See also the lower-level [`freeze-to-out!`](https://taoensso.github.io/nippy/taoensso.nippy.html#var-freeze-to-out.21) and [`thaw-from-in!`](https://taoensso.github.io/nippy/taoensso.nippy.html#var-thaw-from-in.21) fns for operating on `DataOutput` and `DataInput` types directly.
+# Streaming
+
+- To serialize directly to a `java.io.DataInput`, see [`freeze-to-out!`](https://taoensso.github.io/nippy/taoensso.nippy.html#var-freeze-to-out.21).
+- To deserialize directly from a `java.io.DataOutput`, see [`thaw-from-in!`](https://taoensso.github.io/nippy/taoensso.nippy.html#var-thaw-from-in.21).
 
 # Encryption
 
