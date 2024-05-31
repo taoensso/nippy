@@ -13,7 +13,7 @@ It is used at scale by [Carmine](https://www.taoensso.com/carmine), [Faraday](ht
 
 ## Latest release/s
 
-- `2024-05-26` `v3.4.2`: [release info](../../releases/tag/v3.4.2)
+- `2024-05-26` `v3.4.2`: [release info](../../releases/tag/v3.4.2) (⚠️ contains [**security fix**](https://github.com/taoensso/nippy/security/advisories/GHSA-vw78-267v-588h))
 
 [![Main tests][Main tests SVG]][Main tests URL]
 [![Graal tests][Graal tests SVG]][Graal tests URL]

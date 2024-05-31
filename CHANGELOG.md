@@ -7,7 +7,7 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 > **Dep**: Nippy is [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.2).  
 > **Versioning**: Nippy uses [Break Versioning](https://www.taoensso.com/break-versioning).
 
-This release includes **important updates to internal dependencies** and is **recommended for all existing users**.
+⚠️ This release addresses a [**security vulnerability**](https://github.com/taoensso/nippy/security/advisories/GHSA-vw78-267v-588h) in Nippy's upstream compression library and is **recommended for all existing users**.
 
 It should be a **straight-forward and non-breaking update** for almost everyone:
 
