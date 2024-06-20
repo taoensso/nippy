@@ -1250,10 +1250,15 @@
     - Drops all support for compression and encryption
     - Must be thawed with `fast-thaw`
 
-  Equivalent to (but a little faster than) `freeze` with opts:
-    - :compressor nil
-    - :encryptor  nil
-    - :no-header? true"
+  Equivalent to (but a little faster than) `freeze` with opts
+    {:no-header? true, :compressor nil, :encryptor nil}.
+
+  Intended for use only by advanced users that clearly understand the tradeoffs.
+  I STRONGLY recommend that most users prefer the standard `freeze` since:
+    - The Nippy header is useful for data portability and preservation
+    - Compression is often benefitial at little/no cost
+    - The performance difference between `freeze` and `fast-freeze` is
+      often negligible in practice."
   [x]
   (let [baos (ByteArrayOutputStream. 64)
         dos  (DataOutputStream. baos)]
@@ -1769,13 +1774,11 @@
 
 (defn fast-thaw
   "Like `thaw` but:
-    - Drops all support for compression and encryption
     - Supports only data frozen with `fast-freeze`
+    - Drops all support for compression and encryption
 
   Equivalent to (but a little faster than) `thaw` with opts:
-    - :compressor nil
-    - :encryptor  nil
-    - :no-header? true"
+    {:no-header? true, :compressor nil, :encryptor nil}."
   [^bytes ba]
   (let [dis (DataInputStream. (ByteArrayInputStream. ba))]
     (with-cache (thaw-from-in! dis))))
