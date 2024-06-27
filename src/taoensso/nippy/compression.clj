@@ -5,7 +5,7 @@
    [java.nio ByteBuffer]
    [java.io
     ByteArrayInputStream ByteArrayOutputStream
-    DataInputStream DataOutputStream]))
+    DataInputStream DataOutputStream InputStream OutputStream]))
 
 ;;;; Interface
 
@@ -37,7 +37,7 @@
 ;;;; Airlift
 
 (defn- airlift-compress
-  ^bytes [^io.airlift.compress.Compressor c ^bytes ba prepend-size?]
+  ^bytes [c ^bytes ba prepend-size?]
   (let [in-len      (alength ba)
         max-out-len (.maxCompressedLength c in-len)]
 
@@ -65,7 +65,7 @@
           (java.util.Arrays/copyOfRange ba-max-out 0 out-len))))))
 
 (defn- airlift-decompress
-  ^bytes [^io.airlift.compress.Decompressor d ^bytes ba max-out-len]
+  ^bytes [d ^bytes ba max-out-len]
   (if max-out-len
     (let [max-out-len (int        max-out-len)
           ba-max-out  (byte-array max-out-len)
@@ -86,21 +86,36 @@
         ba-out 0 out-len)
       ba-out)))
 
+(defn- new-instance
+  ([s]
+   (new-instance s [] []))
+  ([s types args]
+   (.newInstance (.getDeclaredConstructor (Class/forName s) (into-array Class types))
+                 (into-array Object args))))
+
 (do
-  (enc/def* ^:private airlift-zstd-compressor_   (enc/thread-local (io.airlift.compress.zstd.ZstdCompressor.)))
-  (enc/def* ^:private airlift-zstd-decompressor_ (enc/thread-local (io.airlift.compress.zstd.ZstdDecompressor.)))
+  (enc/def* ^:private airlift-zstd-compressor_   (enc/thread-local
+                                                   (new-instance "io.airlift.compress.zstd.ZstdCompressor")))
+  (enc/def* ^:private airlift-zstd-decompressor_ (enc/thread-local
+                                                   (new-instance "io.airlift.compress.zstd.ZstdDecompressor")))
   (deftype ZstdCompressor [prepend-size?]
     ICompressor
     (header-id  [_] :zstd)
     (compress   [_ ba] (airlift-compress   @airlift-zstd-compressor_   ba prepend-size?))
     (decompress [_ ba] (airlift-decompress @airlift-zstd-decompressor_ ba
                          (when-not prepend-size?
-                           (io.airlift.compress.zstd.ZstdDecompressor/getDecompressedSize ba
-                             0 (alength ^bytes ba)))))))
+                           (.invoke
+                             (.getDeclaredMethod (Class/forName "io.airlift.compress.zstd.ZstdDecompressor")
+                                                 "getDecompressedSize"
+                                                 (into-array Class [(Class/forName "[B") Integer/TYPE Integer/TYPE]))
+                             nil
+                             (into-array Object [ba (int 0) (alength ^bytes ba)])))))))
 
 (do
-  (enc/def* ^:private airlift-lz4-compressor_   (enc/thread-local (io.airlift.compress.lz4.Lz4Compressor.)))
-  (enc/def* ^:private airlift-lz4-decompressor_ (enc/thread-local (io.airlift.compress.lz4.Lz4Decompressor.)))
+  (enc/def* ^:private airlift-lz4-compressor_   (enc/thread-local
+                                                  (new-instance "io.airlift.compress.lz4.Lz4Compressor")))
+  (enc/def* ^:private airlift-lz4-decompressor_ (enc/thread-local
+                                                  (new-instance "io.airlift.compress.lz4.Lz4Decompressor")))
   (deftype LZ4Compressor []
     ICompressor
     (header-id  [_] :lz4)
@@ -108,8 +123,10 @@
     (decompress [_ ba] (airlift-decompress @airlift-lz4-decompressor_ ba nil))))
 
 (do
-  (enc/def* ^:private airlift-lzo-compressor_   (enc/thread-local (io.airlift.compress.lzo.LzoCompressor.)))
-  (enc/def* ^:private airlift-lzo-decompressor_ (enc/thread-local (io.airlift.compress.lzo.LzoDecompressor.)))
+  (enc/def* ^:private airlift-lzo-compressor_   (enc/thread-local
+                                                  (new-instance "io.airlift.compress.lzo.LzoCompressor")))
+  (enc/def* ^:private airlift-lzo-decompressor_ (enc/thread-local
+                                                  (new-instance "io.airlift.compress.lzo.LzoDecompressor")))
   (deftype LZOCompressor []
     ICompressor
     (header-id  [_] :lzo)
@@ -117,15 +134,22 @@
     (decompress [_ ba] (airlift-decompress @airlift-lzo-decompressor_ ba nil))))
 
 (do
-  (enc/def* ^:private airlift-snappy-compressor_   (enc/thread-local (io.airlift.compress.snappy.SnappyCompressor.)))
-  (enc/def* ^:private airlift-snappy-decompressor_ (enc/thread-local (io.airlift.compress.snappy.SnappyDecompressor.)))
+  (enc/def* ^:private airlift-snappy-compressor_   (enc/thread-local
+                                                     (new-instance "io.airlift.compress.snappy.SnappyCompressor")))
+  (enc/def* ^:private airlift-snappy-decompressor_ (enc/thread-local
+                                                     (new-instance "io.airlift.compress.snappy.SnappyDecompressor")))
   (deftype SnappyCompressor [prepend-size?]
     ICompressor
     (header-id  [_] :snappy)
     (compress   [_ ba] (airlift-compress   @airlift-snappy-compressor_   ba prepend-size?))
     (decompress [_ ba] (airlift-decompress @airlift-snappy-decompressor_ ba
                          (when-not prepend-size?
-                           (io.airlift.compress.snappy.SnappyDecompressor/getUncompressedLength ba 0))))))
+                           (.invoke
+                             (.getDeclaredMethod (Class/forName "io.airlift.compress.snappy.SnappyDecompressor")
+                                                 "getUncompressedLength"
+                                                 (into-array Class [(Class/forName "[B") Integer/TYPE]))
+                             nil
+                             (into-array Object [ba (int 0)])))))))
 
 ;;;; LZMA2
 
@@ -140,8 +164,10 @@
           len-decomp (alength ^bytes ba)
           ;; Prefix with uncompressed length:
           _   (.writeInt dos len-decomp)
-          xzs (org.tukaani.xz.XZOutputStream. baos
-                (org.tukaani.xz.LZMA2Options. compression-level))]
+          filter-options (new-instance "org.tukaani.xz.LZMA2Options" [Integer/TYPE] [(int compression-level)])
+          xzs (new-instance "org.tukaani.xz.XZOutputStream"
+                            [OutputStream (Class/forName "org.tukaani.xz.FilterOptions")]
+                            [baos filter-options])]
       (.write xzs ^bytes ba)
       (.close xzs)
       (.toByteArray baos)))
@@ -152,7 +178,7 @@
           ;;
           len-decomp (.readInt dis)
           ba         (byte-array len-decomp)
-          xzs        (org.tukaani.xz.XZInputStream. bais)]
+          xzs (new-instance "org.tukaani.xz.XZInputStream" [InputStream] [bais])]
       (.read xzs ba 0 len-decomp)
       (if (== -1 (.read xzs)) ; Good practice as extra safety measure
         nil
