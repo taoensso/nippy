@@ -145,11 +145,6 @@
    51  [:reader-md [[:bytes {:read 2}]]]
    52  [:reader-lg [[:bytes {:read 4}]]]
 
-   53  [:bytes-0   []]
-   7   [:bytes-sm  [[:bytes {:read 1}]]]
-   15  [:bytes-md  [[:bytes {:read 2}]]]
-   2   [:bytes-lg  [[:bytes {:read 4}]]]
-
    17  [:vec-0     []]
    113 [:vec-2     [[:elements 2]]]
    114 [:vec-3     [[:elements 3]]]
@@ -182,7 +177,6 @@
    28  [:sorted-set-lg [[:elements {:read 4}]]]
    31  [:sorted-map-lg [[:elements {:read 4 :multiplier 2}]]]
    26  [:queue-lg      [[:elements {:read 4}]]]
-   115 [:objects-lg    [[:elements {:read 4}]]]
 
    25  [:meta  [[:elements 1]]]
    58  [:regex [[:elements 1]]]
@@ -195,6 +189,21 @@
                      [:bytes {:read 4}]]]
    70  [:ratio      [[:bytes {:read 4}]
                      [:bytes {:read 4}]]]
+
+   ;; Arrays
+   53  [:byte-array-0    []]
+   7   [:byte-array-sm   [[:elements {:read 1}]]]
+   15  [:byte-array-md   [[:elements {:read 2}]]]
+   2   [:byte-array-lg   [[:elements {:read 4}]]]
+
+   108 [:long-array-lg   [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+   109 [:int-array-lg    [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+
+   116 [:double-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+   117 [:float-array-lg  [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+
+   107 [:string-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+   115 [:object-array-lg [[:elements {:read 4}]]]
 
    ;; Serializable
    75  [:sz-quarantined-sm [[:bytes {:read 1}] [:elements 1]]]
@@ -641,14 +650,22 @@
 (defn- write-bytes     [^DataOutput out ^bytes ba]
   (let [len (alength ba)]
     (if (zero? len)
-      (write-id out id-bytes-0)
+      (write-id out id-byte-array-0)
       (do
         (enc/cond
-          (sm-count? len) (do (write-id out id-bytes-sm) (write-sm-count out len))
-          (md-count? len) (do (write-id out id-bytes-md) (write-md-count out len))
-          :else           (do (write-id out id-bytes-lg) (write-lg-count out len)))
+          (sm-count? len) (do (write-id out id-byte-array-sm) (write-sm-count out len))
+          (md-count? len) (do (write-id out id-byte-array-md) (write-md-count out len))
+          :else           (do (write-id out id-byte-array-lg) (write-lg-count out len)))
 
         (.write out ba 0 len)))))
+
+(defmacro ^:private -run!    [proc coll] `(do (reduce    #(~proc %2)    nil ~coll) nil))
+(defmacro ^:private -run-kv! [proc    m] `(do (reduce-kv #(~proc %2 %3) nil    ~m) nil))
+
+(defn- write-array-lg [^DataOutput out array array-len id]
+  (write-id       out id)
+  (write-lg-count out array-len)
+  (-run! (fn [in] (-freeze-with-meta! in out)) array))
 
 (defn- write-biginteger [out ^BigInteger n] (write-bytes-lg out (.toByteArray n)))
 
@@ -728,9 +745,6 @@
         (<= y range-ushort) (do (write-id out id-long-neg-md) (.writeShort out (+ y   Short/MIN_VALUE)))
         (<= y range-uint)   (do (write-id out id-long-neg-lg) (.writeInt   out (+ y Integer/MIN_VALUE)))
         :else               (do (write-id out id-long-xl)     (.writeLong  out    n))))))
-
-(defmacro ^:private -run!    [proc coll] `(do (reduce    #(~proc %2)    nil ~coll) nil))
-(defmacro ^:private -run-kv! [proc    m] `(do (reduce-kv #(~proc %2 %3) nil    ~m) nil))
 
 (defn- write-vec [^DataOutput out v]
   (let [cnt (count v)]
@@ -878,12 +892,6 @@
           :else                                              (do (write-id out id-set-lg)  (write-lg-count  out cnt)))
 
         (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
-
-(defn- write-objects [^DataOutput out ^objects ary]
-  (let [len (alength ary)]
-    (write-id       out id-objects-lg)
-    (write-lg-count out len)
-    (-run! (fn [in] (-freeze-with-meta! in out)) ary)))
 
 (defn- write-serializable [^DataOutput out x ^String class-name]
   (when-debug (println (str "write-serializable: " (type x))))
@@ -1094,8 +1102,6 @@
     (.writeLong out (.getLeastSignificantBits x))))
 
 (freezer Boolean                               nil true (if (boolean x) (write-id out id-true) (write-id out id-false)))
-(freezer (Class/forName "[B")                  nil true (write-bytes   out x))
-(freezer (Class/forName "[Ljava.lang.Object;") nil true (write-objects out x))
 (freezer String                                nil true (write-str   out x))
 (freezer Keyword                               nil true (write-kw    out x))
 (freezer Symbol                                nil true (write-sym   out x))
@@ -1104,6 +1110,19 @@
   (if (zero? ^double x)
     (do (write-id out id-double-0))
     (do (write-id out id-double) (.writeDouble out x))))
+
+;; Arrays
+(freezer (Class/forName "[B")                   nil true (write-bytes    out x))
+(freezer (Class/forName "[Ljava.lang.Object;")  nil true (write-array-lg out x (alength ^"[Ljava.lang.Object;"  x) id-object-array-lg))
+
+(when (impl/target-release>= 350)
+  (freezer (Class/forName "[J")                  nil true (write-array-lg out x (alength ^"[J"                  x) id-long-array-lg))
+  (freezer (Class/forName "[I")                  nil true (write-array-lg out x (alength ^"[I"                  x) id-int-array-lg))
+
+  (freezer (Class/forName "[D")                  nil true (write-array-lg out x (alength ^"[D"                  x) id-double-array-lg))
+  (freezer (Class/forName "[F")                  nil true (write-array-lg out x (alength ^"[F"                  x) id-float-array-lg))
+
+  (freezer (Class/forName "[Ljava.lang.String;") nil true (write-array-lg out x (alength ^"[Ljava.lang.String;" x) id-string-array-lg)))
 
 (freezer PersistentQueue    nil true (write-counted-coll   out id-queue-lg      x))
 (freezer PersistentTreeSet  nil true (write-counted-coll   out id-sorted-set-lg x))
@@ -1328,10 +1347,21 @@
   ([^DataInput in len] (let [ba (byte-array len)] (.readFully in ba 0 len) ba))
   ([^DataInput in    ]
    (enc/case-eval (.readByte in)
-     id-bytes-0  (byte-array 0)
-     id-bytes-sm (read-bytes in (read-sm-count in))
-     id-bytes-md (read-bytes in (read-md-count in))
-     id-bytes-lg (read-bytes in (read-lg-count in)))))
+     id-byte-array-0  (byte-array 0)
+     id-byte-array-sm (read-bytes in (read-sm-count in))
+     id-byte-array-md (read-bytes in (read-md-count in))
+     id-byte-array-lg (read-bytes in (read-lg-count in)))))
+
+(defmacro ^:private read-array [in thaw-type array array-type]
+  (let [thawed-sym (with-meta 'thawed-sym {:tag thaw-type})
+        array-sym  (with-meta 'array-sym  {:tag array-type})]
+    `(let [~array-sym ~array]
+       (enc/reduce-n
+         (fn [_# idx#]
+           (let [~thawed-sym (thaw-from-in! ~in)]
+             (aset ~'array-sym idx# ~'thawed-sym)))
+         nil (alength ~'array-sym))
+       ~'array-sym)))
 
 (defn- read-str-sm* [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count* in)) StandardCharsets/UTF_8))
 (defn- read-str-sm  [^DataInput in] (String. ^bytes (read-bytes in (read-sm-count  in)) StandardCharsets/UTF_8))
@@ -1380,12 +1410,6 @@
         (let [rf              rf2 ] (rf (enc/reduce-n (fn [acc _] (rf acc                (thaw-from-in! in) (thaw-from-in! in)))  init n)))))))
 
 (defn- read-kvs-depr [to ^DataInput in] (read-kvs-into to in (quot (.readInt in) 2)))
-(defn- read-objects [^objects ary ^DataInput in]
-  (enc/reduce-n
-    (fn [^objects ary i]
-      (aset ary i (thaw-from-in! in))
-      ary)
-    ary (alength ary)))
 
 (def ^:private class-method-sig (into-array Class [IPersistentMap]))
 
@@ -1578,12 +1602,19 @@
         id-cached-sm   (thaw-cached (read-sm-count in) in)
         id-cached-md   (thaw-cached (read-md-count in) in)
 
-        id-bytes-0     (byte-array 0)
-        id-bytes-sm    (read-bytes in (read-sm-count in))
-        id-bytes-md    (read-bytes in (read-md-count in))
-        id-bytes-lg    (read-bytes in (read-lg-count in))
+        id-byte-array-0    (byte-array 0)
+        id-byte-array-sm   (read-bytes in (read-sm-count in))
+        id-byte-array-md   (read-bytes in (read-md-count in))
+        id-byte-array-lg   (read-bytes in (read-lg-count in))
 
-        id-objects-lg  (read-objects (object-array (read-lg-count in)) in)
+        id-long-array-lg   (read-array in long   (long-array        (read-lg-count in)) "[J")
+        id-int-array-lg    (read-array in int    (int-array         (read-lg-count in)) "[I")
+
+        id-double-array-lg (read-array in double (double-array      (read-lg-count in)) "[D")
+        id-float-array-lg  (read-array in float  (float-array       (read-lg-count in)) "[F")
+
+        id-string-array-lg (read-array in String (make-array String (read-lg-count in)) "[Ljava.lang.String;")
+        id-object-array-lg (read-array in Object (object-array      (read-lg-count in)) "[Ljava.lang.Object;")
 
         id-str-0       ""
         id-str-sm*              (read-str in (read-sm-count* in))
@@ -2037,8 +2068,21 @@
          :uri        (java.net.URI. "https://clojure.org")
          :defrecord  (StressRecord. "data")
          :deftype    (StressType.   "data")
+
          :bytes      (byte-array   [(byte 1) (byte 2) (byte 3)])
          :objects    (object-array [1 "two" {:data "data"}])
+
+         ;; TODO (target-release>= 350)
+         ;; :byte-array   (byte-array   [(byte 1) (byte 2) (byte 3) (byte 4)])
+
+         ;; :long-array   (long-array   [1 2 3 4])
+         ;; :int-array    (int-array    [1 2 3 4])
+
+         ;; :double-array (double-array [1.5 2.5 3.5 4.5])
+         ;; :float-array  (float-array  [1.5 2.5 3.5 4.5])
+
+         ;; :object-array (object-array [1 "two" {:data "data"}])
+         ;; :string-array (into-array String ["a" "b" "c"])
 
          :util-date (java.util.Date. 1577884455500)
          :sql-date  (java.sql.Date.  1577884455500)
