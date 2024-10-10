@@ -1254,7 +1254,7 @@
     - :compressor nil
     - :encryptor  nil
     - :no-header? true"
-  [x]
+  ^bytes [x]
   (let [baos (ByteArrayOutputStream. 64)
         dos  (DataOutputStream. baos)]
     (with-cache (-freeze-with-meta! x dos))
@@ -1263,11 +1263,13 @@
 (defn freeze
   "Serializes arg (any Clojure data type) to a byte array.
   To freeze custom types, extend the Clojure reader or see `extend-freeze`."
-  ([x] (freeze x nil))
-  ([x {:as   opts
-       :keys [compressor encryptor password serializable-allowlist incl-metadata?]
-       :or   {compressor :auto
-              encryptor  aes128-gcm-encryptor}}]
+  (^bytes [x] (freeze x nil))
+  (^bytes
+   [x
+    {:as   opts
+     :keys [compressor encryptor password serializable-allowlist incl-metadata?]
+     :or   {compressor :auto
+            encryptor  aes128-gcm-encryptor}}]
 
    (call-with-bindings :freeze opts
      (fn []
