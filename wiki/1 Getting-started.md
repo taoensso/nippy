@@ -66,8 +66,12 @@ As an example of what it can do, let's take a look at Nippy's own reference [str
  :uri        (java.net.URI. "https://clojure.org")
  :defrecord  (nippy/StressRecord. "data")
  :deftype    (nippy/StressType.   "data")
- :bytes      (byte-array   [(byte 1) (byte 2) (byte 3)])
- :objects    (object-array [1 "two" {:data "data"}])
+
+ :byte-array   (byte-array   [(byte 1) (byte 2) (byte 3) (byte 4)])
+ :int-array    (int-array    [1 2 3 4])
+ :long-array   (long-array   [1 2 3 4])
+ :object-array (object-array [1 "two" {:data "data"}])
+ :string-array (into-array String ["a" "b" "c"])
 
  :util-date (java.util.Date. 1577884455500)
  :sql-date  (java.sql.Date.  1577884455500)
