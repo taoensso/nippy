@@ -8,10 +8,10 @@
    :url  "https://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies
-  [[org.clojure/tools.reader "1.4.2"]
-   [com.taoensso/encore      "3.112.0"]
-   [org.tukaani/xz           "1.9"]
-   [io.airlift/aircompressor "0.27"]]
+  [[org.clojure/tools.reader "1.5.0"]
+   [com.taoensso/encore      "3.127.0"]
+   [org.tukaani/xz           "1.10"]
+   [io.airlift/aircompressor "2.0.2"]]
 
   :test-paths ["test" #_"src"]
 
