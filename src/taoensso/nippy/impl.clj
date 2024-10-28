@@ -157,19 +157,27 @@
   (set! *print-length* nil)
   (vec (sort (keys taoensso.nippy/public-types-spec)))
 
-  ;; To help support release targeting, we keep track of when new type ids are added
+  ;; To help support release targeting, we track new type ids added over time
   (let [id-history ; {<release> #{type-ids}}
-        {340 ; v3.4.0 (2024-04-30), added 2
-         ;; New: map-entry meta-protocol-key
+        {350 ; v3.5.0 (YYYY-MM-DD), added 5x
+         ;; #{string-array-lg long-array-lg int-array-lg double-array-lg float-array-lg}
+         #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
+           29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
+           55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80
+           81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104
+           105 106 107 108 109 110 111 112 113 114 115 116 117}
+
+         340 ; v3.4.0 (2024-04-30), added 2x
+         ;; #{map-entry meta-protocol-key}
          #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
            29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
            55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80
            81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104
            105 106 110 111 112 113 114 115}
 
-         330 ; v3.3.0 (2023-10-11), added 11
-         ;; New: long-pos-sm long-pos-md long-pos-lg long-neg-sm long-neg-md long-neg-lg
-         ;;      str-sm* vec-sm* set-sm* map-sm* sql-date
+         330 ; v3.3.0 (2023-10-11), added 11x
+         ;; #{long-pos-sm long-pos-md long-pos-lg long-neg-sm long-neg-md long-neg-lg
+         ;;   str-sm* vec-sm* set-sm* map-sm* sql-date}
          #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
            29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
            55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80
@@ -182,8 +190,8 @@
            55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80
            81 82 83 84 85 86 90 91 100 101 102 105 106 110 111 112 113 114 115}
 
-         313 ; v3.1.3 (2022-06-23), added 5
-         ;; New: time-instant time-duration time-period kw-md sym-md
+         313 ; v3.1.3 (2022-06-23), added 5x
+         ;; #{time-instant time-duration time-period kw-md sym-md}
          #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
            29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
            55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80
@@ -193,16 +201,15 @@
          #{0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28
            29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54
            55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 80
-           81 82 90 91 100 101 102 105 106 110 111 112 113 114 115}}]
+           81 82 90 91 100 101 102 105 106 110 111 112 113 114 115}}
 
-    (defn diff [new-release old-release]
-      (vec (sort (clojure.set/difference (id-history new-release) (id-history old-release))))))
+        diff
+        (fn [new-release old-release]
+          (vec (sort (clojure.set/difference (id-history new-release) (id-history old-release)))))]
 
-  (diff 340 330))
+    (diff 350 340)))
 
-(let [;; Initially target compatibility with v3.2.0 (2020-07-18)
-      ;; Next release will target v3.4.0 (2024-04-30), etc.
-      target-release
+(let [target-release
       (enc/get-env {:as :edn, :default 320}
         :taoensso.nippy.target-release)
 
