@@ -960,16 +960,16 @@
   This is a low-level util: in most cases you'll want `freeze` instead."
   [^DataOutput data-output x] (-freeze-with-meta! x data-output))
 
-;;;; Caching ; Experimental
+;;;; Caching
 
-;; Nb: don't use an auto initialValue; can cause thread-local state to
-;; accidentally hang around with the use of `freeze-to-out!`, etc.
-;; Safer to require explicit activation through `with-cache`.
 (def ^ThreadLocal -cache-proxy
   "{[<x> <meta>] <idx>} for freezing, {<idx> <x-with-meta>} for thawing."
+  ;; Nb: don't use an auto initialValue; can cause thread-local state to
+  ;; accidentally hang around with the use of `freeze-to-out!`, etc.
+  ;; Safer to require explicit activation through `with-cache`.
   (proxy [ThreadLocal] []))
 
-(defmacro ^:private with-cache
+(defmacro with-cache
   "Executes body with support for freezing/thawing cached values.
 
   This is a low-level util: you won't need to use this yourself unless
@@ -984,9 +984,7 @@
 
 (deftype Cached [val])
 (defn cache
-  "Experimental, subject to change. Feedback welcome!
-
-  Wraps value so that future writes of the same wrapped value with same
+  "Wraps value so that future writes of the same wrapped value with same
   metadata will be efficiently encoded as references to this one.
 
   (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
@@ -1051,7 +1049,7 @@
               (vswap! cache_ assoc idx x)
               x)
             v))
-        (throw (ex-info "No cache_ established, can't thaw. See `with-cache`." {}))))))
+        (throw (ex-info "Can't thaw without cache available. See `with-cache`." {}))))))
 
 (comment
   (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")]))
