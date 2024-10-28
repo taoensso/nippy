@@ -2,6 +2,38 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.5.0-RC1` (2024-10-28)
+
+- 📦 **Dependency**: available [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.5.0-RC1)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+This is a **non-breaking maintenance release** that updates dependencies and includes read support for more native array types to be introduced in a future v3.6 release.
+
+It should be safe to update from (at least) all recent versions of Nippy.
+
+| Updating from Nippy | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Recommended update sequence [1]
+| :-- | :-- | :-- | :--
+| `v3.4.2` (2024-05-26) | - | -   | -
+| `v3.4.1` (2024-05-02) | - | -   | -
+| `v3.4.0` (2024-04-30) | - | Yes | -
+| `v3.3.0` (2023-10-11) | - | -   | -
+| `v3.2.0` (2022-07-18) | - | -   | -
+| `v3.1.3` (2022-06-23) | - | -   | -
+
+> [1] Relevant only when introducing support for new types, to help with rolling updates
+
+If updating from older versions of Nippy, please see the relevant release notes.
+
+As always:
+
+- See [operational considerations](https://github.com/taoensso/nippy/wiki/2-Operational-considerations) for info on: **data compatibility**, **rolling updates**, **rollback support**, etc.
+- It's always a good idea to **ensure adequate testing** in your environment before updating against production data!
+- **Please report any unexpected problems** 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+---
+
 # `v3.4.2` (2024-05-26)
 
 > **Dep**: Nippy is [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.2).  
@@ -11,13 +43,15 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 It should be a **straight-forward and non-breaking update** for almost everyone:
 
-| Updating from Nippy version | API changes? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | New types                                       |
-| :-------------------------- | :----------- | :---------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------- |
-| `v3.4.1` (2024-05-02)       | -            | -                                                                                                                       | -                                               |
-| `v3.4.0` (2024-04-30)       | -            | Yes                                                                                                                     | `clojure.lang.MapEntry`                         |
-| `v3.3.0` (2023-10-11)       | -            | -                                                                                                                       | `java.lang.ClassCastException`, `java.sql.Date` |
-| `v3.2.0` (2022-07-18)       | -            | -                                                                                                                       | `org.joda.time.DateTime`                        |
-| `v3.1.3` (2022-06-23)       | -            | -                                                                                                                       | Several `java.time.X` types                     |
+| Updating from Nippy | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Recommended update sequence [1]
+| :-- | :-- | :-- | :--
+| `v3.4.1` (2024-05-02) | - | -   | -
+| `v3.4.0` (2024-04-30) | - | Yes | -
+| `v3.3.0` (2023-10-11) | - | -   | -
+| `v3.2.0` (2022-07-18) | - | -   | -
+| `v3.1.3` (2022-06-23) | - | -   | -
+
+> [1] Relevant only when introducing support for new types, to help with rolling updates
 
 If updating from older versions of Nippy, please see the relevant release notes.
 
