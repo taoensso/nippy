@@ -4,14 +4,14 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 # `v3.5.0-RC1` (2024-10-28)
 
-- 📦 **Dependency**: available [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.5.0-RC1)
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.5.0-RC1)
 - **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
 
 This is a **non-breaking maintenance release** that updates dependencies and includes read support for more native array types to be introduced in a future v3.6 release.
 
 It should be safe to update from (at least) all recent versions of Nippy.
 
-| Updating from Nippy | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Recommended update sequence [1]
+| Updating from Nippy | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Rolling update sequence [1]
 | :-- | :-- | :-- | :--
 | `v3.4.2` (2024-05-26) | - | -   | -
 | `v3.4.1` (2024-05-02) | - | -   | -
@@ -20,7 +20,7 @@ It should be safe to update from (at least) all recent versions of Nippy.
 | `v3.2.0` (2022-07-18) | - | -   | -
 | `v3.1.3` (2022-06-23) | - | -   | -
 
-> [1] Relevant only when introducing support for new types, to help with rolling updates
+> [1] Relevant only when introducing support for new types, and for users that do rolling updates
 
 If updating from older versions of Nippy, please see the relevant release notes.
 
@@ -36,14 +36,14 @@ As always:
 
 # `v3.4.2` (2024-05-26)
 
-> **Dep**: Nippy is [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.2).  
-> **Versioning**: Nippy uses [Break Versioning](https://www.taoensso.com/break-versioning).
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.4.2)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
 
 ⚠️ This release addresses a [**security vulnerability**](https://github.com/taoensso/nippy/security/advisories/GHSA-vw78-267v-588h) in Nippy's upstream compression library and is **recommended for all existing users**.
 
 It should be a **straight-forward and non-breaking update** for almost everyone:
 
-| Updating from Nippy | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Recommended update sequence [1]
+| Updating from Nippy | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Rolling update sequence [1]
 | :-- | :-- | :-- | :--
 | `v3.4.1` (2024-05-02) | - | -   | -
 | `v3.4.0` (2024-04-30) | - | Yes | -
@@ -51,7 +51,7 @@ It should be a **straight-forward and non-breaking update** for almost everyone:
 | `v3.2.0` (2022-07-18) | - | -   | -
 | `v3.1.3` (2022-06-23) | - | -   | -
 
-> [1] Relevant only when introducing support for new types, to help with rolling updates
+> [1] Relevant only when introducing support for new types, and for users that do rolling updates
 
 If updating from older versions of Nippy, please see the relevant release notes.
 

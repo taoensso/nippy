@@ -1352,7 +1352,7 @@
      id-byte-array-md (read-bytes in (read-md-count in))
      id-byte-array-lg (read-bytes in (read-lg-count in)))))
 
-(defmacro ^:private read-array [in thaw-type array array-type]
+(defmacro ^:private read-array [in thaw-type array-type array]
   (let [thawed-sym (with-meta 'thawed-sym {:tag thaw-type})
         array-sym  (with-meta 'array-sym  {:tag array-type})]
     `(let [~array-sym ~array]
@@ -1607,14 +1607,14 @@
         id-byte-array-md   (read-bytes in (read-md-count in))
         id-byte-array-lg   (read-bytes in (read-lg-count in))
 
-        id-long-array-lg   (read-array in long   (long-array        (read-lg-count in)) "[J")
-        id-int-array-lg    (read-array in int    (int-array         (read-lg-count in)) "[I")
+        id-long-array-lg   (read-array in long   "[J" (long-array   (read-lg-count in)))
+        id-int-array-lg    (read-array in int    "[I" (int-array    (read-lg-count in)))
 
-        id-double-array-lg (read-array in double (double-array      (read-lg-count in)) "[D")
-        id-float-array-lg  (read-array in float  (float-array       (read-lg-count in)) "[F")
+        id-double-array-lg (read-array in double "[D" (double-array (read-lg-count in)))
+        id-float-array-lg  (read-array in float  "[F" (float-array  (read-lg-count in)))
 
-        id-string-array-lg (read-array in String (make-array String (read-lg-count in)) "[Ljava.lang.String;")
-        id-object-array-lg (read-array in Object (object-array      (read-lg-count in)) "[Ljava.lang.Object;")
+        id-string-array-lg (read-array in String "[Ljava.lang.String;" (make-array String (read-lg-count in)))
+        id-object-array-lg (read-array in Object "[Ljava.lang.Object;" (object-array      (read-lg-count in)))
 
         id-str-0       ""
         id-str-sm*              (read-str in (read-sm-count* in))

@@ -118,8 +118,8 @@ Licensed under [EPL 1.0](LICENSE.txt) (same as Clojure).
 
 <!-- Project -->
 
-[Codox docs]:   https://taoensso.github.io/nippy/
-[cljdoc docs]: https://cljdoc.org/d/com.taoensso/nippy/
+[Codox docs]:  https://taoensso.github.io/nippy/
+[cljdoc docs]: https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy
 
 [Clojars SVG]: https://img.shields.io/clojars/v/com.taoensso/nippy.svg
 [Clojars URL]: https://clojars.org/com.taoensso/nippy
