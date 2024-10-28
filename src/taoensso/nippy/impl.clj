@@ -151,6 +151,29 @@
     See that function's docstring for more info."
     [] (trim nmax (state_))))
 
+(comment
+  (count (get-recorded-serializable-classes))
+  (enc/reduce-n
+    (fn [_ n] (allow-and-record-any-serializable-class-unsafe (str n)))
+    nil 0 1e5))
+
+(let [compile
+      (enc/fmemoize
+        (fn [x]
+          (if (allow-and-record? x)
+            allow-and-record-any-serializable-class-unsafe
+            (enc/name-filter x))))
+
+      fn? fn?
+      conform?
+      (fn [x cn]
+        (if (fn? x)
+          (x cn) ; Intentionally uncached, can be handy
+          ((compile x) cn)))]
+
+  (defn serializable-allowed? [allow-list class-name]
+    (conform? allow-list class-name)))
+
 ;;;; Release targeting
 
 (comment
@@ -247,28 +270,3 @@
     [min-release] (target>= min-release)))
 
 (comment (macroexpand '(target-release>= 340)))
-
-;;;
-
-(comment
-  (count (get-recorded-serializable-classes))
-  (enc/reduce-n
-    (fn [_ n] (allow-and-record-any-serializable-class-unsafe (str n)))
-    nil 0 1e5))
-
-(let [compile
-      (enc/fmemoize
-        (fn [x]
-          (if (allow-and-record? x)
-            allow-and-record-any-serializable-class-unsafe
-            (enc/name-filter x))))
-
-      fn? fn?
-      conform?
-      (fn [x cn]
-        (if (fn? x)
-          (x cn) ; Intentionally uncached, can be handy
-          ((compile x) cn)))]
-
-  (defn serializable-allowed? [allow-list class-name]
-    (conform? allow-list class-name)))
