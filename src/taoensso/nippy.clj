@@ -365,25 +365,26 @@
 ;; For back compatibility (incl. Timbre's Carmine appender)
 (enc/defonce ^:dynamic ^:no-doc ^:deprecated *final-freeze-fallback* "Prefer `*freeze-fallback`." nil)
 (enc/defonce ^:dynamic                             *freeze-fallback*
-  "Controls Nippy's behaviour when trying to freeze an item for which Nippy
-  doesn't currently have a native freeze/thaw implementation.
+  "Controls Nippy's behaviour when trying to freeze an object with a type for
+  which Nippy doesn't currently have a native (protocol) implementation.
 
   Possible values:
 
-    1. `nil` (no freeze-fallback, default)
+    1. `nil` (no fallback, default)
        Tries the following in order:
-         - Freeze with Java's `Serializable` interface if possible
-         - Freeze with Clojure's reader                if possible
+         - Freeze with Java's `Serializable` interface if this seems possible
+         - Freeze with Clojure's reader                if this seems possible
          - Throw
 
     2. `:write-unfreezable` keyword
        Tries the following in order:
-         - Freeze with Java's `Serializable` interface if possible
-         - Freeze with Clojure's reader                if possible
+         - Freeze with Java's `Serializable` interface if this seems possible
+         - Freeze with Clojure's reader                if this seems possible
          - Freeze a {:nippy/unfreezable {:type _}} placeholder value
 
-    3. [Advanced] Custom (fn [^java.io.DataOutput out item]) that must
-       write exactly one value to the given `DataOutput` stream"
+    3. [Advanced] Custom (fn [^java.io.DataOutput out obj]) that must
+        write an appropriate object type id and payload to the given
+       `DataOutput` stream."
 
   nil)
 
