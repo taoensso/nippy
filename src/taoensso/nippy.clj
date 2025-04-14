@@ -451,7 +451,7 @@
   "A set of common safe class names to allow to be frozen using Java's
   `Serializable` interface. PRs welcome for additions.
   See also `*thaw-serializable-allowlist*`."
-  #{"[Z" "[B" "[S" "[I" "[J" "[F" "[D" "[C"
+  #{"[Z" "[B" "[S" "[I" "[J" "[F" "[D" "[C" "[Ljava.lang.String;"
 
     "java.lang.Throwable"
     "java.lang.Exception"
@@ -2087,6 +2087,7 @@
           :float   (float-array       (mapv float  (range 32)))
           :double  (double-array      (mapv double (range 32)))
           :char    (char-array        (mapv char   (range 32)))
+          :str     (into-array String (mapv str    (range 32)))
           :object  (object-array      (mapv vector (range 32)))}}))))
 
 (comment
