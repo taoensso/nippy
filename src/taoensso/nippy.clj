@@ -197,11 +197,11 @@
    15  [:byte-array-md   [[:elements {:read 2}]]]
    2   [:byte-array-lg   [[:elements {:read 4}]]]
 
-   108 [:long-array-lg   [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
    109 [:int-array-lg    [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+   108 [:long-array-lg   [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
 
-   116 [:double-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
    117 [:float-array-lg  [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+   116 [:double-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
 
    107 [:string-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
    115 [:object-array-lg [[:elements {:read 4}]]]
@@ -451,7 +451,7 @@
   "A set of common safe class names to allow to be frozen using Java's
   `Serializable` interface. PRs welcome for additions.
   See also `*thaw-serializable-allowlist*`."
-  #{"[I" "[F" "[Z" "[B" "[C" "[D" "[S" "[J"
+  #{"[Z" "[B" "[S" "[I" "[J" "[F" "[D" "[C"
 
     "java.lang.Throwable"
     "java.lang.Exception"
@@ -1105,12 +1105,10 @@
 (freezer (Class/forName "[Ljava.lang.Object;")  nil true (write-array-lg out x (alength ^"[Ljava.lang.Object;"  x) id-object-array-lg))
 
 (when (impl/target-release>= 350)
-  (freezer (Class/forName "[J")                  nil true (write-array-lg out x (alength ^"[J"                  x) id-long-array-lg))
   (freezer (Class/forName "[I")                  nil true (write-array-lg out x (alength ^"[I"                  x) id-int-array-lg))
-
-  (freezer (Class/forName "[D")                  nil true (write-array-lg out x (alength ^"[D"                  x) id-double-array-lg))
+  (freezer (Class/forName "[J")                  nil true (write-array-lg out x (alength ^"[J"                  x) id-long-array-lg))
   (freezer (Class/forName "[F")                  nil true (write-array-lg out x (alength ^"[F"                  x) id-float-array-lg))
-
+  (freezer (Class/forName "[D")                  nil true (write-array-lg out x (alength ^"[D"                  x) id-double-array-lg))
   (freezer (Class/forName "[Ljava.lang.String;") nil true (write-array-lg out x (alength ^"[Ljava.lang.String;" x) id-string-array-lg)))
 
 (freezer PersistentQueue    nil true (write-counted-coll   out id-queue-lg      x))
@@ -2009,7 +2007,7 @@
   [{:keys [comparable?] :as opts}]
   (let [rng      (java.util.Random. 123456) ; Seeded for determinism
         rand-nth (fn [coll] (nth coll (.nextInt rng (count coll))))
-        all
+        base
         {:nil                   nil
          :true                  true
          :false                 false
@@ -2046,7 +2044,6 @@
                      #{{1 [:a :b] 2 [:c :d] 3 [:e :f]} [#{{[] ()}}] #{:a :b}}
                      [1 [1 2 [1 2 3 [1 2 3 4 [1 2 3 4 5 "ಬಾ ಇಲ್ಲಿ ಸಂಭವಿಸ"] {} #{} [] ()]]]]]
 
-         :regex          #"^(https?:)?//(www\?|\?)?"
          :sorted-set     (sorted-set 1 2 3 4 5)
          :sorted-map     (sorted-map :b 2 :a 1 :d 4 :c 3)
          :lazy-seq-empty (map identity ())
@@ -2054,35 +2051,16 @@
          :queue          (into clojure.lang.PersistentQueue/EMPTY [:a :b :c :d :e :f :g])
          :queue-empty          clojure.lang.PersistentQueue/EMPTY
 
-         :uuid       (java.util.UUID. 7232453380187312026 -7067939076204274491)
-         :uri        (java.net.URI. "https://clojure.org")
-         :defrecord  (StressRecord. "data")
-         :deftype    (StressType.   "data")
-
-         :bytes      (byte-array   [(byte 1) (byte 2) (byte 3)])
-         :objects    (object-array [1 "two" {:data "data"}])
-
-         ;; TODO (target-release>= 350)
-         ;; :byte-array   (byte-array   [(byte 1) (byte 2) (byte 3) (byte 4)])
-
-         ;; :long-array   (long-array   [1 2 3 4])
-         ;; :int-array    (int-array    [1 2 3 4])
-
-         ;; :double-array (double-array [1.5 2.5 3.5 4.5])
-         ;; :float-array  (float-array  [1.5 2.5 3.5 4.5])
-
-         ;; :object-array (object-array [1 "two" {:data "data"}])
-         ;; :string-array (into-array String ["a" "b" "c"])
+         :uuid      (java.util.UUID. 7232453380187312026 -7067939076204274491)
+         :uri       (java.net.URI. "https://clojure.org")
+         :defrecord (StressRecord. "data")
+         :deftype   (StressType.   "data")
 
          :util-date (java.util.Date. 1577884455500)
          :sql-date  (java.sql.Date.  1577884455500)
          :instant   (enc/compile-if java.time.Instant  (java.time.Instant/parse "2020-01-01T13:14:15.50Z") ::skip)
          :duration  (enc/compile-if java.time.Duration (java.time.Duration/ofSeconds 100 100)              ::skip)
          :period    (enc/compile-if java.time.Period   (java.time.Period/of 1 1 1)                         ::skip)
-
-         :throwable (Throwable. "Msg")
-         :exception (Exception. "Msg")
-         :ex-info   (ex-info    "Msg" {:data "data"})
 
          :many-longs    (vec (repeatedly 512         #(rand-nth (range 10))))
          :many-doubles  (vec (repeatedly 512 #(double (rand-nth (range 10)))))
@@ -2093,8 +2071,23 @@
                                   (rand-nth ["foo" "bar" "baz" "qux"    ]))))}]
 
     (if comparable?
-      (dissoc all :bytes :objects :throwable :exception :ex-info :regex)
-      (do     all))))
+      base
+      (assoc base
+        :non-comparable
+        {:regex     #"^(https?:)?//(www\?|\?)?"
+         :throwable (Throwable. "Msg")
+         :exception (Exception. "Msg")
+         :ex-info   (ex-info    "Msg" {:data "data"})
+         :arrays
+         {:boolean (boolean-array     (mapv even?  (range 32)))
+          :byte    (byte-array        (mapv byte   (range 32)))
+          :short   (short-array       (mapv short  (range 32)))
+          :int     (int-array         (mapv int    (range 32)))
+          :long    (long-array        (mapv long   (range 32)))
+          :float   (float-array       (mapv float  (range 32)))
+          :double  (double-array      (mapv double (range 32)))
+          :char    (char-array        (mapv char   (range 32)))
+          :object  (object-array      (mapv vector (range 32)))}}))))
 
 (comment
   [(=      (stress-data {:comparable? true}) (stress-data {:comparable? true}))

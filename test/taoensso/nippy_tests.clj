@@ -54,10 +54,6 @@
                            #(freeze % {:password [:salted "p"]}))
                      test-data)))
 
-   (let [d (nippy/stress-data {})]
-     [(is (= (vec (:bytes   d)) ((comp vec thaw freeze) (:bytes   d))))
-      (is (= (vec (:objects d)) ((comp vec thaw freeze) (:objects d))))])
-
    (is (= test-data ((comp #(thaw   % {:compressor nippy/lzma2-compressor})
                            #(freeze % {:compressor nippy/lzma2-compressor}))
                      test-data)))
@@ -102,6 +98,15 @@
       (is (= {:a :A}              (meta (nippy/thaw (nippy/freeze (with-meta [] {:a :A, 'b/c (fn [])}))))))
       (is (= nil                  (meta (nippy/thaw (nippy/freeze (with-meta [] {       'b/c (fn [])})))))
         "Don't attach empty metadata")])
+
+   (let [d (nippy/stress-data {})]
+     [(is (= (vec (:bytes   d)) ((comp vec thaw freeze) (:bytes   d))))
+      (is (= (vec (:objects d)) ((comp vec thaw freeze) (:objects d))))])
+
+   (testing "Arrays"
+     (binding [nippy/*thaw-serializable-allowlist* nippy/default-freeze-serializable-allowlist]
+       (mapv (fn [[k aval]] (is (= (vec aval) (-> aval nippy/freeze nippy/thaw vec)) (name k)))
+         (get-in (nippy/stress-data {}) [:non-comparable :arrays]))))
 
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
 
