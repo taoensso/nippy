@@ -25,7 +25,7 @@
     PersistentQueue PersistentTreeMap PersistentTreeSet PersistentList
     MapEntry LazySeq IRecord ISeq IType]))
 
-(enc/assert-min-encore-version [3 127 0])
+(enc/assert-min-encore-version [3 142 0])
 
 (comment
   (set! *unchecked-math* :warn-on-boxed)
