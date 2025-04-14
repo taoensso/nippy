@@ -4,6 +4,7 @@
    [clojure.test.check            :as tc]
    [clojure.test.check.generators :as tc-gens]
    [clojure.test.check.properties :as tc-props]
+   [taoensso.truss                :as truss :refer [throws?]]
    [taoensso.encore               :as enc   :refer [ba=]]
    [taoensso.nippy                :as nippy :refer [freeze thaw]]
    [taoensso.nippy.compression    :as compr]
@@ -75,9 +76,9 @@
                            #(freeze % {:compressor nippy/zstd-compressor}))
                      test-data)))
 
-   (is (enc/throws? Exception (thaw (freeze test-data {:password "malformed"}))))
-   (is (enc/throws? Exception (thaw (freeze test-data {:password [:salted "p"]}))))
-   (is (enc/throws? Exception (thaw (freeze test-data {:password [:salted "p"]}))))
+   (is (throws? Exception (thaw (freeze test-data {:password "malformed"}))))
+   (is (throws? Exception (thaw (freeze test-data {:password [:salted "p"]}))))
+   (is (throws? Exception (thaw (freeze test-data {:password [:salted "p"]}))))
 
    (is
      (= "payload"
@@ -94,12 +95,12 @@
         (let [n    range-uint+]                          (= (thaw (freeze n)) n))
         (let [n (- range-uint+)]                         (= (thaw (freeze n)) n))]))
 
-   (is (enc/throws? :ex-info "Failed to freeze type" (nippy/freeze (fn []))))
+   (is (throws? :ex-info "Failed to freeze type" (nippy/freeze (fn []))))
 
    (testing "Clojure v1.10+ metadata protocol extensions"
-     [(is (enc/throws? :ex-info "Failed to freeze type" (nippy/freeze (with-meta [] {:a :A, 'b   (fn [])}))))
-      (is (= {:a :A}                  (meta (nippy/thaw (nippy/freeze (with-meta [] {:a :A, 'b/c (fn [])}))))))
-      (is (= nil                      (meta (nippy/thaw (nippy/freeze (with-meta [] {       'b/c (fn [])})))))
+     [(is (throws? :ex-info "Failed to freeze type" (nippy/freeze (with-meta [] {:a :A, 'b   (fn [])}))))
+      (is (= {:a :A}              (meta (nippy/thaw (nippy/freeze (with-meta [] {:a :A, 'b/c (fn [])}))))))
+      (is (= nil                  (meta (nippy/thaw (nippy/freeze (with-meta [] {       'b/c (fn [])})))))
         "Don't attach empty metadata")])
 
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
@@ -112,7 +113,7 @@
 (deftest _types
   [(testing "Extend to custom type"
      [(is
-        (enc/throws? Exception ; No thaw extension yet
+        (throws? Exception ; No thaw extension yet
           (do
             (alter-var-root #'nippy/*custom-readers* (constantly {}))
             (nippy/extend-freeze MyType 1 [x s]
@@ -323,7 +324,7 @@
   [(is (= nippy/*thaw-serializable-allowlist* #{"base.1" "base.2" "add.1" "add.2"})
      "JVM properties override initial allowlist values")
 
-   (is (enc/throws? Exception (nippy/freeze sem {:serializable-allowlist #{}}))
+   (is (throws? Exception (nippy/freeze sem {:serializable-allowlist #{}}))
      "Can't freeze Serializable objects unless approved by allowlist")
 
    (is (sem?
@@ -435,8 +436,8 @@
 
    (is (= (binding [nippy/*thaw-xform* (map (fn [x] (/ 1 0)))] (thaw (freeze []))) []) "rf not run on empty colls")
 
-   (let [ex (enc/throws :default (binding [nippy/*thaw-xform* (map (fn [x] (/ 1 0)))] (thaw (freeze [:a :b]))))]
-     (is (= (-> ex enc/ex-cause enc/ex-cause ex-data :call) '(rf acc in)) "Error thrown via `*thaw-xform*`"))])
+   (let [ex (truss/throws :default (binding [nippy/*thaw-xform* (map (fn [x] (/ 1 0)))] (thaw (freeze [:a :b]))))]
+     (is (= (-> ex ex-cause ex-cause ex-data :call) '(rf acc in)) "Error thrown via `*thaw-xform*`"))])
 
 ;;;; Compressors
 
@@ -453,7 +454,7 @@
       (print ".") (flush)
       (dotimes [_ 1000]
         (is
-          (nil? (enc/catching (compr/decompress c (crypto/rand-bytes 1024))))
+          (nil? (truss/catching :all (compr/decompress c (crypto/rand-bytes 1024))))
           "Decompression never crashes JVM, even against invalid data")))
     (println)))
 

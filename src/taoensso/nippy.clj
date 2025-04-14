@@ -4,6 +4,7 @@
   (:require
    [clojure.string  :as str]
    [clojure.java.io :as jio]
+   [taoensso.truss  :as truss]
    [taoensso.encore :as enc]
    [taoensso.nippy
     [impl        :as impl]
@@ -695,7 +696,7 @@
       (sm-count? len) (do (write-id out id-kw-sm) (write-sm-count out len))
       (md-count? len) (do (write-id out id-kw-md) (write-md-count out len))
       ;; :else        (do (write-id out id-kw-lg) (write-lg-count out len)) ; Unrealistic
-      :else           (throw (ex-info "Keyword too long" {:name s})))
+      :else           (truss/ex-info! "Keyword too long" {:name s}))
 
     (.write out ba 0 len)))
 
@@ -707,7 +708,7 @@
       (sm-count? len) (do (write-id out id-sym-sm) (write-sm-count out len))
       (md-count? len) (do (write-id out id-sym-md) (write-md-count out len))
       ;; :else        (do (write-id out id-sym-lg) (write-lg-count out len)) ; Unrealistic
-      :else           (throw (ex-info "Symbol too long" {:name s})))
+      :else           (truss/ex-info! "Symbol too long" {:name s}))
 
     (.write out ba 0 len)))
 
@@ -906,7 +907,7 @@
             (sm-count? len) (do (write-id out id-sz-quarantined-sm) (write-bytes-sm out class-name-ba))
             (md-count? len) (do (write-id out id-sz-quarantined-md) (write-bytes-md out class-name-ba))
             ;; :else        (do (write-id out id-sz-quarantined-lg) (write-bytes-md out class-name-ba)) ; Unrealistic
-            :else           (throw (ex-info "Serializable class name too long" {:name class-name})))
+            :else           (truss/ex-info! "Serializable class name too long" {:name class-name}))
 
           ;; Legacy: write object directly to out.
           ;; (.writeObject (ObjectOutputStream. out) x)
@@ -931,8 +932,8 @@
         :else           (do (write-id out id-reader-lg) (write-bytes-lg out edn-ba)))
       true)))
 
-(defn ^:deprecated try-write-serializable [out x] (enc/catching (write-serializable out x)))
-(defn ^:deprecated try-write-readable     [out x] (enc/catching (write-readable     out x)))
+(defn ^:deprecated try-write-serializable [out x] (truss/catching :all (write-serializable out x)))
+(defn ^:deprecated try-write-readable     [out x] (truss/catching :all (write-readable     out x)))
 
 (defn- try-pr-edn [x]
   (try
@@ -1028,7 +1029,7 @@
             (when first-occurance? (-freeze-with-meta! x-val out)))
 
           :else
-          ;; (throw (ex-info "Max cache size exceeded" {:idx idx}))
+          ;; (truss/ex-info! "Max cache size exceeded" {:idx idx})
           (-freeze-with-meta! x-val out) ; Just freeze uncached
           ))
 
@@ -1045,7 +1046,7 @@
               (vswap! cache_ assoc idx x)
               x)
             v))
-        (throw (ex-info "Can't thaw without cache available. See `with-cache`." {}))))))
+        (truss/ex-info! "Can't thaw without cache available. See `with-cache`." {})))))
 
 (comment
   (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")]))
@@ -1129,7 +1130,7 @@
       (sm-count? len) (do (write-id out id-record-sm) (write-bytes-sm out class-name-ba))
       (md-count? len) (do (write-id out id-record-md) (write-bytes-md out class-name-ba))
       ;; :else        (do (write-id out id-record-lg) (write-bytes-md out class-name-ba)) ; Unrealistic
-      :else           (throw (ex-info "Record class name too long" {:name class-name})))
+      :else           (truss/ex-info! "Record class name too long" {:name class-name}))
 
     (-freeze-without-meta! (into {} x) out)))
 
@@ -1191,14 +1192,13 @@
         :if-let [fff *final-freeze-fallback*] (fff out x) ; Deprecated
         :else
         (let [t (type x)]
-          (throw
-            (ex-info (str "Failed to freeze type: " t)
-              (enc/assoc-some
-                {:type   t
-                 :as-str (try-pr-edn x)}
-                {:serializable-error e1
-                 :readable-error     e2})
-              (or e1 e2))))))))
+          (truss/ex-info! (str "Failed to freeze type: " t)
+            (enc/assoc-some
+              {:type   t
+               :as-str (try-pr-edn x)}
+              {:serializable-error e1
+               :readable-error     e2})
+            (or e1 e2)))))))
 
 ;;;;
 
@@ -1212,9 +1212,8 @@
 (defn- wrap-header [data-ba head-meta]
   (if-let [head-ba (get-head-ba head-meta)]
     (enc/ba-concat head-ba data-ba)
-    (throw
-      (ex-info (str "Unrecognized header meta: " head-meta)
-        {:head-meta head-meta}))))
+    (truss/ex-info! (str "Unrecognized header meta: " head-meta)
+      {:head-meta head-meta})))
 
 (comment (wrap-header (.getBytes "foo") {:compressor-id :lz4
                                          :encryptor-id  nil}))
@@ -1377,7 +1376,7 @@
 
 (defmacro ^:private editable? [coll] `(instance? clojure.lang.IEditableCollection ~coll))
 
-(defn- xform* [xform] (enc/catching-xform {:error/msg "Error thrown via `*thaw-xform*`"} xform))
+(defn- xform* [xform] (truss/catching-xform {:error/msg "Error thrown via `*thaw-xform*`"} xform))
 
 (let [rf! (fn rf! ([x] (persistent! x)) ([acc x] (conj! acc x)))
       rf* (fn rf* ([x]              x)  ([acc x] (conj  acc x)))]
@@ -1414,14 +1413,12 @@
     (try
       (custom-reader in)
       (catch Exception e
-        (throw
-          (ex-info
-            (str "Reader exception for custom type id: " type-id)
-            {:type-id type-id, :prefixed? prefixed?} e))))
-    (throw
-      (ex-info
-        (str "No reader provided for custom type id: " type-id)
-        {:type-id type-id, :prefixed? prefixed?}))))
+        (truss/ex-info!
+          (str "Reader exception for custom type id: " type-id)
+          {:type-id type-id, :prefixed? prefixed?} e)))
+    (truss/ex-info!
+      (str "No reader provided for custom type id: " type-id)
+      {:type-id type-id, :prefixed? prefixed?})))
 
 (defn- read-edn [edn]
   (try
@@ -1498,9 +1495,9 @@
   [^DataInput in class-name]
   (if (thaw-serializable-allowed? class-name)
     (read-object in class-name)
-    (throw ; No way to skip bytes, so best we can do is throw
-      (ex-info "Cannot thaw object: `taoensso.nippy/*thaw-serializable-allowlist*` check failed. This is a security feature. See `*thaw-serializable-allowlist*` docstring or https://github.com/ptaoussanis/nippy/issues/130 for details!"
-        {:class-name class-name}))))
+    (truss/ex-info! ; No way to skip bytes, so best we can do is throw
+      "Cannot thaw object: `taoensso.nippy/*thaw-serializable-allowlist*` check failed. This is a security feature. See `*thaw-serializable-allowlist*` docstring or https://github.com/ptaoussanis/nippy/issues/130 for details!"
+      {:class-name class-name})))
 
 (defn- read-record [in class-name]
   (let [content (thaw-from-in! in)]
@@ -1753,15 +1750,13 @@
 
         (if (neg? type-id)
           (read-custom! in nil type-id) ; Unprefixed custom type
-          (throw
-            (ex-info
-              (str "Unrecognized type id (" type-id "). Data frozen with newer Nippy version?")
-              {:type-id type-id}))))
+          (truss/ex-info!
+            (str "Unrecognized type id (" type-id "). Data frozen with newer Nippy version?")
+            {:type-id type-id})))
 
       (catch Throwable t
-        (throw
-          (ex-info (str "Thaw failed against type-id: " type-id)
-            {:type-id type-id} t))))))
+        (truss/ex-info! (str "Thaw failed against type-id: " type-id)
+          {:type-id type-id} t)))))
 
 (let [head-sig head-sig] ; Not ^:const
   (defn- try-parse-header [^bytes ba]
@@ -1781,20 +1776,20 @@
     :lzma2     lzma2-compressor
     :lz4       lz4-compressor
     :zstd      zstd-compressor
-    :no-header (throw (ex-info ":auto not supported on headerless data." {}))
-    :else      (throw (ex-info ":auto not supported for non-standard compressors." {}))
-    (do        (throw (ex-info (str "Unrecognized :auto compressor id: " compressor-id)
-                        {:compressor-id compressor-id})))))
+    :no-header (truss/ex-info! ":auto not supported on headerless data." {})
+    :else      (truss/ex-info! ":auto not supported for non-standard compressors." {})
+    (do        (truss/ex-info! (str "Unrecognized :auto compressor id: " compressor-id)
+                 {:compressor-id compressor-id}))))
 
 (defn- get-auto-encryptor [encryptor-id]
   (case encryptor-id
     nil                nil
     :aes128-gcm-sha512 aes128-gcm-encryptor
     :aes128-cbc-sha512 aes128-cbc-encryptor
-    :no-header (throw (ex-info ":auto not supported on headerless data." {}))
-    :else      (throw (ex-info ":auto not supported for non-standard encryptors." {}))
-    (do        (throw (ex-info (str "Unrecognized :auto encryptor id: " encryptor-id)
-                        {:encryptor-id encryptor-id})))))
+    :no-header (truss/ex-info! ":auto not supported on headerless data." {})
+    :else      (truss/ex-info! ":auto not supported for non-standard encryptors." {})
+    (do        (truss/ex-info! (str "Unrecognized :auto encryptor id: " encryptor-id)
+                 {:encryptor-id encryptor-id}))))
 
 (def ^:private err-msg-unknown-thaw-failure "Possible decryption/decompression error, unfrozen/damaged data, etc.")
 (def ^:private err-msg-unrecognized-header  "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?")
@@ -1841,24 +1836,23 @@
              (fn ex
                ([  msg] (ex nil msg))
                ([e msg]
-                (throw
-                  (ex-info (str "Thaw failed. " msg)
-                    {:opts
-                     (assoc opts
-                       :compressor compressor
-                       :encryptor  encryptor)
+                (truss/ex-info! (str "Thaw failed. " msg)
+                  {:opts
+                   (assoc opts
+                     :compressor compressor
+                     :encryptor  encryptor)
 
-                     :bindings
-                     (enc/assoc-some {}
-                       '*freeze-fallback*             *freeze-fallback*
-                       '*final-freeze-fallback*       *final-freeze-fallback*
-                       '*auto-freeze-compressor*      *auto-freeze-compressor*
-                       '*custom-readers*              *custom-readers*
-                       '*incl-metadata?*              *incl-metadata?*
-                       '*thaw-serializable-allowlist* *thaw-serializable-allowlist*
-                       '*thaw-xform*                  *thaw-xform*)}
+                   :bindings
+                   (enc/assoc-some {}
+                     '*freeze-fallback*             *freeze-fallback*
+                     '*final-freeze-fallback*       *final-freeze-fallback*
+                     '*auto-freeze-compressor*      *auto-freeze-compressor*
+                     '*custom-readers*              *custom-readers*
+                     '*incl-metadata?*              *incl-metadata?*
+                     '*thaw-serializable-allowlist* *thaw-serializable-allowlist*
+                     '*thaw-xform*                  *thaw-xform*)}
 
-                    e))))
+                  e)))
 
              thaw-data
              (fn [data-ba compressor-id encryptor-id ex-fn]
@@ -2243,5 +2237,5 @@
       (alter-var-root *thaw-serializable-allowlist*    f) and/or
       (alter-var-root *freeze-serializable-allow-list* f) instead."
     [f]
-    (alter-var-root *freeze-serializable-allowlist* (fn [old] (f (enc/have set? old))))
-    (alter-var-root *thaw-serializable-allowlist*   (fn [old] (f (enc/have set? old))))))
+    (alter-var-root *freeze-serializable-allowlist* (fn [old] (f (truss/have set? old))))
+    (alter-var-root *thaw-serializable-allowlist*   (fn [old] (f (truss/have set? old))))))

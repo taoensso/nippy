@@ -1,6 +1,7 @@
 (ns ^:no-doc taoensso.nippy.encryption
   "Private, implementation detail."
   (:require
+   [taoensso.truss        :as truss]
    [taoensso.encore       :as enc]
    [taoensso.nippy.crypto :as crypto]))
 
@@ -14,11 +15,11 @@
   (decrypt ^bytes [encryptor pwd ba]))
 
 (defn- throw-destructure-ex [typed-password]
-  (throw (ex-info
-           (str "Expected password form: "
-             "[<#{:salted :cached}> <password-string>].\n "
-             "See `aes128-encryptor` docstring for details!")
-           {:typed-password typed-password})))
+  (truss/ex-info!
+    (str "Expected password form: "
+      "[<#{:salted :cached}> <password-string>].\n "
+      "See `aes128-encryptor` docstring for details!")
+    {:typed-password typed-password}))
 
 (defn- destructure-typed-pwd [typed-password]
   (if (vector? typed-password)

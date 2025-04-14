@@ -1,6 +1,8 @@
 (ns ^:no-doc taoensso.nippy.compression
   "Private, implementation detail."
-  (:require [taoensso.encore :as enc])
+  (:require
+   [taoensso.truss  :as truss]
+   [taoensso.encore :as enc])
   (:import
    [java.nio ByteBuffer]
    [java.io
@@ -156,7 +158,7 @@
       (.read xzs ba 0 len-decomp)
       (if (== -1 (.read xzs)) ; Good practice as extra safety measure
         nil
-        (throw (ex-info "LZMA2 Decompress failed: corrupt data?" {:ba ba})))
+        (truss/ex-info! "LZMA2 Decompress failed: corrupt data?" {:ba ba}))
       ba)))
 
 ;;;; Public API

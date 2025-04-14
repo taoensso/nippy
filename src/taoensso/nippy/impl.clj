@@ -2,6 +2,7 @@
   "Private, implementation detail."
   (:require
    [clojure.string  :as str]
+   [taoensso.truss  :as truss]
    [taoensso.encore :as enc]))
 
 ;;;; Fallback type tests
@@ -63,7 +64,7 @@
   (when x
     (if (string? x)
       (if (= x "") #{} (set (mapv str/trim (str/split x #"[,:]"))))
-      (enc/have set? x))))
+      (truss/have set? x))))
 
 (comment
   (mapv classname-set [nil #{"foo"} "" "foo, bar:baz"])
