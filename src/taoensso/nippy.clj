@@ -197,13 +197,13 @@
    15  [:byte-array-md   [[:elements {:read 2}]]]
    2   [:byte-array-lg   [[:elements {:read 4}]]]
 
-   109 [:int-array-lg    [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
-   108 [:long-array-lg   [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+   109 [:int-array-lg    [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
+   108 [:long-array-lg   [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
 
-   117 [:float-array-lg  [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
-   116 [:double-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+   117 [:float-array-lg  [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
+   116 [:double-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
 
-   107 [:string-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (YYYY-MM-DD)
+   107 [:string-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
    115 [:object-array-lg [[:elements {:read 4}]]]
 
    ;; Serializable

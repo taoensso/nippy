@@ -1,5 +1,5 @@
 <a href="https://www.taoensso.com/clojure" title="More stuff by @ptaoussanis at www.taoensso.com"><img src="https://www.taoensso.com/open-source.png" alt="Taoensso open source" width="340"/></a>  
-[**API**][cljdoc docs] | [**Wiki**][GitHub wiki] | [Latest releases](#latest-releases) | [Get support][GitHub issues]
+[**API**][cljdoc] | [**Wiki**][GitHub wiki] | [Latest releases](#latest-releases) | [Get support][GitHub issues]
 
 # Nippy
 
@@ -13,8 +13,7 @@ It is used at scale by [Carmine](https://www.taoensso.com/carmine), [Faraday](ht
 
 ## Latest release/s
 
-- `2024-05-26` `v3.4.2` (stable): [release info](../../releases/tag/v3.4.2)
-- `2024-10-28` `v3.5.0-RC1` (dev): [release info](../../releases/tag/v3.5.0-RC1)
+- `2025-04-15` `v3.5.0`: [release info](../../releases/tag/v3.5.0)
 
 [![Main tests][Main tests SVG]][Main tests URL]
 [![Graal tests][Graal tests SVG]][Graal tests URL]
@@ -96,7 +95,7 @@ PRs welcome to include other alternatives in the [benchmark suite](../../blob/ma
 ## Documentation
 
 - [Wiki][GitHub wiki] (getting started, usage, etc.)
-- API reference: [cljdoc][cljdoc docs], [Codox][Codox docs]
+- API reference via [cljdoc][cljdoc]
 
 ## Funding
 
@@ -104,7 +103,7 @@ You can [help support][sponsor] continued work on this project, thank you!! 🙏
 
 ## License
 
-Copyright &copy; 2012-2024 [Peter Taoussanis][].  
+Copyright &copy; 2012-2025 [Peter Taoussanis][].  
 Licensed under [EPL 1.0](LICENSE.txt) (same as Clojure).
 
 <!-- Common -->
@@ -118,8 +117,7 @@ Licensed under [EPL 1.0](LICENSE.txt) (same as Clojure).
 
 <!-- Project -->
 
-[Codox docs]:  https://taoensso.github.io/nippy/
-[cljdoc docs]: https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy
+[cljdoc]: https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy
 
 [Clojars SVG]: https://img.shields.io/clojars/v/com.taoensso/nippy.svg
 [Clojars URL]: https://clojars.org/com.taoensso/nippy

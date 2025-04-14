@@ -2,6 +2,56 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.5.0` (2025-04-15)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.5.0)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+This is a **general maintenance release** focused on updating dependencies and laying groundwork (read support) for new array types coming in Nippy v3.6.
+
+It **drops support for Clojure v1.9** but should otherwise be a safe update from (at least) all recent versions of Nippy.
+
+## Since `v3.5.0-RC1` (2024-10-28)
+
+- **\[mod]** Drop official Clojure v1.9 support \[da57206]
+- \[new] Add string array type to default [thaw-serializable-allowlist](https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy#*thaw-serializable-allowlist*) \[bfba594]
+- \[new] Use [Truss exceptions](https://cljdoc.org/d/com.taoensso/truss/CURRENT/api/taoensso.truss#ex-info) on errors \[8d62dc2]
+- \[new] [#184] Incl. cause on non-native freeze failures \[8d10765]
+- \[doc] Clarify `*freeze-fallback*` docstring \[1026ea0]
+
+## Since `v3.4.2` (2024-05-26)
+
+- **\[mod]** Drop official Clojure v1.9 support \[da57206]
+- \[new] Add string array type to default [thaw-serializable-allowlist](https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy#*thaw-serializable-allowlist*) \[bfba594]
+- \[new] Use [Truss exceptions](https://cljdoc.org/d/com.taoensso/truss/CURRENT/api/taoensso.truss#ex-info) on errors \[8d62dc2]
+- \[new] [#184] Incl. cause on non-native freeze failures \[8d10765]
+- \[new] [#175] Mark [cache](https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy#cache) feature as stable \[b217db5]
+- \[doc] Clarify `*freeze-fallback*` docstring \[1026ea0]
+
+## Migration info
+
+| Updating from Nippy       | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Rolling update sequence [1] |
+| :------------------------ | :-------------- | :---------------------------------------------------------------------------------------------------------------------- | :-------------------------- |
+| `v3.5.0-RC1` (2024-10-28) | -               | -                                                                                                                       | -                           |
+| `v3.4.2` (2024-05-26)     | -               | -                                                                                                                       | -                           |
+| `v3.4.1` (2024-05-02)     | -               | -                                                                                                                       | -                           |
+| `v3.4.0` (2024-04-30)     | -               | **Yes**                                                                                                                 | -                           |
+| `v3.3.0` (2023-10-11)     | -               | -                                                                                                                       | -                           |
+| `v3.2.0` (2022-07-18)     | -               | -                                                                                                                       | -                           |
+| `v3.1.3` (2022-06-23)     | -               | -                                                                                                                       | -                           |
+
+> [1] Relevant only when Nippy introduces support for new types **AND** you plan to update Nippy with a **rolling update** (coexisting new and old versions).
+
+If updating from older versions of Nippy, please see the relevant release notes.
+
+As always:
+
+- See [operational considerations](https://github.com/taoensso/nippy/wiki/2-Operational-considerations) for info on: **data compatibility**, **rolling updates**, **rollback support**, etc.
+- It's always a good idea to **ensure adequate testing** in your environment before updating against production data!
+- **Please report any unexpected problems** 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
 # `v3.5.0-RC1` (2024-10-28)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.5.0-RC1)
@@ -11,14 +61,14 @@ This is a **non-breaking maintenance release** that updates dependencies and inc
 
 It should be safe to update from (at least) all recent versions of Nippy.
 
-| Updating from Nippy | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Rolling update sequence [1]
-| :-- | :-- | :-- | :--
-| `v3.4.2` (2024-05-26) | - | -   | -
-| `v3.4.1` (2024-05-02) | - | -   | -
-| `v3.4.0` (2024-04-30) | - | Yes | -
-| `v3.3.0` (2023-10-11) | - | -   | -
-| `v3.2.0` (2022-07-18) | - | -   | -
-| `v3.1.3` (2022-06-23) | - | -   | -
+| Updating from Nippy   | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Rolling update sequence [1] |
+| :-------------------- | :-------------- | :---------------------------------------------------------------------------------------------------------------------- | :-------------------------- |
+| `v3.4.2` (2024-05-26) | -               | -                                                                                                                       | -                           |
+| `v3.4.1` (2024-05-02) | -               | -                                                                                                                       | -                           |
+| `v3.4.0` (2024-04-30) | -               | Yes                                                                                                                     | -                           |
+| `v3.3.0` (2023-10-11) | -               | -                                                                                                                       | -                           |
+| `v3.2.0` (2022-07-18) | -               | -                                                                                                                       | -                           |
+| `v3.1.3` (2022-06-23) | -               | -                                                                                                                       | -                           |
 
 > [1] Relevant only when introducing support for new types, and for users that do rolling updates
 
@@ -43,13 +93,13 @@ As always:
 
 It should be a **straight-forward and non-breaking update** for almost everyone:
 
-| Updating from Nippy | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Rolling update sequence [1]
-| :-- | :-- | :-- | :--
-| `v3.4.1` (2024-05-02) | - | -   | -
-| `v3.4.0` (2024-04-30) | - | Yes | -
-| `v3.3.0` (2023-10-11) | - | -   | -
-| `v3.2.0` (2022-07-18) | - | -   | -
-| `v3.1.3` (2022-06-23) | - | -   | -
+| Updating from Nippy   | Changes to API? | Changes to [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output)? | Rolling update sequence [1] |
+| :-------------------- | :-------------- | :---------------------------------------------------------------------------------------------------------------------- | :-------------------------- |
+| `v3.4.1` (2024-05-02) | -               | -                                                                                                                       | -                           |
+| `v3.4.0` (2024-04-30) | -               | Yes                                                                                                                     | -                           |
+| `v3.3.0` (2023-10-11) | -               | -                                                                                                                       | -                           |
+| `v3.2.0` (2022-07-18) | -               | -                                                                                                                       | -                           |
+| `v3.1.3` (2022-06-23) | -               | -                                                                                                                       | -                           |
 
 > [1] Relevant only when introducing support for new types, and for users that do rolling updates
 
