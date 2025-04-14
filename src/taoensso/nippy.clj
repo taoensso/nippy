@@ -894,51 +894,45 @@
 
         (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
 
-(defn- write-serializable [^DataOutput out x ^String class-name]
+(defn- write-serializable [^DataOutput out x]
   (when-debug (println (str "write-serializable: " (type x))))
-  (let [class-name-ba (.getBytes class-name StandardCharsets/UTF_8)
-        len           (alength   class-name-ba)]
+  (when (and (instance? Serializable x) (not (fn? x)))
+    (let [class-name (.getName (class x))] ; Reflect
+      (when (freeze-serializable-allowed? class-name)
+        (let [class-name-ba (.getBytes class-name StandardCharsets/UTF_8)
+              len           (alength   class-name-ba)]
 
-    (enc/cond
-      (sm-count? len) (do (write-id out id-sz-quarantined-sm) (write-bytes-sm out class-name-ba))
-      (md-count? len) (do (write-id out id-sz-quarantined-md) (write-bytes-md out class-name-ba))
-      ;; :else        (do (write-id out id-sz-quarantined-lg) (write-bytes-md out class-name-ba)) ; Unrealistic
-      :else           (throw (ex-info "Serializable class name too long" {:name class-name})))
+          (enc/cond
+            (sm-count? len) (do (write-id out id-sz-quarantined-sm) (write-bytes-sm out class-name-ba))
+            (md-count? len) (do (write-id out id-sz-quarantined-md) (write-bytes-md out class-name-ba))
+            ;; :else        (do (write-id out id-sz-quarantined-lg) (write-bytes-md out class-name-ba)) ; Unrealistic
+            :else           (throw (ex-info "Serializable class name too long" {:name class-name})))
 
-    ;; Legacy: write object directly to out.
-    ;; (.writeObject (ObjectOutputStream. out) x)
+          ;; Legacy: write object directly to out.
+          ;; (.writeObject (ObjectOutputStream. out) x)
 
-    ;; Quarantined: write object to ba, then ba to out.
-    ;; We'll have object length during thaw, allowing us to skip readObject.
-    (let [quarantined-ba (ByteArrayOutputStream.)]
-      (.writeObject (ObjectOutputStream. (DataOutputStream. quarantined-ba)) x)
-      (write-bytes out (.toByteArray quarantined-ba)))))
+          ;; Quarantined: write object to ba, then ba to out.
+          ;; We'll have object length during thaw, allowing us to skip readObject.
+          (let [quarantined-ba (ByteArrayOutputStream.)]
+            (.writeObject (ObjectOutputStream. (DataOutputStream. quarantined-ba)) x)
+            (write-bytes out (.toByteArray quarantined-ba)))
+
+          true)))))
 
 (defn- write-readable [^DataOutput out x]
   (when-debug (println (str "write-readable: " (type x))))
-  (let [edn    (enc/pr-edn x)
-        edn-ba (.getBytes ^String edn StandardCharsets/UTF_8)
-        len    (alength edn-ba)]
-    (enc/cond
-      (sm-count? len) (do (write-id out id-reader-sm) (write-bytes-sm out edn-ba))
-      (md-count? len) (do (write-id out id-reader-md) (write-bytes-md out edn-ba))
-      :else           (do (write-id out id-reader-lg) (write-bytes-lg out edn-ba)))))
-
-(defn try-write-serializable [out x]
-  (when (and (instance? Serializable x) (not (fn? x)))
-    (try
-      (let [class-name (.getName (class x))] ; Reflect
-        (when (freeze-serializable-allowed? class-name)
-          (write-serializable out x class-name)
-          true))
-      (catch Throwable _ nil))))
-
-(defn try-write-readable [out x]
   (when (impl/seems-readable? x)
-    (try
-      (write-readable out x)
-      true
-      (catch Throwable _ nil))))
+    (let [edn    (enc/pr-edn x)
+          edn-ba (.getBytes ^String edn StandardCharsets/UTF_8)
+          len    (alength edn-ba)]
+      (enc/cond
+        (sm-count? len) (do (write-id out id-reader-sm) (write-bytes-sm out edn-ba))
+        (md-count? len) (do (write-id out id-reader-md) (write-bytes-md out edn-ba))
+        :else           (do (write-id out id-reader-lg) (write-bytes-lg out edn-ba)))
+      true)))
+
+(defn ^:deprecated try-write-serializable [out x] (enc/catching (write-serializable out x)))
+(defn ^:deprecated try-write-readable     [out x] (enc/catching (write-readable     out x)))
 
 (defn- try-pr-edn [x]
   (try
@@ -955,13 +949,6 @@
      {:type    (type       x)
       :content (try-pr-edn x)}}
     out))
-
-(defn throw-unfreezable [x]
-  (let [t (type x)]
-    (throw
-      (ex-info (str "Unfreezable type: " t)
-        {:type   t
-         :as-str (try-pr-edn x)}))))
 
 ;; Public `-freeze-with-meta!` with different arg order
 (defn freeze-to-out!
@@ -1197,13 +1184,21 @@
           (write-unfreezable      out x)))
 
       ;; Without ff
-      (or
-        (try-write-serializable out x)
-        (try-write-readable     out x)
+      (enc/cond
+        :let [[r1 e1] (try [(write-serializable out x)] (catch Throwable t [nil t]))], r1 r1
+        :let [[r2 e2] (try [(write-readable     out x)] (catch Throwable t [nil t]))], r2 r2
 
-        (when-let [fff *final-freeze-fallback*] (fff out x) true) ; Deprecated
-
-        (throw-unfreezable x)))))
+        :if-let [fff *final-freeze-fallback*] (fff out x) ; Deprecated
+        :else
+        (let [t (type x)]
+          (throw
+            (ex-info (str "Failed to freeze type: " t)
+              (enc/assoc-some
+                {:type   t
+                 :as-str (try-pr-edn x)}
+                {:serializable-error e1
+                 :readable-error     e2})
+              (or e1 e2))))))))
 
 ;;;;
 

@@ -94,12 +94,12 @@
         (let [n    range-uint+]                          (= (thaw (freeze n)) n))
         (let [n (- range-uint+)]                         (= (thaw (freeze n)) n))]))
 
-   (is (enc/throws? :ex-info "Unfreezable type" (nippy/freeze (fn []))))
+   (is (enc/throws? :ex-info "Failed to freeze type" (nippy/freeze (fn []))))
 
    (testing "Clojure v1.10+ metadata protocol extensions"
-     [(is (enc/throws? :ex-info "Unfreezable type" (nippy/freeze (with-meta [] {:a :A, 'b   (fn [])}))))
-      (is (= {:a :A}             (meta (nippy/thaw (nippy/freeze (with-meta [] {:a :A, 'b/c (fn [])}))))))
-      (is (= nil                 (meta (nippy/thaw (nippy/freeze (with-meta [] {       'b/c (fn [])})))))
+     [(is (enc/throws? :ex-info "Failed to freeze type" (nippy/freeze (with-meta [] {:a :A, 'b   (fn [])}))))
+      (is (= {:a :A}                  (meta (nippy/thaw (nippy/freeze (with-meta [] {:a :A, 'b/c (fn [])}))))))
+      (is (= nil                      (meta (nippy/thaw (nippy/freeze (with-meta [] {       'b/c (fn [])})))))
         "Don't attach empty metadata")])
 
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
