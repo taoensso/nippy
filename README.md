@@ -3,7 +3,7 @@
 
 # Nippy
 
-### The fastest serialization library for Clojure
+### Fast serialization library for Clojure
 
 Clojure's rich data types are awesome. And its [reader](https://clojure.org/reference/reader) allows you to take your data just about anywhere. But the reader can be painfully slow when you've got a lot of data to crunch (like when you're serializing to a database).
 
@@ -86,11 +86,11 @@ So starting with Nippy v3.4, Nippy's release notes will **always clearly indicat
 
 ## Performance
 
-Since its earliest versions, Nippy has consistently been the **fastest serialization library for Clojure** that I'm aware of. Latest results:
+Nippy is fast! Latest [benchmark](../../blob/master/test/taoensso/nippy_benchmarks.clj) results:
 
 ![benchmarks-png](../../raw/master/benchmarks.png)
 
-PRs welcome to include other alternatives in the [benchmark suite](../../blob/master/test/taoensso/nippy_benchmarks.clj)!
+PRs welcome to include other alternatives in the bench suite!
 
 ## Documentation
 

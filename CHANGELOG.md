@@ -52,6 +52,8 @@ As always:
 
 \- [Peter Taoussanis](https://www.taoensso.com)
 
+---
+
 # `v3.5.0-RC1` (2024-10-28)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.5.0-RC1)

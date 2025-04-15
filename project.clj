@@ -1,6 +1,6 @@
 (defproject com.taoensso/nippy "3.5.0"
   :author "Peter Taoussanis <https://www.taoensso.com>"
-  :description "The fastest serialization library for Clojure"
+  :description "Fast serialization library for Clojure"
   :url "https://www.taoensso.com/nippy"
 
   :license
