@@ -7,6 +7,8 @@
    [taoensso.truss                :as truss :refer [throws?]]
    [taoensso.encore               :as enc   :refer [ba=]]
    [taoensso.nippy                :as nippy :refer [freeze thaw]]
+   [taoensso.nippy.impl           :as impl]
+   [taoensso.nippy.tools          :as tools]
    [taoensso.nippy.compression    :as compr]
    [taoensso.nippy.crypto         :as crypto]
    [taoensso.nippy-benchmarks     :as benchmarks]))

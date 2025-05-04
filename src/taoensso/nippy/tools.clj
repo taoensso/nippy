@@ -1,10 +1,8 @@
 (ns taoensso.nippy.tools
   "Utils for community tools that want to add user-configurable Nippy support.
   Used by Carmine, Faraday, etc."
-
-  (:refer-clojure :exclude [binding])
   (:require
-   [taoensso.encore :as enc :refer [binding]]
+   [taoensso.encore :as enc]
    [taoensso.nippy  :as nippy]))
 
 (def ^:dynamic *freeze-opts* nil)
