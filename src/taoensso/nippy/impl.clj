@@ -213,7 +213,7 @@
   When relevant, we can then warn users in the CHANGELOG to not leapfrog
   (e.g. Nippy vX -> Nippy vX+2) when doing rolling updates."
 
-  (enc/get-env {:as :edn, :default 320} :taoensso.nippy.target-release))
+  (enc/get-env {:as :edn, :default 350} :taoensso.nippy.target-release))
 
 (let [target>=
       (fn [min-release]
@@ -224,7 +224,7 @@
   (defmacro target-release<  [min-release] (not (target>= min-release)))
   (defmacro target-release>= [min-release]      (target>= min-release)))
 
-(comment (macroexpand '(target-release>= 340)))
+(comment (macroexpand '(target-release>= 350)))
 
 (comment
   ;; Track new type ids added over time

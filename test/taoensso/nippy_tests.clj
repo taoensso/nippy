@@ -208,7 +208,7 @@
 (comment (cmp-hashes (gen-hashes) ref-hashes)) ; []
 
 (deftest     _target-release
-  (is (= impl/target-release 320) "Default target release"))
+  (is (= impl/target-release 350) "Default target release"))
 
 (deftest   _stable-serialized-output
   (testing "Stable serialized output"
