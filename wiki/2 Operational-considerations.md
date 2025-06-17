@@ -16,14 +16,14 @@ From time to time, Nippy may introduce:
 
 To help ease **rolling updates** and to better support **rollback**, Nippy (since version v3.4.1) will always introduce such changes over **two version releases**:
 
-- Release 1: to add **read support** for the new types
-- Release 2: to add **write support** for the new types
+- Release 1: to add **thaw** (read) support for the new types
+- Release 2: to add **freeze** (write) support for the new types
 
 Starting from v3.4.1, Nippy's release notes will **always clearly indicate** if a particular update sequence is recommended.
 
 # Stability of byte output
 
-It has **never been an objective** of Nippy to offer **predictable byte output**, and I'd generally **recommend against** depending on specific byte output.
+It has never been an objective of Nippy to offer **predictable byte output**, and I'd generally **recommend against** depending on specific byte output.
 
 However, I know that a small minority of users *do* have specialized needs in this area.
 
