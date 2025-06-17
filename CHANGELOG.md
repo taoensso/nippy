@@ -2,12 +2,37 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.6.0` (2025-06-17)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.6.0)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+This is a minor **feature release** that adds freeze support for some new types.
+
+## Migration info
+
+👉 If doing a **rolling update** (>1 coexisting version) from Nippy < `v3.5.0`, please **FIRST** update to `v3.5.x` **THEN** to `v3.6.x`. (v3.5 adds thaw support for new types frozen by v3.6).
+
+No changes to API or [byte output](https://github.com/taoensso/nippy/wiki/2-Operational-considerations#stability-of-byte-output).
+
+As always:
+
+- Please **ensure adequate testing** before updating against production data!
+- Please report any unexpected problems 🙏
+- See [operational considerations](https://github.com/taoensso/nippy/wiki/2-Operational-considerations) for info on data longevity, rolling updates, etc.
+
+## Since `v3.5.0` (2025-04-15)
+
+- \[new] [#178] Add freeze support for native arrays: strings, longs, ints, doubles, floats
+
+---
+
 # `v3.5.0` (2025-04-15)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.5.0)
 - **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
 
-This is a **general maintenance release** focused on updating dependencies and laying groundwork (read support) for new array types coming in Nippy v3.6.
+This is a **general maintenance release** focused on updating dependencies and laying groundwork (thaw support) for new array types coming in Nippy v3.6.
 
 It **drops support for Clojure v1.9** but should otherwise be a safe update from (at least) all recent versions of Nippy.
 
@@ -26,6 +51,7 @@ It **drops support for Clojure v1.9** but should otherwise be a safe update from
 - \[new] Use [Truss exceptions](https://cljdoc.org/d/com.taoensso/truss/CURRENT/api/taoensso.truss#ex-info) on errors \[8d62dc2]
 - \[new] [#184] Incl. cause on non-native freeze failures \[8d10765]
 - \[new] [#175] Mark [cache](https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy#cache) feature as stable \[b217db5]
+- \[new] [#178] Add thaw support for native arrays: strings, longs, ints, doubles, floats
 - \[doc] Clarify `*freeze-fallback*` docstring \[1026ea0]
 
 ## Migration info
@@ -59,7 +85,7 @@ As always:
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.5.0-RC1)
 - **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
 
-This is a **non-breaking maintenance release** that updates dependencies and includes read support for more native array types to be introduced in a future v3.6 release.
+This is a **non-breaking maintenance release** that updates dependencies and includes thaw support for more native array types to be introduced in a future v3.6 release.
 
 It should be safe to update from (at least) all recent versions of Nippy.
 

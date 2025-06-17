@@ -13,7 +13,7 @@ It is used at scale by [Carmine](https://www.taoensso.com/carmine), [Faraday](ht
 
 ## Latest release/s
 
-- `2025-04-15` `v3.5.0`: [release info](../../releases/tag/v3.5.0)
+- `2025-05-18` `v3.6.0`: [release info](../../releases/tag/v3.6.0)
 
 [![Main tests][Main tests SVG]][Main tests URL]
 [![Graal tests][Graal tests SVG]][Graal tests URL]
