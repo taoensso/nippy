@@ -1,5 +1,8 @@
 <a href="https://www.taoensso.com/clojure" title="More stuff by @ptaoussanis at www.taoensso.com"><img src="https://www.taoensso.com/open-source.png" alt="Taoensso open source" width="340"/></a>  
-[**API**][cljdoc] | [**Wiki**][GitHub wiki] | [Latest releases](#latest-releases) | [Get support][GitHub issues]
+[**API**][cljdoc] | [**Wiki**][GitHub wiki] | [Support][GitHub issues] | Latest release: [v3.6.0](../../releases/tag/v3.6.0) (2025-05-18)
+
+[![Clj tests][Clj tests SVG]][Clj tests URL]
+[![Graal tests][Graal tests SVG]][Graal tests URL]
 
 # Nippy
 
@@ -10,15 +13,6 @@ Clojure's rich data types are awesome. And its [reader](https://clojure.org/refe
 Nippy is a mature, high-performance **drop-in alternative to the reader**.
 
 It is used at scale by [Carmine](https://www.taoensso.com/carmine), [Faraday](https://www.taoensso.com/faraday), [PigPen](https://github.com/Netflix/PigPen), [Onyx](https://github.com/onyx-platform/onyx), [XTDB](https://github.com/xtdb/xtdb), [Datalevin](https://github.com/juji-io/datalevin), and others.
-
-## Latest release/s
-
-- `2025-05-18` `v3.6.0`: [release info](../../releases/tag/v3.6.0)
-
-[![Main tests][Main tests SVG]][Main tests URL]
-[![Graal tests][Graal tests SVG]][Graal tests URL]
-
-See [here][GitHub releases] for earlier releases.
 
 ## Why Nippy?
 
@@ -99,7 +93,7 @@ PRs welcome to include other alternatives in the bench suite!
 
 ## Funding
 
-You can [help support][sponsor] continued work on this project, thank you!! 🙏
+You can [help support][sponsor] continued work on this project and [others][my work], thank you!! 🙏
 
 ## License
 
@@ -114,6 +108,7 @@ Licensed under [EPL 1.0](LICENSE.txt) (same as Clojure).
 
 [Peter Taoussanis]: https://www.taoensso.com
 [sponsor]:          https://www.taoensso.com/sponsor
+[my work]:          https://www.taoensso.com/clojure-libraries
 
 <!-- Project -->
 
@@ -122,7 +117,7 @@ Licensed under [EPL 1.0](LICENSE.txt) (same as Clojure).
 [Clojars SVG]: https://img.shields.io/clojars/v/com.taoensso/nippy.svg
 [Clojars URL]: https://clojars.org/com.taoensso/nippy
 
-[Main tests SVG]:  https://github.com/taoensso/nippy/actions/workflows/main-tests.yml/badge.svg
-[Main tests URL]:  https://github.com/taoensso/nippy/actions/workflows/main-tests.yml
+[Clj tests SVG]:  https://github.com/taoensso/nippy/actions/workflows/clj-tests.yml/badge.svg
+[Clj tests URL]:  https://github.com/taoensso/nippy/actions/workflows/clj-tests.yml
 [Graal tests SVG]: https://github.com/taoensso/nippy/actions/workflows/graal-tests.yml/badge.svg
 [Graal tests URL]: https://github.com/taoensso/nippy/actions/workflows/graal-tests.yml
