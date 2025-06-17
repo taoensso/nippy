@@ -38,8 +38,8 @@
      "-Dtaoensso.elide-deprecated=true"
      "-Dtaoensso.nippy.thaw-serializable-allowlist-base=base.1, base.2"
      "-Dtaoensso.nippy.thaw-serializable-allowlist-add=add.1 , add.2"
-     #_"-Dtaoensso.nippy.target-release=320"
-     #_"-Dtaoensso.nippy.target-release=350"]
+     #_"-Dtaoensso.nippy.pack-unsigned=true"
+     #_"-Dtaoensso.nippy.target-release=320"]
 
     :global-vars
     {*warn-on-reflection* true

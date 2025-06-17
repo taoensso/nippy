@@ -175,13 +175,61 @@
   (defn serializable-allowed? [allow-list class-name]
     (conform? allow-list class-name)))
 
-;;;; Release targeting
+;;;; Compatibility config
+
+(def pack-unsigned?
+  "Use tight packing for unsigned integer types?
+  Disabled by default since:
+    1. The benefit (reduced output size) is generally small, and
+    2. Enabling this would change Nippy's byte output for some common data
+       types - possibly affecting the small minority of users that depend
+       on specific byte output."
+  (enc/get-env {:as :bool, :default false} :taoensso.nippy.pack-unsigned))
+
+(def target-release
+  "When freezing values, Nippy will target compatibility with the Nippy version
+  specified here: 325 for Nippy v3.2.5, etc.
+
+  Used to help ease data migration for changes to core data types.
+
+  When support is added for a new type in Nippy version X, it necessarily means
+  that data containing that new type and frozen with Nippy version X is unthawable
+  with Nippy versions < X.
+
+  Earlier versions of Nippy will throw an exception on thawing affected data:
+    \"Unrecognized type id (<n>). Data frozen with newer Nippy version?\"
+
+  This can present a challenge when updating to new versions of Nippy, e.g.:
+
+    - Rolling updates could lead to old and new versions of Nippy temporarily co-existing.
+    - Data written with new types could limit your ability to revert a Nippy update.
+
+  There's no easy solution to this in GENERAL, but we CAN at least help reduce the
+  burden related to CHANGES in core data types by introducing changes over 2 phases:
+
+    1. Nippy vX   reads  new (changed) type, writes old type
+    2. Nippy vX+1 writes new (changed) type
+
+  When relevant, we can then warn users in the CHANGELOG to not leapfrog
+  (e.g. Nippy vX -> Nippy vX+2) when doing rolling updates."
+
+  (enc/get-env {:as :edn, :default 320} :taoensso.nippy.target-release))
+
+(let [target>=
+      (fn [min-release]
+        (if         target-release
+          (>= (long target-release) (long min-release))
+          true))]
+
+  (defmacro target-release<  [min-release] (not (target>= min-release)))
+  (defmacro target-release>= [min-release]      (target>= min-release)))
+
+(comment (macroexpand '(target-release>= 340)))
 
 (comment
-  (set! *print-length* nil)
+  ;; Track new type ids added over time
   (vec (sort (keys taoensso.nippy/public-types-spec)))
 
-  ;; To help support release targeting, we track new type ids added over time
   (let [id-history ; {<release> #{type-ids}}
         {350 ; v3.5.0 (2025-04-15), added 5x
          ;; #{int-array-lg long-array-lg float-array-lg double-array-lg string-array-lg}
@@ -232,42 +280,3 @@
           (vec (sort (clojure.set/difference (id-history new-release) (id-history old-release)))))]
 
     (diff 350 340)))
-
-(let [target-release
-      (enc/get-env {:as :edn, :default 320}
-        :taoensso.nippy.target-release)
-
-      target>=
-      (fn [min-release]
-        (if target-release
-          (>= (long target-release) (long min-release))
-          true))]
-
-  (defmacro target-release< [min-release] (not (target>= min-release)))
-  (defmacro target-release>=
-    "Returns true iff `target-release` is nil or >= given `min-release`.
-    Used to help ease data migration for changes to core data types.
-
-    When support is added for a new type in Nippy version X, it necessarily means
-    that data containing that new type and frozen with Nippy version X is unthawable
-    with Nippy versions < X.
-
-    Earlier versions of Nippy will throw an exception on thawing affected data:
-      \"Unrecognized type id (<n>). Data frozen with newer Nippy version?\"
-
-    This can present a challenge when updating to new versions of Nippy, e.g.:
-
-      - Rolling updates could lead to old and new versions of Nippy temporarily co-existing.
-      - Data written with new types could limit your ability to revert a Nippy update.
-
-    There's no easy solution to this in GENERAL, but we CAN at least help reduce the
-    burden related to CHANGES in core data types by introducing changes over 2 phases:
-
-      1. Nippy vX   reads  new (changed) type, writes old type
-      2. Nippy vX+1 writes new (changed) type
-
-    When relevant, we can then warn users in the CHANGELOG to not leapfrog
-    (e.g. Nippy vX -> Nippy vX+2) when doing rolling updates."
-    [min-release] (target>= min-release)))
-
-(comment (macroexpand '(target-release>= 340)))
