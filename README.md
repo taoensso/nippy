@@ -15,7 +15,7 @@ It is used at scale by [Carmine](https://www.taoensso.com/carmine), [Faraday](ht
 
 - `2025-05-18` `v3.6.0`: [release info](../../releases/tag/v3.6.0)
 
-[![Main tests][Main tests SVG]][Main tests URL]
+[![Clj tests][Clj tests SVG]][Clj tests URL]
 [![Graal tests][Graal tests SVG]][Graal tests URL]
 
 See [here][GitHub releases] for earlier releases.
@@ -122,7 +122,7 @@ Licensed under [EPL 1.0](LICENSE.txt) (same as Clojure).
 [Clojars SVG]: https://img.shields.io/clojars/v/com.taoensso/nippy.svg
 [Clojars URL]: https://clojars.org/com.taoensso/nippy
 
-[Main tests SVG]:  https://github.com/taoensso/nippy/actions/workflows/main-tests.yml/badge.svg
-[Main tests URL]:  https://github.com/taoensso/nippy/actions/workflows/main-tests.yml
+[Clj tests SVG]:  https://github.com/taoensso/nippy/actions/workflows/clj-tests.yml/badge.svg
+[Clj tests URL]:  https://github.com/taoensso/nippy/actions/workflows/clj-tests.yml
 [Graal tests SVG]: https://github.com/taoensso/nippy/actions/workflows/graal-tests.yml/badge.svg
 [Graal tests URL]: https://github.com/taoensso/nippy/actions/workflows/graal-tests.yml
