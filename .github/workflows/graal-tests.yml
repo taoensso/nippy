@@ -2,7 +2,7 @@ name: Graal tests
 on: [push, pull_request]
 
 jobs:
-  test:
+  tests:
     strategy:
       matrix:
         java: ['17']
@@ -29,4 +29,8 @@ jobs:
           key: deps-${{ hashFiles('deps.edn') }}
           restore-keys: deps-
 
-      - run: bb graal-tests
+      - name: Run Graal tests
+        run: bb graal-tests
+
+#     - name: Run Babashka tests
+#       run: bb bb-tests

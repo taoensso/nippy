@@ -9,7 +9,7 @@
 
   :dependencies
   [[org.clojure/tools.reader "1.5.2"]
-   [com.taoensso/encore      "3.142.0"]
+   [com.taoensso/encore      "3.148.0"]
    [org.tukaani/xz           "1.10"]
    [io.airlift/aircompressor "2.0.2"]]
 
@@ -18,7 +18,7 @@
   :profiles
   {;; :default [:base :system :user :provided :dev]
    :provided {:dependencies [[org.clojure/clojure "1.11.4"]]}
-   :c1.12    {:dependencies [[org.clojure/clojure "1.12.0"]]}
+   :c1.12    {:dependencies [[org.clojure/clojure "1.12.1"]]}
    :c1.11    {:dependencies [[org.clojure/clojure "1.11.4"]]}
    :c1.10    {:dependencies [[org.clojure/clojure "1.10.3"]]}
 

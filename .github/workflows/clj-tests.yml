@@ -1,4 +1,4 @@
-name: Main tests
+name: Clj tests
 on: [push, pull_request]
 
 jobs:
@@ -7,7 +7,6 @@ jobs:
       matrix:
         java: ['17', '19', '21']
         os: [ubuntu-latest]
-
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -15,16 +14,13 @@ jobs:
         with:
           distribution: 'corretto'
           java-version: ${{ matrix.java }}
-
       - uses: DeLaGuardo/setup-clojure@12.5
         with:
           lein: latest
-
       - uses: actions/cache@v4
         id: cache-deps
         with:
           path: ~/.m2/repository
           key: deps-${{ hashFiles('project.clj') }}
           restore-keys: deps-
-
-      - run: lein test-all
+      - run: lein test-clj
