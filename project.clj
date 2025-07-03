@@ -48,7 +48,8 @@
 
     :dependencies
     [[org.clojure/test.check    "1.1.1"]
-     [org.clojure/data.fressian "1.1.0"]]
+     [org.clojure/data.fressian "1.1.0"]
+     [org.apache.fory/fory-core "0.11.1"]]
 
     :plugins
     [[lein-pprint  "1.3.2"]
