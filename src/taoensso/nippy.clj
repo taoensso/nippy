@@ -1132,25 +1132,28 @@
 
     (-freeze-without-meta! (into {} x) out)))
 
-(let [munged-name (enc/fmemoize #(munge (name %)))
-      get-basis
-      (do #_enc/fmemoize ; Small perf benefit not worth the loss of dynamism
-        (fn [^java.lang.Class aclass]
-          (let [basis-method (.getMethod aclass "getBasis" nil)]
-            (.invoke basis-method nil nil))))]
+(def ^:private get-basis-fields
+  "Returns [`java.lang.reflect.Field` ...] for given class."
+  (enc/fmemoize
+    (fn [^Class c] ; Auto invalidated on `deftype` redef, etc.
+      (let [basis (.invoke (.getMethod c "getBasis" nil) nil nil)]
+        (mapv
+          (fn [f]
+            (let [field (.getDeclaredField c (munge (name f)))]
+              (.setAccessible field true)
+              (do             field)))
+          basis)))))
 
-  (freezer IType nil true
-    (let [aclass     (class x)
-          class-name (.getName aclass)]
-      (write-id  out id-type)
-      (write-str out class-name)
-      (-run!
-        (fn [b]
-          (let [^Field cfield (.getField aclass (munged-name b))]
-            (-freeze-without-meta! (.get cfield x) out)))
-        (get-basis aclass)))))
+(freezer IType nil true
+  (let [c (class x)]
+    (write-id  out id-type)
+    (write-str out (.getName c))
+    (-run! (fn [^java.lang.reflect.Field f] (-freeze-without-meta! (.get f x) out))
+      (get-basis-fields c))))
 
-(comment (do (deftype T1 [x]) (.invoke (.getMethod (class (T1. :x)) "getBasis" nil) nil nil)))
+(comment
+  (do (deftype T1 [x])                          (let [t1 (T1. :x)] (get-basis-fields (class t1))))
+  (do (deftype T2 [^:unsynchronized-mutable x]) (let [t2 (T2. :x)] (get-basis-fields (class t2)))))
 
 (enc/compile-if java.time.Instant
   (freezer      java.time.Instant id-time-instant true
@@ -1404,8 +1407,6 @@
 
 (defn- read-kvs-depr [to ^DataInput in] (read-kvs-into to in (quot (.readInt in) 2)))
 
-(def ^:private class-method-sig (into-array Class [IPersistentMap]))
-
 (defn- read-custom! [in prefixed? type-id]
   (if-let [custom-reader (get *custom-readers* type-id)]
     (try
@@ -1497,39 +1498,36 @@
       "Cannot thaw object: `taoensso.nippy/*thaw-serializable-allowlist*` check failed. This is a security feature. See `*thaw-serializable-allowlist*` docstring or https://github.com/ptaoussanis/nippy/issues/130 for details!"
       {:class-name class-name})))
 
-(defn- read-record [in class-name]
-  (let [content (thaw-from-in! in)]
-    (try
-      (let [class  (clojure.lang.RT/classForName class-name)
-            method (.getMethod class "create" class-method-sig)]
-        (.invoke method class (into-array Object [content])))
-      (catch Exception e
-        {:nippy/unthawable
-         {:type  :record
-          :cause :exception
+(let [class-method-sig (into-array Class [IPersistentMap])]
+  (defn- read-record [in class-name]
+    (let [content (thaw-from-in! in)]
+      (try
+        (let [c   (clojure.lang.RT/classForName class-name)
+              ctr (.getMethod c "create" class-method-sig)]
+          (.invoke ctr c (into-array Object [content])))
+        (catch Exception e
+          {:nippy/unthawable
+           {:type  :record
+            :cause :exception
 
-          :class-name class-name
-          :content    content
-          :exception  e}}))))
+            :class-name class-name
+            :content    content
+            :exception  e}})))))
 
 (defn- read-type [in class-name]
   (try
-    (let [aclass (clojure.lang.RT/classForName class-name)
-          nbasis
-          (let [basis-method (.getMethod aclass "getBasis" nil)
-                basis        (.invoke basis-method nil nil)]
-            (count basis))
+    (let [c (clojure.lang.RT/classForName class-name)
+          num-fields (count (get-basis-fields c))
+          field-vals (object-array num-fields)
 
-          cvalues (object-array nbasis)]
+          ;; Ref. <https://github.com/clojure/clojure/blob/e78519c174fb506afa70e236af509e73160f022a/src/jvm/clojure/lang/Compiler.java#L4799>
+          ^Constructor ctr (aget (.getConstructors c) 0)]
 
       (enc/reduce-n
-        (fn [_ i] (aset cvalues i (thaw-from-in! in)))
-        nil nbasis)
+        (fn [_ i] (aset field-vals i (thaw-from-in! in)))
+        nil num-fields)
 
-      (let [ctors (.getConstructors aclass)
-            ^Constructor ctor (aget ctors 0) ; Impl. detail? Ref. <https://goo.gl/XWmckR>
-            ]
-        (.newInstance ctor cvalues)))
+      (.newInstance ctr field-vals))
 
     (catch Exception e
       {:nippy/unthawable
@@ -1997,10 +1995,10 @@
 
 ;;;; Stress data
 
-(defrecord StressRecord [my-data])
-(deftype   StressType   [my-data]
-  Object (equals [a b] (and (instance? StressType b) (= (.-my-data             a)
-                                                        (.-my-data ^StressType b)))))
+(defrecord StressRecord [x])
+(deftype   StressType [x ^:unsynchronized-mutable y]
+  clojure.lang.IDeref (deref [_] [x y])
+  Object (equals [_ other] (and (instance? StressType other) (= [x y] @other))))
 
 (defn stress-data
   "Returns map of reference stress data for use by tests, benchmarks, etc."
@@ -2054,7 +2052,7 @@
          :uuid      (java.util.UUID. 7232453380187312026 -7067939076204274491)
          :uri       (java.net.URI. "https://clojure.org")
          :defrecord (StressRecord. "data")
-         :deftype   (StressType.   "data")
+         :deftype   (StressType.   "normal field" "private field")
 
          :util-date (java.util.Date. 1577884455500)
          :sql-date  (java.sql.Date.  1577884455500)
