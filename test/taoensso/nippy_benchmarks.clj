@@ -3,8 +3,80 @@
    [clojure.data.fressian      :as fress]
    [taoensso.encore            :as enc]
    [taoensso.nippy             :as nippy]
-   [taoensso.nippy.compression :as compr]))
+   [taoensso.nippy.compression :as compr])
 
+  (:import
+   [clojure.lang APersistentVector$RSeq APersistentVector$Seq APersistentVector$SubVector BigInt Cons Keyword LazySeq
+    MapEntry PersistentArrayMap PersistentHashMap PersistentHashMap$ArrayNode PersistentHashMap$BitmapIndexedNode
+    PersistentHashMap$HashCollisionNode PersistentHashMap$INode PersistentHashSet PersistentList
+    PersistentList$EmptyList PersistentList$Primordial PersistentStructMap PersistentTreeMap PersistentTreeMap$Black
+    PersistentTreeMap$BlackBranch PersistentTreeMap$BlackBranchVal PersistentTreeMap$BlackVal PersistentTreeMap$Node
+    PersistentTreeMap$Red PersistentTreeMap$RedBranch PersistentTreeMap$RedBranchVal PersistentTreeMap$RedVal
+    PersistentTreeSet PersistentVector PersistentVector$ChunkedSeq PersistentVector$Node RT$DefaultComparator
+    Ratio Symbol]
+   [org.apache.fory Fory]
+   [org.apache.fory.config Language]))
+
+;;;; Fory
+(def ^Fory fory (let [fory (-> (Fory/builder)
+                               (.suppressClassRegistrationWarnings true)
+                               (.requireClassRegistration false)
+                               (.withLanguage Language/JAVA)
+                               .build)
+                      classes [Keyword
+                               Symbol
+                               LazySeq
+                               Cons
+                               BigInt
+                               Ratio
+                               RT$DefaultComparator
+                               MapEntry
+                               PersistentTreeMap$Black
+                               PersistentTreeMap$BlackVal
+                               PersistentTreeMap$BlackBranch
+                               PersistentTreeMap$BlackBranchVal
+                               PersistentTreeMap$Node
+                               PersistentTreeMap$Red
+                               PersistentTreeMap$RedVal
+                               PersistentTreeMap$RedBranch
+                               PersistentTreeMap$RedBranchVal
+                               PersistentTreeMap
+                               PersistentArrayMap
+                               PersistentTreeMap
+                               PersistentStructMap
+                               PersistentHashMap
+                               PersistentHashMap$ArrayNode
+                               PersistentHashMap$INode
+                               PersistentHashMap$BitmapIndexedNode
+                               PersistentHashMap$HashCollisionNode
+                               PersistentHashSet
+                               PersistentTreeSet
+                               PersistentVector
+                               PersistentVector$ChunkedSeq
+                               APersistentVector$SubVector
+                               APersistentVector$Seq
+                               APersistentVector$RSeq
+                               PersistentVector$Node
+                               PersistentList
+                               PersistentList$EmptyList
+                               PersistentList$Primordial
+                               ;benchmark-specific classes
+                               #_StressType
+                               #_StressRecord]]
+                  (run! #(.register ^Fory fory %) classes)
+                  fory))
+
+(defn- freeze-fory [x]
+  (.serialize fory x))
+
+(defn- thaw-fory [^bytes ba]
+  (.deserialize fory ba))
+
+(comment
+  (= (nippy/stress-data {:comparable? true})
+     (thaw-fory
+       (freeze-fory
+         (nippy/stress-data {:comparable? true})))))
 ;;;; Reader
 
 (defn- freeze-reader [x]   (enc/pr-edn   x))
@@ -72,7 +144,7 @@
   (do           results))
 
 (defn bench-serialization
-  [{:keys [all? reader? fressian? fressian? lzma2? laps warmup bench-data]
+  [{:keys [all? fory? reader? fressian? lzma2? laps warmup bench-data]
     :as   opts
     :or
     {laps   1e4
@@ -81,6 +153,12 @@
   (println "\nRunning benchmarks...")
 
   (let [results_ (atom {})]
+    (when (or all? fory?)
+      (println "  With Fory...")
+      (swap! results_ assoc :fory
+             (bench1-serialization freeze-fory thaw-fory alength
+                                   (assoc opts :laps laps, :warmup warmup))))
+
     (when (or all? reader?)
       (println "  With Reader...")
       (swap! results_ assoc :reader
