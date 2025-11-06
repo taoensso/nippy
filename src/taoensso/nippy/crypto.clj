@@ -29,10 +29,10 @@
 
 ;;;; Hashing
 
-(def ^:private sha256-md* (enc/thread-local-proxy (java.security.MessageDigest/getInstance "SHA-256")))
-(def ^:private sha512-md* (enc/thread-local-proxy (java.security.MessageDigest/getInstance "SHA-512")))
-(defn  sha256-md ^java.security.MessageDigest [] (.get ^ThreadLocal sha256-md*))
-(defn  sha512-md ^java.security.MessageDigest [] (.get ^ThreadLocal sha512-md*))
+(def ^:private tl:sha256-md (enc/threadlocal (java.security.MessageDigest/getInstance "SHA-256")))
+(def ^:private tl:sha512-md (enc/threadlocal (java.security.MessageDigest/getInstance "SHA-512")))
+(defn  sha256-md ^java.security.MessageDigest [] (.get ^ThreadLocal tl:sha256-md))
+(defn  sha512-md ^java.security.MessageDigest [] (.get ^ThreadLocal tl:sha512-md))
 (defn  sha256-ba ^bytes [ba] (.digest (sha256-md) ba))
 (defn  sha512-ba ^bytes [ba] (.digest (sha512-md) ba))
 
@@ -73,11 +73,11 @@
   (get-param-spec ^java.security.spec.AlgorithmParameterSpec [_ iv-ba] "Returns a `java.security.spec.AlgorithmParameters`."))
 
 ;; Prefer GCM > CBC, Ref. <https://goo.gl/jpZoj8>
-(def ^:private gcm-cipher* (enc/thread-local-proxy (javax.crypto.Cipher/getInstance "AES/GCM/NoPadding")))
-(def ^:private cbc-cipher* (enc/thread-local-proxy (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
+(def ^:private tl:gcm-cipher (enc/threadlocal (javax.crypto.Cipher/getInstance "AES/GCM/NoPadding")))
+(def ^:private tl:cbc-cipher (enc/threadlocal (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
 
-(defn gcm-cipher ^javax.crypto.Cipher [] (.get ^ThreadLocal gcm-cipher*))
-(defn cbc-cipher ^javax.crypto.Cipher [] (.get ^ThreadLocal cbc-cipher*))
+(defn gcm-cipher ^javax.crypto.Cipher [] (.get tl:gcm-cipher))
+(defn cbc-cipher ^javax.crypto.Cipher [] (.get tl:cbc-cipher))
 ;
 (deftype CipherKit-AES-GCM []
   ICipherKit
