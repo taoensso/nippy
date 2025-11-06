@@ -9,7 +9,7 @@
 
   :dependencies
   [[org.clojure/tools.reader "1.5.2"]
-   [com.taoensso/encore      "3.148.0"]
+   [com.taoensso/encore      "3.158.0"]
    [org.tukaani/xz           "1.10"]
    [io.airlift/aircompressor "2.0.2"]]
 
