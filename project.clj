@@ -8,17 +8,17 @@
    :url  "https://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies
-  [[org.clojure/tools.reader "1.5.2"]
-   [com.taoensso/encore      "3.148.0"]
-   [org.tukaani/xz           "1.10"]
+  [[org.clojure/tools.reader "1.6.0"]
+   [com.taoensso/encore      "3.160.0"]
+   [org.tukaani/xz           "1.12"]
    [io.airlift/aircompressor "2.0.2"]]
 
   :test-paths ["test" #_"src"]
 
   :profiles
   {;; :default [:base :system :user :provided :dev]
-   :provided {:dependencies [[org.clojure/clojure "1.11.4"]]}
-   :c1.12    {:dependencies [[org.clojure/clojure "1.12.1"]]}
+   :provided {:dependencies [[org.clojure/clojure "1.12.4"]]}
+   :c1.12    {:dependencies [[org.clojure/clojure "1.12.4"]]}
    :c1.11    {:dependencies [[org.clojure/clojure "1.11.4"]]}
    :c1.10    {:dependencies [[org.clojure/clojure "1.10.3"]]}
 
@@ -47,8 +47,8 @@
      *unchecked-math*     false #_:warn-on-boxed}
 
     :dependencies
-    [[org.clojure/test.check    "1.1.1"]
-     [org.clojure/data.fressian "1.1.0"]]
+    [[org.clojure/test.check    "1.1.3"]
+     [org.clojure/data.fressian "1.1.1"]]
 
     :plugins
     [[lein-pprint  "1.3.2"]
