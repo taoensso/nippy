@@ -89,43 +89,43 @@
       ba-out)))
 
 (do
-  (enc/def* ^:private airlift-zstd-compressor_   (enc/thread-local (io.airlift.compress.zstd.ZstdCompressor.)))
-  (enc/def* ^:private airlift-zstd-decompressor_ (enc/thread-local (io.airlift.compress.zstd.ZstdDecompressor.)))
+  (enc/def* ^:private tl:airlift-zstd-compressor   (enc/threadlocal (io.airlift.compress.zstd.ZstdCompressor.)))
+  (enc/def* ^:private tl:airlift-zstd-decompressor (enc/threadlocal (io.airlift.compress.zstd.ZstdDecompressor.)))
   (deftype ZstdCompressor [prepend-size?]
     ICompressor
     (header-id  [_] :zstd)
-    (compress   [_ ba] (airlift-compress   @airlift-zstd-compressor_   ba prepend-size?))
-    (decompress [_ ba] (airlift-decompress @airlift-zstd-decompressor_ ba
+    (compress   [_ ba] (airlift-compress   (.get ^ThreadLocal tl:airlift-zstd-compressor)   ba prepend-size?))
+    (decompress [_ ba] (airlift-decompress (.get ^ThreadLocal tl:airlift-zstd-decompressor) ba
                          (when-not prepend-size?
                            (io.airlift.compress.zstd.ZstdDecompressor/getDecompressedSize ba
                              0 (alength ^bytes ba)))))))
 
 (do
-  (enc/def* ^:private airlift-lz4-compressor_   (enc/thread-local (io.airlift.compress.lz4.Lz4Compressor.)))
-  (enc/def* ^:private airlift-lz4-decompressor_ (enc/thread-local (io.airlift.compress.lz4.Lz4Decompressor.)))
+  (enc/def* ^:private tl:airlift-lz4-compressor   (enc/threadlocal (io.airlift.compress.lz4.Lz4Compressor.)))
+  (enc/def* ^:private tl:airlift-lz4-decompressor (enc/threadlocal (io.airlift.compress.lz4.Lz4Decompressor.)))
   (deftype LZ4Compressor []
     ICompressor
     (header-id  [_] :lz4)
-    (compress   [_ ba] (airlift-compress   @airlift-lz4-compressor_   ba true))
-    (decompress [_ ba] (airlift-decompress @airlift-lz4-decompressor_ ba nil))))
+    (compress   [_ ba] (airlift-compress   (.get ^ThreadLocal tl:airlift-lz4-compressor)   ba true))
+    (decompress [_ ba] (airlift-decompress (.get ^ThreadLocal tl:airlift-lz4-decompressor) ba nil))))
 
 (do
-  (enc/def* ^:private airlift-lzo-compressor_   (enc/thread-local (io.airlift.compress.lzo.LzoCompressor.)))
-  (enc/def* ^:private airlift-lzo-decompressor_ (enc/thread-local (io.airlift.compress.lzo.LzoDecompressor.)))
+  (enc/def* ^:private tl:airlift-lzo-compressor   (enc/threadlocal (io.airlift.compress.lzo.LzoCompressor.)))
+  (enc/def* ^:private tl:airlift-lzo-decompressor (enc/threadlocal (io.airlift.compress.lzo.LzoDecompressor.)))
   (deftype LZOCompressor []
     ICompressor
     (header-id  [_] :lzo)
-    (compress   [_ ba] (airlift-compress   @airlift-lzo-compressor_   ba true))
-    (decompress [_ ba] (airlift-decompress @airlift-lzo-decompressor_ ba nil))))
+    (compress   [_ ba] (airlift-compress   (.get ^ThreadLocal tl:airlift-lzo-compressor)   ba true))
+    (decompress [_ ba] (airlift-decompress (.get ^ThreadLocal tl:airlift-lzo-decompressor) ba nil))))
 
 (do
-  (enc/def* ^:private airlift-snappy-compressor_   (enc/thread-local (io.airlift.compress.snappy.SnappyCompressor.)))
-  (enc/def* ^:private airlift-snappy-decompressor_ (enc/thread-local (io.airlift.compress.snappy.SnappyDecompressor.)))
+  (enc/def* ^:private tl:airlift-snappy-compressor   (enc/threadlocal (io.airlift.compress.snappy.SnappyCompressor.)))
+  (enc/def* ^:private tl:airlift-snappy-decompressor (enc/threadlocal (io.airlift.compress.snappy.SnappyDecompressor.)))
   (deftype SnappyCompressor [prepend-size?]
     ICompressor
     (header-id  [_] :snappy)
-    (compress   [_ ba] (airlift-compress   @airlift-snappy-compressor_   ba prepend-size?))
-    (decompress [_ ba] (airlift-decompress @airlift-snappy-decompressor_ ba
+    (compress   [_ ba] (airlift-compress   (.get ^ThreadLocal tl:airlift-snappy-compressor)   ba prepend-size?))
+    (decompress [_ ba] (airlift-decompress (.get ^ThreadLocal tl:airlift-snappy-decompressor) ba
                          (when-not prepend-size?
                            (io.airlift.compress.snappy.SnappyDecompressor/getUncompressedLength ba 0))))))
 
