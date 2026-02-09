@@ -8,10 +8,10 @@
    :url  "https://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies
-  [[org.clojure/tools.reader "1.5.2"]
-   [com.taoensso/encore      "3.158.0"]
-   [org.tukaani/xz           "1.10"]
-   [io.airlift/aircompressor "2.0.2"]]
+  [[org.clojure/tools.reader    "1.5.2"]
+   [com.taoensso/encore         "3.158.0"]
+   [org.tukaani/xz              "1.10"]
+   [io.airlift/aircompressor-v3 "3.5"]]
 
   :test-paths ["test" #_"src"]
 
@@ -38,6 +38,7 @@
      "-Dtaoensso.elide-deprecated=true"
      "-Dtaoensso.nippy.thaw-serializable-allowlist-base=base.1, base.2"
      "-Dtaoensso.nippy.thaw-serializable-allowlist-add=add.1 , add.2"
+     "--enable-native-access=ALL-UNNAMED"
      #_"-Dtaoensso.nippy.pack-unsigned=true"
      #_"-Dtaoensso.nippy.target-release=350"]
 

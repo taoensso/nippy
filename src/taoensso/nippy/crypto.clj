@@ -73,8 +73,8 @@
   (get-param-spec ^java.security.spec.AlgorithmParameterSpec [_ iv-ba] "Returns a `java.security.spec.AlgorithmParameters`."))
 
 ;; Prefer GCM > CBC, Ref. <https://goo.gl/jpZoj8>
-(def ^:private tl:gcm-cipher (enc/threadlocal (javax.crypto.Cipher/getInstance "AES/GCM/NoPadding")))
-(def ^:private tl:cbc-cipher (enc/threadlocal (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
+(def ^:private ^ThreadLocal tl:gcm-cipher (enc/threadlocal (javax.crypto.Cipher/getInstance "AES/GCM/NoPadding")))
+(def ^:private ^ThreadLocal tl:cbc-cipher (enc/threadlocal (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
 
 (defn gcm-cipher ^javax.crypto.Cipher [] (.get tl:gcm-cipher))
 (defn cbc-cipher ^javax.crypto.Cipher [] (.get tl:cbc-cipher))

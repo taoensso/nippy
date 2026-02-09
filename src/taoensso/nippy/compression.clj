@@ -39,7 +39,7 @@
 ;;;; Airlift
 
 (defn- airlift-compress
-  ^bytes [^io.airlift.compress.Compressor c ^bytes ba prepend-size?]
+  ^bytes [^io.airlift.compress.v3.Compressor c ^bytes ba prepend-size?]
   (let [in-len      (alength ba)
         max-out-len (.maxCompressedLength c in-len)]
 
@@ -67,7 +67,7 @@
           (java.util.Arrays/copyOfRange ba-max-out 0 out-len))))))
 
 (defn- airlift-decompress
-  ^bytes [^io.airlift.compress.Decompressor d ^bytes ba max-out-len]
+  ^bytes [^io.airlift.compress.v3.Decompressor d ^bytes ba max-out-len]
   (if max-out-len
     (let [max-out-len (int        max-out-len)
           ba-max-out  (byte-array max-out-len)
@@ -89,20 +89,21 @@
       ba-out)))
 
 (do
-  (enc/def* ^:private tl:airlift-zstd-compressor   (enc/threadlocal (io.airlift.compress.zstd.ZstdCompressor.)))
-  (enc/def* ^:private tl:airlift-zstd-decompressor (enc/threadlocal (io.airlift.compress.zstd.ZstdDecompressor.)))
+  (enc/def* ^:private tl:airlift-zstd-compressor   (enc/threadlocal (io.airlift.compress.v3.zstd.ZstdCompressor/create)))
+  (enc/def* ^:private tl:airlift-zstd-decompressor (enc/threadlocal (io.airlift.compress.v3.zstd.ZstdDecompressor/create)))
   (deftype ZstdCompressor [prepend-size?]
     ICompressor
     (header-id  [_] :zstd)
     (compress   [_ ba] (airlift-compress   (.get ^ThreadLocal tl:airlift-zstd-compressor)   ba prepend-size?))
-    (decompress [_ ba] (airlift-decompress (.get ^ThreadLocal tl:airlift-zstd-decompressor) ba
-                         (when-not prepend-size?
-                           (io.airlift.compress.zstd.ZstdDecompressor/getDecompressedSize ba
-                             0 (alength ^bytes ba)))))))
+    (decompress [_ ba]
+      (let [^io.airlift.compress.v3.zstd.ZstdDecompressor decompressor (.get ^ThreadLocal tl:airlift-zstd-decompressor)]
+        (airlift-decompress decompressor ba
+                            (when-not prepend-size?
+                              (.getDecompressedSize decompressor ba 0 (alength ^bytes ba))))))))
 
 (do
-  (enc/def* ^:private tl:airlift-lz4-compressor   (enc/threadlocal (io.airlift.compress.lz4.Lz4Compressor.)))
-  (enc/def* ^:private tl:airlift-lz4-decompressor (enc/threadlocal (io.airlift.compress.lz4.Lz4Decompressor.)))
+  (enc/def* ^:private tl:airlift-lz4-compressor   (enc/threadlocal (io.airlift.compress.v3.lz4.Lz4Compressor/create)))
+  (enc/def* ^:private tl:airlift-lz4-decompressor (enc/threadlocal (io.airlift.compress.v3.lz4.Lz4Decompressor/create)))
   (deftype LZ4Compressor []
     ICompressor
     (header-id  [_] :lz4)
@@ -110,8 +111,8 @@
     (decompress [_ ba] (airlift-decompress (.get ^ThreadLocal tl:airlift-lz4-decompressor) ba nil))))
 
 (do
-  (enc/def* ^:private tl:airlift-lzo-compressor   (enc/threadlocal (io.airlift.compress.lzo.LzoCompressor.)))
-  (enc/def* ^:private tl:airlift-lzo-decompressor (enc/threadlocal (io.airlift.compress.lzo.LzoDecompressor.)))
+  (enc/def* ^:private tl:airlift-lzo-compressor   (enc/threadlocal (io.airlift.compress.v3.lzo.LzoCompressor.)))
+  (enc/def* ^:private tl:airlift-lzo-decompressor (enc/threadlocal (io.airlift.compress.v3.lzo.LzoDecompressor.)))
   (deftype LZOCompressor []
     ICompressor
     (header-id  [_] :lzo)
@@ -119,15 +120,17 @@
     (decompress [_ ba] (airlift-decompress (.get ^ThreadLocal tl:airlift-lzo-decompressor) ba nil))))
 
 (do
-  (enc/def* ^:private tl:airlift-snappy-compressor   (enc/threadlocal (io.airlift.compress.snappy.SnappyCompressor.)))
-  (enc/def* ^:private tl:airlift-snappy-decompressor (enc/threadlocal (io.airlift.compress.snappy.SnappyDecompressor.)))
+  (enc/def* ^:private tl:airlift-snappy-compressor   (enc/threadlocal (io.airlift.compress.v3.snappy.SnappyCompressor/create)))
+  (enc/def* ^:private tl:airlift-snappy-decompressor (enc/threadlocal (io.airlift.compress.v3.snappy.SnappyDecompressor/create)))
   (deftype SnappyCompressor [prepend-size?]
     ICompressor
     (header-id  [_] :snappy)
     (compress   [_ ba] (airlift-compress   (.get ^ThreadLocal tl:airlift-snappy-compressor)   ba prepend-size?))
-    (decompress [_ ba] (airlift-decompress (.get ^ThreadLocal tl:airlift-snappy-decompressor) ba
-                         (when-not prepend-size?
-                           (io.airlift.compress.snappy.SnappyDecompressor/getUncompressedLength ba 0))))))
+    (decompress [_ ba]
+      (let [^io.airlift.compress.v3.snappy.SnappyDecompressor decompressor (.get ^ThreadLocal tl:airlift-snappy-decompressor)]
+        (airlift-decompress decompressor ba
+                            (when-not prepend-size?
+                              (.getUncompressedLength decompressor ba 0)))))))
 
 ;;;; LZMA2
 
