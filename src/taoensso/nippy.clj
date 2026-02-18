@@ -12,10 +12,11 @@
     [encryption  :as encryption]])
 
   (:import
+   [java.nio ByteBuffer ByteOrder]
    [java.nio.charset StandardCharsets]
    [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream
     DataOutputStream Serializable ObjectOutputStream ObjectInputStream
-    DataOutput DataInput]
+    DataOutput DataInput EOFException UTFDataFormatException]
    [java.lang.reflect Method Field Constructor]
    [java.net URI]
    [java.util #_Date UUID]
@@ -895,6 +896,215 @@
 
         (-run! (fn [in] (-freeze-with-meta! in out)) s)))))
 
+(defmacro write-id-bb [bb id]       `(.put      ~bb (unchecked-byte  ~id)))
+(defmacro write-sm-count*-bb [bb n] `(.put      ~bb (unchecked-byte (+ ~n Byte/MIN_VALUE))))
+(defmacro write-sm-count-bb  [bb n] `(.put      ~bb (unchecked-byte  ~n)))
+(defmacro write-md-count-bb  [bb n] `(.putShort ~bb (unchecked-short ~n)))
+(defmacro write-lg-count-bb  [bb n] `(.putInt   ~bb (int             ~n)))
+
+(def ^:private class-byte-array (Class/forName "[B"))
+
+(declare freeze-with-meta-bb! freeze-without-meta-bb!)
+
+(defn- write-bytes-sm*-bb [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-sm-count*-bb bb len) (.put bb ba 0 len)))
+(defn- write-bytes-sm-bb  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-sm-count-bb  bb len) (.put bb ba 0 len)))
+(defn- write-bytes-md-bb  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-md-count-bb  bb len) (.put bb ba 0 len)))
+(defn- write-bytes-lg-bb  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-lg-count-bb  bb len) (.put bb ba 0 len)))
+(defn- write-bytes-bb     [^ByteBuffer bb ^bytes ba]
+  (let [len (alength ba)]
+    (if (zero? len)
+      (write-id-bb bb id-byte-array-0)
+      (do
+        (enc/cond
+          (sm-count? len) (do (write-id-bb bb id-byte-array-sm) (write-sm-count-bb bb len))
+          (md-count? len) (do (write-id-bb bb id-byte-array-md) (write-md-count-bb bb len))
+          :else           (do (write-id-bb bb id-byte-array-lg) (write-lg-count-bb bb len)))
+
+        (.put bb ba 0 len)))))
+
+(defn- write-biginteger-bb [^ByteBuffer bb ^BigInteger n] (write-bytes-lg-bb bb (.toByteArray n)))
+
+(defn- write-str-bb [^ByteBuffer bb ^String s]
+  (if (identical? s "")
+    (write-id-bb bb id-str-0)
+    (let [ba  (.getBytes s StandardCharsets/UTF_8)
+          len (alength ba)]
+      (enc/cond
+        (when     impl/pack-unsigned? (sm-count?* len)) (do (write-id-bb bb id-str-sm*) (write-sm-count*-bb bb len))
+        (when-not impl/pack-unsigned? (sm-count?  len)) (do (write-id-bb bb id-str-sm_) (write-sm-count-bb  bb len))
+                                      (md-count?  len)  (do (write-id-bb bb id-str-md)  (write-md-count-bb  bb len))
+        :else                                           (do (write-id-bb bb id-str-lg)  (write-lg-count-bb  bb len)))
+      (.put bb ba 0 len))))
+
+(defn- write-kw-bb [^ByteBuffer bb kw]
+  (let [s   (if-let [ns (namespace kw)] (str ns "/" (name kw)) (name kw))
+        ba  (.getBytes s StandardCharsets/UTF_8)
+        len (alength ba)]
+    (enc/cond
+      (sm-count? len) (do (write-id-bb bb id-kw-sm) (write-sm-count-bb bb len))
+      (md-count? len) (do (write-id-bb bb id-kw-md) (write-md-count-bb bb len))
+      :else           (truss/ex-info! "Keyword too long" {:name s}))
+    (.put bb ba 0 len)))
+
+(defn- write-sym-bb [^ByteBuffer bb s]
+  (let [s   (if-let [ns (namespace s)] (str ns "/" (name s)) (name s))
+        ba  (.getBytes s StandardCharsets/UTF_8)
+        len (alength ba)]
+    (enc/cond
+      (sm-count? len) (do (write-id-bb bb id-sym-sm) (write-sm-count-bb bb len))
+      (md-count? len) (do (write-id-bb bb id-sym-md) (write-md-count-bb bb len))
+      :else           (truss/ex-info! "Symbol too long" {:name s}))
+    (.put bb ba 0 len)))
+
+(defn- write-long-legacy-bb [^ByteBuffer bb ^long n]
+  (enc/cond
+    (zero? n) (write-id-bb bb id-long-0)
+    (pos?  n)
+    (enc/cond
+      (<= n    Byte/MAX_VALUE) (do (write-id-bb bb id-long-sm_) (.put      bb (unchecked-byte n)))
+      (<= n   Short/MAX_VALUE) (do (write-id-bb bb id-long-md_) (.putShort bb (unchecked-short n)))
+      (<= n Integer/MAX_VALUE) (do (write-id-bb bb id-long-lg_) (.putInt   bb (int n)))
+      :else                    (do (write-id-bb bb id-long-xl)  (.putLong  bb n)))
+
+    :else
+    (enc/cond
+      (>= n    Byte/MIN_VALUE) (do (write-id-bb bb id-long-sm_) (.put      bb (unchecked-byte n)))
+      (>= n   Short/MIN_VALUE) (do (write-id-bb bb id-long-md_) (.putShort bb (unchecked-short n)))
+      (>= n Integer/MIN_VALUE) (do (write-id-bb bb id-long-lg_) (.putInt   bb (int n)))
+      :else                    (do (write-id-bb bb id-long-xl)  (.putLong  bb n)))))
+
+(defn- write-long-bb [^ByteBuffer bb ^long n]
+  (enc/cond
+    (not impl/pack-unsigned?) (write-long-legacy-bb bb n)
+    (zero? n)                 (write-id-bb          bb id-long-0)
+    (pos?  n)
+    (enc/cond
+      (<= n range-ubyte)  (do (write-id-bb bb id-long-pos-sm) (.put      bb (unchecked-byte  (+ n Byte/MIN_VALUE))))
+      (<= n range-ushort) (do (write-id-bb bb id-long-pos-md) (.putShort bb (unchecked-short (+ n Short/MIN_VALUE))))
+      (<= n range-uint)   (do (write-id-bb bb id-long-pos-lg) (.putInt   bb (int             (+ n Integer/MIN_VALUE))))
+      :else               (do (write-id-bb bb id-long-xl)     (.putLong  bb                  n)))
+
+    :else
+    (let [y (- n)]
+      (enc/cond
+        (<= y range-ubyte)  (do (write-id-bb bb id-long-neg-sm) (.put      bb (unchecked-byte  (+ y Byte/MIN_VALUE))))
+        (<= y range-ushort) (do (write-id-bb bb id-long-neg-md) (.putShort bb (unchecked-short (+ y Short/MIN_VALUE))))
+        (<= y range-uint)   (do (write-id-bb bb id-long-neg-lg) (.putInt   bb (int             (+ y Integer/MIN_VALUE))))
+        :else               (do (write-id-bb bb id-long-xl)     (.putLong  bb                  n))))))
+
+(defn- write-counted-coll-bb
+  ([^ByteBuffer bb out* id-lg coll]
+   (let [cnt (count coll)]
+     (write-id-bb       bb id-lg)
+     (write-lg-count-bb bb cnt)
+     (reduce (fn [_ in] (freeze-with-meta-bb! bb out* in)) nil coll)))
+
+  ([^ByteBuffer bb out* id-empty id-sm id-md id-lg coll]
+   (let [cnt (count coll)]
+     (if (zero? cnt)
+       (write-id-bb bb id-empty)
+       (do
+         (enc/cond
+           (sm-count? cnt) (do (write-id-bb bb id-sm) (write-sm-count-bb bb cnt))
+           (md-count? cnt) (do (write-id-bb bb id-md) (write-md-count-bb bb cnt))
+           :else           (do (write-id-bb bb id-lg) (write-lg-count-bb bb cnt)))
+         (reduce (fn [_ in] (freeze-with-meta-bb! bb out* in)) nil coll))))))
+
+(defn- write-map-bb [^ByteBuffer bb out* m is-metadata?]
+  (let [cnt (count m)]
+    (if (zero? cnt)
+      (write-id-bb bb id-map-0)
+      (do
+        (enc/cond
+          (when     impl/pack-unsigned? (sm-count?* cnt)) (do (write-id-bb bb id-map-sm*) (write-sm-count*-bb bb cnt))
+          (when-not impl/pack-unsigned? (sm-count?  cnt)) (do (write-id-bb bb id-map-sm_) (write-sm-count-bb  bb cnt))
+                                        (md-count?  cnt)  (do (write-id-bb bb id-map-md)  (write-md-count-bb  bb cnt))
+          :else                                           (do (write-id-bb bb id-map-lg)  (write-lg-count-bb  bb cnt)))
+
+        (reduce-kv
+          (fn [_ k v]
+            (if (enc/and? is-metadata? (fn? v) (qualified-symbol? k))
+              (do
+                (if (impl/target-release>= 340)
+                  (write-id-bb bb id-meta-protocol-key)
+                  (freeze-without-meta-bb! bb out* meta-protocol-key))
+                (write-id-bb bb id-nil))
+              (do
+                (freeze-with-meta-bb! bb out* k)
+                (freeze-with-meta-bb! bb out* v))))
+          nil
+          m)))))
+
+(defn- write-set-bb [^ByteBuffer bb out* s]
+  (let [cnt (count s)]
+    (if (zero? cnt)
+      (write-id-bb bb id-set-0)
+      (do
+        (enc/cond
+          (when     impl/pack-unsigned? (sm-count?* cnt)) (do (write-id-bb bb id-set-sm*) (write-sm-count*-bb bb cnt))
+          (when-not impl/pack-unsigned? (sm-count?  cnt)) (do (write-id-bb bb id-set-sm_) (write-sm-count-bb  bb cnt))
+                                        (md-count?  cnt)  (do (write-id-bb bb id-set-md)  (write-md-count-bb  bb cnt))
+          :else                                           (do (write-id-bb bb id-set-lg)  (write-lg-count-bb  bb cnt)))
+        (reduce (fn [_ in] (freeze-with-meta-bb! bb out* in)) nil s)))))
+
+(defn- freeze-without-meta-bb! [^ByteBuffer bb out* x]
+  (cond
+    (nil? x)                    (write-id-bb bb id-nil)
+    (true? x)                   (write-id-bb bb id-true)
+    (false? x)                  (write-id-bb bb id-false)
+    (instance? Character x)     (do (write-id-bb bb id-char)    (.putChar   bb (unchecked-char  (int x))))
+    (instance? Byte x)          (do (write-id-bb bb id-byte)    (.put       bb (unchecked-byte  x)))
+    (instance? Short x)         (do (write-id-bb bb id-short)   (.putShort  bb (unchecked-short x)))
+    (instance? Integer x)       (do (write-id-bb bb id-integer) (.putInt    bb (int x)))
+    (instance? Long x)          (write-long-bb  bb x)
+    (instance? Float x)         (do (write-id-bb bb id-float)   (.putFloat  bb x))
+    (instance? Double x)        (if (zero? ^double x) (write-id-bb bb id-double-0) (do (write-id-bb bb id-double) (.putDouble bb x)))
+    (instance? BigInt x)        (do (write-id-bb bb id-bigint)     (write-biginteger-bb bb (.toBigInteger ^BigInt x)))
+    (instance? BigInteger x)    (do (write-id-bb bb id-biginteger) (write-biginteger-bb bb x))
+    (instance? BigDecimal x)    (do (write-id-bb bb id-bigdec) (write-biginteger-bb bb (.unscaledValue ^BigDecimal x)) (.putInt bb (.scale ^BigDecimal x)))
+    (instance? Ratio x)         (do (write-id-bb bb id-ratio) (write-biginteger-bb bb (.numerator ^Ratio x)) (write-biginteger-bb bb (.denominator ^Ratio x)))
+    (instance? MapEntry x)      (do (write-id-bb bb id-map-entry) (freeze-with-meta-bb! bb out* (key x)) (freeze-with-meta-bb! bb out* (val x)))
+    (instance? java.sql.Date  x) (do (write-id-bb bb id-sql-date ) (.putLong bb (.getTime ^java.sql.Date  x)))
+    (instance? java.util.Date x) (do (write-id-bb bb id-util-date) (.putLong bb (.getTime ^java.util.Date x)))
+    (instance? URI x)            (do (write-id-bb bb id-uri      ) (write-str-bb bb (.toString ^URI x)))
+    (instance? UUID x)           (do (write-id-bb bb id-uuid     ) (.putLong bb (.getMostSignificantBits ^UUID x)) (.putLong bb (.getLeastSignificantBits ^UUID x)))
+    (instance? String x)        (write-str-bb bb x)
+    (instance? Keyword x)       (write-kw-bb  bb x)
+    (instance? Symbol x)        (write-sym-bb bb x)
+    (instance? class-byte-array x) (write-bytes-bb bb x)
+    (instance? PersistentQueue x)   (write-counted-coll-bb bb out* id-queue-lg x)
+    (instance? PersistentTreeSet x) (write-counted-coll-bb bb out* id-sorted-set-lg x)
+    (instance? PersistentTreeMap x) (do (write-id-bb bb id-sorted-map-lg)
+                                        (write-lg-count-bb bb (count x))
+                                        (reduce-kv (fn [_ k v] (freeze-with-meta-bb! bb out* k) (freeze-with-meta-bb! bb out* v)) nil x))
+    (instance? APersistentVector x) (let [cnt (count x)]
+                                      (if (zero? cnt)
+                                        (write-id-bb bb id-vec-0)
+                                        (do
+                                          (enc/cond
+                                            (when     impl/pack-unsigned? (sm-count?* cnt)) (do (write-id-bb bb id-vec-sm*) (write-sm-count*-bb bb cnt))
+                                            (when-not impl/pack-unsigned? (sm-count?  cnt)) (do (write-id-bb bb id-vec-sm_) (write-sm-count-bb  bb cnt))
+                                                                                  (md-count?  cnt)  (do (write-id-bb bb id-vec-md)  (write-md-count-bb  bb cnt))
+                                            :else                                           (do (write-id-bb bb id-vec-lg)  (write-lg-count-bb  bb cnt)))
+                                          (reduce (fn [_ in] (freeze-with-meta-bb! bb out* in)) nil x))))
+    (instance? APersistentSet x)    (write-set-bb bb out* x)
+    (instance? APersistentMap x)    (write-map-bb bb out* x false)
+    (instance? PersistentList x)    (write-counted-coll-bb bb out* id-list-0 id-list-sm id-list-md id-list-lg x)
+    (or (instance? LazySeq x) (instance? ISeq x))
+    (if (counted? x)
+      (write-counted-coll-bb bb out* id-seq-0 id-seq-sm id-seq-md id-seq-lg x)
+      ;; Rare path: use existing DataOutput path for uncounted seq encoding
+      (-freeze-without-meta! x (out*)))
+    :else
+    (-freeze-without-meta! x (out*))))
+
+(defn- freeze-with-meta-bb! [^ByteBuffer bb out* x]
+  (when-let [m (when (and *incl-metadata?* (instance? clojure.lang.IObj x))
+                  (not-empty (meta x)))]
+    (write-id-bb bb id-meta)
+    (write-map-bb bb out* m :is-metadata))
+  (freeze-without-meta-bb! bb out* x))
+
 (defn- write-serializable [^DataOutput out x]
   (when-debug (println (str "write-serializable: " (type x))))
   (when (and (instance? Serializable x) (not (fn? x)))
@@ -951,11 +1161,263 @@
       :content (try-pr-edn x)}}
     out))
 
+;;; ByteBuffer adapters
+
+(defn- assert-big-endian-byte-buffer
+  ^ByteBuffer [^ByteBuffer bb]
+  (when-not (= (.order bb) ByteOrder/BIG_ENDIAN)
+    (throw (IllegalArgumentException.
+             (str "ByteBuffer must use BIG_ENDIAN order for DataInput/DataOutput semantics"
+               " (got " (.order bb) ")."))))
+  bb)
+
+(defn- require-readable!
+  [^ByteBuffer bb ^long n]
+  (when (> n (.remaining bb))
+    (throw (EOFException.
+             (str "ByteBuffer underflow: need " n " bytes, have " (.remaining bb) ".")))))
+
+(defn- require-writable!
+  [^ByteBuffer bb ^long n]
+  (when (> n (.remaining bb))
+    (throw (EOFException.
+             (str "ByteBuffer overflow: need " n " bytes, have " (.remaining bb) ".")))))
+
+(defn- write-modified-utf!
+  [^ByteBuffer bb ^String s]
+  (let [strlen (.length s)
+        utf-len
+        (loop [idx 0 utf-len 0]
+          (if (< idx strlen)
+            (let [c (int (.charAt s idx))]
+              (recur
+                (inc idx)
+                (long
+                  (+ (long utf-len)
+                    (long
+                      (cond
+                        (<= 0x0001 c 0x007F) 1
+                        (> c 0x07FF)         3
+                        :else                2))))))
+            utf-len))]
+
+    (when (> utf-len 65535)
+      (throw (UTFDataFormatException.
+               (str "encoded string too long: " utf-len " bytes"))))
+
+    (require-writable! bb (+ 2 utf-len))
+    (.putShort bb (unchecked-short utf-len))
+    (loop [idx 0]
+      (when (< idx strlen)
+        (let [c (int (.charAt s idx))]
+          (cond
+            (<= 0x0001 c 0x007F)
+            (do (.put bb (unchecked-byte c))
+                (recur (inc idx)))
+
+            (> c 0x07FF)
+            (do (.put bb (unchecked-byte (bit-or 0xE0 (unsigned-bit-shift-right c 12))))
+                (.put bb (unchecked-byte (bit-or 0x80 (bit-and (unsigned-bit-shift-right c  6) 0x3F))))
+                (.put bb (unchecked-byte (bit-or 0x80 (bit-and                           c     0x3F))))
+                (recur (inc idx)))
+
+            :else
+            (do (.put bb (unchecked-byte (bit-or 0xC0 (unsigned-bit-shift-right c 6))))
+                (.put bb (unchecked-byte (bit-or 0x80 (bit-and c 0x3F))))
+                (recur (inc idx)))))))))
+
+(defn buffer-data-input
+  "Returns a DataInput adapter over given ByteBuffer.
+  Reads from the buffer's current position and advances it."
+  ^DataInput [^ByteBuffer bb]
+  (let [bb (assert-big-endian-byte-buffer bb)]
+    (reify DataInput
+      (^void readFully [_ ^bytes ba]
+       (let [len (alength ba)]
+         (require-readable! bb len)
+         (.get bb ba 0 len)
+         nil))
+
+      (^void readFully [_ ^bytes ba ^int off ^int len]
+       (require-readable! bb len)
+       (.get bb ba off len)
+       nil)
+
+      (^int skipBytes [_ ^int n]
+       (let [n       (max n 0)
+             skipped (min n (.remaining bb))]
+         (.position bb (+ (.position bb) skipped))
+         skipped))
+
+      (^boolean readBoolean [_]
+       (require-readable! bb 1)
+       (not (zero? (int (.get bb)))))
+
+      (^byte readByte [_]
+       (require-readable! bb 1)
+       (.get bb))
+
+      (^int readUnsignedByte [_]
+       (require-readable! bb 1)
+       (bit-and 0xFF (int (.get bb))))
+
+      (^short readShort [_]
+       (require-readable! bb 2)
+       (.getShort bb))
+
+      (^int readUnsignedShort [_]
+       (require-readable! bb 2)
+       (bit-and 0xFFFF (int (.getShort bb))))
+
+      (^char readChar [_]
+       (require-readable! bb 2)
+       (.getChar bb))
+
+      (^int readInt [_]
+       (require-readable! bb 4)
+       (.getInt bb))
+
+      (^long readLong [_]
+       (require-readable! bb 8)
+       (.getLong bb))
+
+      (^float readFloat [_]
+       (require-readable! bb 4)
+       (.getFloat bb))
+
+      (^double readDouble [_]
+       (require-readable! bb 8)
+       (.getDouble bb))
+
+      (^String readLine [_]
+       (if-not (.hasRemaining bb)
+         nil
+         (let [sb (StringBuilder.)]
+           (loop []
+             (if-not (.hasRemaining bb)
+               (.toString sb)
+               (let [b (bit-and 0xFF (int (.get bb)))]
+                 (cond
+                   (= b 10)
+                   (.toString sb)
+
+                   (= b 13)
+                   (do
+                     (when (and (.hasRemaining bb)
+                             (= 10 (bit-and 0xFF (int (.get bb (.position bb))))))
+                       (.position bb (inc (.position bb))))
+                     (.toString sb))
+
+                   :else
+                   (do
+                     (.append sb (char b))
+                     (recur)))))))))
+
+      (^String readUTF [this]
+       (DataInputStream/readUTF this)))))
+
+(defn buffer-data-output
+  "Returns a DataOutput adapter over given ByteBuffer.
+  Writes at the buffer's current position and advances it."
+  ^DataOutput [^ByteBuffer bb]
+  (let [bb (assert-big-endian-byte-buffer bb)]
+    (reify DataOutput
+      (^void write [_ ^bytes ba]
+       (let [len (alength ba)]
+         (require-writable! bb len)
+         (.put bb ba 0 len)
+         nil))
+
+      (^void write [_ ^bytes ba ^int off ^int len]
+       (require-writable! bb len)
+       (.put bb ba off len)
+       nil)
+
+      (^void write [_ ^int b]
+       (require-writable! bb 1)
+       (.put bb (unchecked-byte b))
+       nil)
+
+      (^void writeBoolean [_ ^boolean b]
+       (require-writable! bb 1)
+       (.put bb (unchecked-byte (if b 1 0)))
+       nil)
+
+      (^void writeByte [_ ^int b]
+       (require-writable! bb 1)
+       (.put bb (unchecked-byte b))
+       nil)
+
+      (^void writeShort [_ ^int n]
+       (require-writable! bb 2)
+       (.putShort bb (unchecked-short n))
+       nil)
+
+      (^void writeChar [_ ^int c]
+       (require-writable! bb 2)
+       (.putChar bb (unchecked-char c))
+       nil)
+
+      (^void writeInt [_ ^int n]
+       (require-writable! bb 4)
+       (.putInt bb n)
+       nil)
+
+      (^void writeLong [_ ^long n]
+       (require-writable! bb 8)
+       (.putLong bb n)
+       nil)
+
+      (^void writeFloat [_ ^float n]
+       (require-writable! bb 4)
+       (.putFloat bb n)
+       nil)
+
+      (^void writeDouble [_ ^double n]
+       (require-writable! bb 8)
+       (.putDouble bb n)
+       nil)
+
+      (^void writeBytes [_ ^String s]
+       (let [len (.length s)]
+         (require-writable! bb len)
+         (loop [idx 0]
+           (when (< idx len)
+             (.put bb (unchecked-byte (int (.charAt s idx))))
+             (recur (inc idx))))
+         nil))
+
+      (^void writeChars [_ ^String s]
+       (let [len (.length s)]
+         (require-writable! bb (* 2 len))
+         (loop [idx 0]
+           (when (< idx len)
+             (.putChar bb (.charAt s idx))
+             (recur (inc idx))))
+         nil))
+
+      (^void writeUTF [_ ^String s]
+       (write-modified-utf! bb s)
+       nil))))
+
 ;; Public `-freeze-with-meta!` with different arg order
 (defn freeze-to-out!
   "Serializes arg (any Clojure data type) to a DataOutput.
   This is a low-level util: in most cases you'll want `freeze` instead."
   [^DataOutput data-output x] (-freeze-with-meta! x data-output))
+
+(defn freeze-to-byte-buffer!
+  "Serializes arg (any Clojure data type) to a ByteBuffer.
+  This is a low-level util: in most cases you'll want `freeze` instead."
+  [^ByteBuffer bb x]
+  (let [bb   (assert-big-endian-byte-buffer bb)
+        out_ (volatile! nil)
+        out* (fn [] (or @out_ (vreset! out_ (buffer-data-output bb))))]
+    (try
+      (freeze-with-meta-bb! bb out* x)
+      (catch java.nio.BufferOverflowException _
+        (throw (EOFException.
+                 (str "ByteBuffer overflow while freezing: remaining " (.remaining bb) " bytes.")))))))
 
 ;;;; Caching
 
@@ -1036,6 +1498,7 @@
       (-freeze-with-meta! x-val out))))
 
 (declare thaw-from-in!)
+(declare thaw-from-byte-buffer*)
 (def ^:private thaw-cached
   (let [not-found (Object.)]
     (fn [idx in]
@@ -1043,6 +1506,18 @@
         (let [v (get @cache_ idx not-found)]
           (if (identical? v not-found)
             (let [x (thaw-from-in! in)]
+            (vswap! cache_ assoc idx x)
+              x)
+            v))
+        (truss/ex-info! "Can't thaw without cache available. See `with-cache`." {})))))
+
+(def ^:private thaw-cached-bb
+  (let [not-found (Object.)]
+    (fn [idx ^ByteBuffer bb]
+      (if-let [cache_ (.get -cache-proxy)]
+        (let [v (get @cache_ idx not-found)]
+          (if (identical? v not-found)
+            (let [x (thaw-from-byte-buffer* bb)]
               (vswap! cache_ assoc idx x)
               x)
             v))
@@ -1537,6 +2012,124 @@
         :class-name class-name
         :exception  e}})))
 
+(defmacro ^:private read-array-bb [bb thaw-type array-type array]
+  (let [thawed-sym (with-meta 'thawed-sym {:tag thaw-type})
+        array-sym  (with-meta 'array-sym  {:tag array-type})]
+    `(let [~array-sym ~array]
+       (enc/reduce-n
+         (fn [_# idx#]
+           (let [~thawed-sym (thaw-from-byte-buffer* ~bb)]
+             (aset ~'array-sym idx# ~'thawed-sym)))
+         nil (alength ~'array-sym))
+       ~'array-sym)))
+
+(defmacro ^:private read-sm-count*-bb [bb] `(- (.get      ~bb) Byte/MIN_VALUE))
+(defmacro ^:private read-sm-count-bb  [bb]    `(.get      ~bb))
+(defmacro ^:private read-md-count-bb  [bb]    `(.getShort ~bb))
+(defmacro ^:private read-lg-count-bb  [bb]    `(.getInt   ~bb))
+
+(declare ^:private read-bytes-bb)
+(defn- read-bytes-sm*-bb [^ByteBuffer bb] (read-bytes-bb bb (read-sm-count*-bb bb)))
+(defn- read-bytes-sm-bb  [^ByteBuffer bb] (read-bytes-bb bb (read-sm-count-bb  bb)))
+(defn- read-bytes-md-bb  [^ByteBuffer bb] (read-bytes-bb bb (read-md-count-bb  bb)))
+(defn- read-bytes-lg-bb  [^ByteBuffer bb] (read-bytes-bb bb (read-lg-count-bb  bb)))
+(defn- read-bytes-bb
+  ([^ByteBuffer bb len]
+   (let [len (int len)
+         ba  (byte-array len)]
+     (.get bb ba 0 len)
+     ba))
+  ([^ByteBuffer bb]
+   (enc/case-eval (.get bb)
+     id-byte-array-0  (byte-array 0)
+     id-byte-array-sm (read-bytes-bb bb (read-sm-count-bb bb))
+     id-byte-array-md (read-bytes-bb bb (read-md-count-bb bb))
+     id-byte-array-lg (read-bytes-bb bb (read-lg-count-bb bb)))))
+
+(defn- read-str-sm*-bb [^ByteBuffer bb] (String. ^bytes (read-bytes-bb bb (read-sm-count*-bb bb)) StandardCharsets/UTF_8))
+(defn- read-str-sm-bb  [^ByteBuffer bb] (String. ^bytes (read-bytes-bb bb (read-sm-count-bb  bb)) StandardCharsets/UTF_8))
+(defn- read-str-md-bb  [^ByteBuffer bb] (String. ^bytes (read-bytes-bb bb (read-md-count-bb  bb)) StandardCharsets/UTF_8))
+(defn- read-str-lg-bb  [^ByteBuffer bb] (String. ^bytes (read-bytes-bb bb (read-lg-count-bb  bb)) StandardCharsets/UTF_8))
+(defn- read-str-bb
+  ([^ByteBuffer bb len] (String. ^bytes (read-bytes-bb bb len) StandardCharsets/UTF_8))
+  ([^ByteBuffer bb]
+   (enc/case-eval (.get bb)
+     id-str-0  ""
+     id-str-sm* (read-str-sm*-bb bb)
+     id-str-sm_ (read-str-sm-bb  bb)
+     id-str-md  (read-str-md-bb  bb)
+     id-str-lg  (read-str-lg-bb  bb))))
+
+(defn- read-biginteger-bb [^ByteBuffer bb] (BigInteger. ^bytes (read-bytes-bb bb (.getInt bb))))
+
+(let [rf! (fn rf! ([x] (persistent! x)) ([acc x] (conj! acc x)))
+      rf* (fn rf* ([x]              x)  ([acc x] (conj  acc x)))]
+  (defn- read-into-bb [to ^ByteBuffer bb ^long n]
+    (let [transient? (when (editable? to) (> n 10))
+          init       (if transient? (transient to) to)
+          rf         (if transient? rf! rf*)
+          rf         (if-let [xf *thaw-xform*] ((xform* xf) rf) rf)]
+      (rf (enc/reduce-n (fn [acc _] (rf acc (thaw-from-byte-buffer* bb))) init n)))))
+
+(let [rf1! (fn rf1! ([x] (persistent! x)) ([acc kv ] (assoc! acc (key kv) (val kv))))
+      rf2! (fn rf2! ([x] (persistent! x)) ([acc k v] (assoc! acc      k         v)))
+      rf1* (fn rf1* ([x]              x)  ([acc kv ] (assoc  acc (key kv) (val kv))))
+      rf2* (fn rf2* ([x]              x)  ([acc k v] (assoc  acc      k         v)))]
+
+  (defn- read-kvs-into-bb [to ^ByteBuffer bb ^long n]
+    (let [transient? (when (editable? to) (> n 10))
+          init       (if transient? (transient to) to)
+          rf1        (if transient? rf1! rf1*)
+          rf2        (if transient? rf2! rf2*)]
+
+      (if-let [xf *thaw-xform*]
+        (let [rf ((xform* xf) rf1)]
+          (rf (enc/reduce-n (fn [acc _] (rf acc (enc/map-entry (thaw-from-byte-buffer* bb) (thaw-from-byte-buffer* bb)))) init n)))
+        (let [rf rf2]
+          (rf (enc/reduce-n (fn [acc _] (rf acc (thaw-from-byte-buffer* bb) (thaw-from-byte-buffer* bb))) init n)))))))
+
+(defn- read-kvs-depr-bb [to ^ByteBuffer bb] (read-kvs-into-bb to bb (quot (.getInt bb) 2)))
+
+(let [class-method-sig (into-array Class [IPersistentMap])]
+  (defn- read-record-bb [^ByteBuffer bb class-name]
+    (let [content (thaw-from-byte-buffer* bb)]
+      (try
+        (let [c   (clojure.lang.RT/classForName class-name)
+              ctr (.getMethod c "create" class-method-sig)]
+          (.invoke ctr c (into-array Object [content])))
+        (catch Exception e
+          {:nippy/unthawable
+           {:type  :record
+            :cause :exception
+
+            :class-name class-name
+            :content    content
+            :exception  e}})))))
+
+(defn- read-type-bb [^ByteBuffer bb class-name]
+  (try
+    (let [c (clojure.lang.RT/classForName class-name)
+          num-fields (count (get-basis-fields c))
+          field-vals (object-array num-fields)
+          ^Constructor ctr (aget (.getConstructors c) 0)]
+
+      (enc/reduce-n
+        (fn [_ i] (aset field-vals i (thaw-from-byte-buffer* bb)))
+        nil num-fields)
+
+      (.newInstance ctr field-vals))
+
+    (catch Exception e
+      {:nippy/unthawable
+       {:type  :type
+        :cause :exception
+
+        :class-name class-name
+        :exception  e}})))
+
+(defn- read-custom-bb [^ByteBuffer bb prefixed? type-id]
+  (read-custom! (buffer-data-input bb) prefixed? type-id))
+
 (defn thaw-from-in!
   "Deserializes a frozen object from given DataInput to its original Clojure
   data type.
@@ -1753,6 +2346,219 @@
       (catch Throwable t
         (truss/ex-info! (str "Thaw failed against type-id: " type-id)
           {:type-id type-id} t)))))
+
+(defn- thaw-from-byte-buffer*
+  [^ByteBuffer bb]
+  (let [type-id (.get bb)]
+    (when-debug (println (str "thaw-from-byte-buffer*: " type-id)))
+    (try
+      (enc/case-eval type-id
+        id-reader-sm       (read-edn             (read-str-bb bb (read-sm-count-bb bb)))
+        id-reader-md       (read-edn             (read-str-bb bb (read-md-count-bb bb)))
+        id-reader-lg       (read-edn             (read-str-bb bb (read-lg-count-bb bb)))
+        id-reader-lg_      (read-edn             (read-str-bb bb (read-lg-count-bb bb)))
+        id-record-sm       (read-record-bb    bb (read-str-bb bb (read-sm-count-bb bb)))
+        id-record-md       (read-record-bb    bb (read-str-bb bb (read-md-count-bb bb)))
+        id-record-lg_      (read-record-bb    bb (read-str-bb bb (read-lg-count-bb bb)))
+
+        ;; Rarely hot paths, keep using DataInput code for compatibility
+        id-sz-quarantined-sm    (read-sz-quarantined   (buffer-data-input bb) (read-str-bb bb (read-sm-count-bb bb)))
+        id-sz-quarantined-md    (read-sz-quarantined   (buffer-data-input bb) (read-str-bb bb (read-md-count-bb bb)))
+
+        id-sz-unquarantined-sm_ (read-sz-unquarantined (buffer-data-input bb) (read-str-bb bb (read-sm-count-bb bb)))
+        id-sz-unquarantined-md_ (read-sz-unquarantined (buffer-data-input bb) (read-str-bb bb (read-md-count-bb bb)))
+        id-sz-unquarantined-lg_ (read-sz-unquarantined (buffer-data-input bb) (read-str-bb bb (read-lg-count-bb bb)))
+
+        id-type        (read-type-bb bb (thaw-from-byte-buffer* bb))
+
+        id-nil         nil
+        id-true        true
+        id-false       false
+        id-char        (.getChar bb)
+
+        id-meta-protocol-key meta-protocol-key
+        id-meta
+        (let [m (thaw-from-byte-buffer* bb)
+              x (thaw-from-byte-buffer* bb)]
+          (if-let [m (when *incl-metadata?* (not-empty (dissoc m meta-protocol-key)))]
+            (with-meta x m)
+            x))
+
+        id-cached-0    (thaw-cached-bb 0 bb)
+        id-cached-1    (thaw-cached-bb 1 bb)
+        id-cached-2    (thaw-cached-bb 2 bb)
+        id-cached-3    (thaw-cached-bb 3 bb)
+        id-cached-4    (thaw-cached-bb 4 bb)
+        id-cached-5    (thaw-cached-bb 5 bb)
+        id-cached-6    (thaw-cached-bb 6 bb)
+        id-cached-7    (thaw-cached-bb 7 bb)
+        id-cached-sm   (thaw-cached-bb (read-sm-count-bb bb) bb)
+        id-cached-md   (thaw-cached-bb (read-md-count-bb bb) bb)
+
+        id-byte-array-0    (byte-array 0)
+        id-byte-array-sm   (read-bytes-bb bb (read-sm-count-bb bb))
+        id-byte-array-md   (read-bytes-bb bb (read-md-count-bb bb))
+        id-byte-array-lg   (read-bytes-bb bb (read-lg-count-bb bb))
+
+        id-long-array-lg   (read-array-bb bb long   "[J" (long-array   (read-lg-count-bb bb)))
+        id-int-array-lg    (read-array-bb bb int    "[I" (int-array    (read-lg-count-bb bb)))
+
+        id-double-array-lg (read-array-bb bb double "[D" (double-array (read-lg-count-bb bb)))
+        id-float-array-lg  (read-array-bb bb float  "[F" (float-array  (read-lg-count-bb bb)))
+
+        id-string-array-lg (read-array-bb bb String "[Ljava.lang.String;" (make-array String (read-lg-count-bb bb)))
+        id-object-array-lg (read-array-bb bb Object "[Ljava.lang.Object;" (object-array      (read-lg-count-bb bb)))
+
+        id-str-0       ""
+        id-str-sm*              (read-str-bb bb (read-sm-count*-bb bb))
+        id-str-sm_              (read-str-bb bb (read-sm-count-bb  bb))
+        id-str-md               (read-str-bb bb (read-md-count-bb  bb))
+        id-str-lg               (read-str-bb bb (read-lg-count-bb  bb))
+
+        id-kw-sm       (keyword (read-str-bb bb (read-sm-count-bb bb)))
+        id-kw-md       (keyword (read-str-bb bb (read-md-count-bb bb)))
+        id-kw-md_      (keyword (read-str-bb bb (read-lg-count-bb bb)))
+        id-kw-lg_      (keyword (read-str-bb bb (read-lg-count-bb bb)))
+
+        id-sym-sm      (symbol  (read-str-bb bb (read-sm-count-bb bb)))
+        id-sym-md      (symbol  (read-str-bb bb (read-md-count-bb bb)))
+        id-sym-md_     (symbol  (read-str-bb bb (read-lg-count-bb bb)))
+        id-sym-lg_     (symbol  (read-str-bb bb (read-lg-count-bb bb)))
+        id-regex       (re-pattern (thaw-from-byte-buffer* bb))
+
+        id-vec-0       []
+        id-vec-2       (read-into-bb [] bb 2)
+        id-vec-3       (read-into-bb [] bb 3)
+        id-vec-sm*     (read-into-bb [] bb (read-sm-count*-bb bb))
+        id-vec-sm_     (read-into-bb [] bb (read-sm-count-bb  bb))
+        id-vec-md      (read-into-bb [] bb (read-md-count-bb  bb))
+        id-vec-lg      (read-into-bb [] bb (read-lg-count-bb  bb))
+
+        id-set-0       #{}
+        id-set-sm*     (read-into-bb    #{} bb (read-sm-count*-bb bb))
+        id-set-sm_     (read-into-bb    #{} bb (read-sm-count-bb  bb))
+        id-set-md      (read-into-bb    #{} bb (read-md-count-bb  bb))
+        id-set-lg      (read-into-bb    #{} bb (read-lg-count-bb  bb))
+
+        id-map-0       {}
+        id-map-sm*     (read-kvs-into-bb {} bb (read-sm-count*-bb bb))
+        id-map-sm_     (read-kvs-into-bb {} bb (read-sm-count-bb  bb))
+        id-map-md      (read-kvs-into-bb {} bb (read-md-count-bb  bb))
+        id-map-lg      (read-kvs-into-bb {} bb (read-lg-count-bb  bb))
+
+        id-queue-lg      (read-into-bb     PersistentQueue/EMPTY bb (read-lg-count-bb bb))
+        id-sorted-set-lg (read-into-bb     (sorted-set)          bb (read-lg-count-bb bb))
+        id-sorted-map-lg (read-kvs-into-bb (sorted-map)          bb (read-lg-count-bb bb))
+
+        id-list-0            ()
+        id-list-sm     (into () (rseq (read-into-bb [] bb (read-sm-count-bb bb))))
+        id-list-md     (into () (rseq (read-into-bb [] bb (read-md-count-bb bb))))
+        id-list-lg     (into () (rseq (read-into-bb [] bb (read-lg-count-bb bb))))
+
+        id-seq-0       (lazy-seq nil)
+        id-seq-sm      (or (seq (read-into-bb [] bb (read-sm-count-bb bb))) (lazy-seq nil))
+        id-seq-md      (or (seq (read-into-bb [] bb (read-md-count-bb bb))) (lazy-seq nil))
+        id-seq-lg      (or (seq (read-into-bb [] bb (read-lg-count-bb bb))) (lazy-seq nil))
+
+        id-byte              (.get      bb)
+        id-short             (.getShort bb)
+        id-integer           (.getInt   bb)
+        id-long-0      0
+        id-long-sm_    (long (.get      bb))
+        id-long-md_    (long (.getShort bb))
+        id-long-lg_    (long (.getInt   bb))
+        id-long-xl           (.getLong  bb)
+
+        id-long-pos-sm    (- (long (.get      bb))    Byte/MIN_VALUE)
+        id-long-pos-md    (- (long (.getShort bb))   Short/MIN_VALUE)
+        id-long-pos-lg    (- (long (.getInt   bb)) Integer/MIN_VALUE)
+
+        id-long-neg-sm (- (- (long (.get      bb))    Byte/MIN_VALUE))
+        id-long-neg-md (- (- (long (.getShort bb))   Short/MIN_VALUE))
+        id-long-neg-lg (- (- (long (.getInt   bb)) Integer/MIN_VALUE))
+
+        id-bigint      (bigint (read-biginteger-bb bb))
+        id-biginteger          (read-biginteger-bb bb)
+
+        id-float       (.getFloat  bb)
+        id-double-0    0.0
+        id-double      (.getDouble bb)
+
+        id-bigdec      (BigDecimal. ^BigInteger (read-biginteger-bb bb) (.getInt bb))
+        id-ratio       (clojure.lang.Ratio.     (read-biginteger-bb bb) (read-biginteger-bb bb))
+
+        id-map-entry   (enc/map-entry (thaw-from-byte-buffer* bb) (thaw-from-byte-buffer* bb))
+
+        id-util-date   (java.util.Date. (.getLong bb))
+        id-sql-date    (java.sql.Date.  (.getLong bb))
+        id-uuid        (UUID. (.getLong bb) (.getLong bb))
+        id-uri         (URI. (thaw-from-byte-buffer* bb))
+
+        id-time-instant
+        (let [secs  (.getLong bb)
+              nanos (.getInt  bb)]
+          (enc/compile-if java.time.Instant
+            (java.time.Instant/ofEpochSecond secs nanos)
+            {:nippy/unthawable
+             {:type  :class
+              :cause :class-not-found
+              :class-name "java.time.Instant"
+              :content    {:epoch-second secs :nano nanos}}}))
+
+        id-time-duration
+        (let [secs  (.getLong bb)
+              nanos (.getInt  bb)]
+          (enc/compile-if java.time.Duration
+            (java.time.Duration/ofSeconds secs nanos)
+            {:nippy/unthawable
+             {:type  :class
+              :cause :class-not-found
+              :class-name "java.time.Duration"
+              :content    {:seconds secs :nanos nanos}}}))
+
+        id-time-period
+        (let [years  (.getInt bb)
+              months (.getInt bb)
+              days   (.getInt bb)]
+          (enc/compile-if java.time.Period
+            (java.time.Period/of years months days)
+            {:nippy/unthawable
+             {:type  :class
+              :cause :class-not-found
+              :class-name "java.time.Period"
+              :content    {:years years :months months :days days}}}))
+
+        ;; Deprecated ------------------------------------------------------
+        id-boolean_    (not (zero? (int (.get bb))))
+        id-sorted-map_ (read-kvs-depr-bb (sorted-map) bb)
+        id-map__       (read-kvs-depr-bb {} bb)
+        id-reader_     (read-edn (.readUTF (buffer-data-input bb)))
+        id-str_                  (.readUTF (buffer-data-input bb))
+        id-kw_         (keyword  (.readUTF (buffer-data-input bb)))
+        id-map_        (apply hash-map
+                         (enc/repeatedly-into [] (* 2 (.getInt bb))
+                           (fn [] (thaw-from-byte-buffer* bb))))
+        ;; -----------------------------------------------------------------
+
+        id-prefixed-custom-md (read-custom-bb bb :prefixed (.getShort bb))
+
+        (if (neg? type-id)
+          (read-custom-bb bb nil type-id)
+          (truss/ex-info!
+            (str "Unrecognized type id (" type-id "). Data frozen with newer Nippy version?")
+            {:type-id type-id})))
+
+      (catch Throwable t
+        (truss/ex-info! (str "Thaw failed against type-id: " type-id)
+          {:type-id type-id} t)))))
+
+(defn thaw-from-byte-buffer!
+  "Deserializes a frozen object from given ByteBuffer to its original Clojure
+  data type.
+  This is a low-level util: in most cases you'll want `thaw` instead."
+  [^ByteBuffer bb]
+  (assert-big-endian-byte-buffer bb)
+  (thaw-from-byte-buffer* bb))
 
 (let [head-sig head-sig] ; Not ^:const
   (defn- try-parse-header [^bytes ba]

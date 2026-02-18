@@ -3,7 +3,10 @@
    [clojure.data.fressian      :as fress]
    [taoensso.encore            :as enc]
    [taoensso.nippy             :as nippy]
-   [taoensso.nippy.compression :as compr]))
+   [taoensso.nippy.compression :as compr])
+  (:import
+   [java.io ByteArrayInputStream ByteArrayOutputStream DataInputStream DataOutputStream]
+   [java.nio ByteBuffer]))
 
 ;;;; Reader
 
@@ -70,6 +73,80 @@
   (println "\nBenchmark results:")
   (doseq [[k v] results] (println k " " v))
   (do           results))
+
+(defn bench-byte-buffer-low-level
+  "Benchmarks low-level stream-backed freeze/thaw against ByteBuffer-backed
+  freeze/thaw. Intended as a focused micro-benchmark for adapter overhead."
+  [{:keys [laps warmup bench-data]
+    :or
+    {laps       1e4
+     warmup     25e3
+     bench-data default-bench-data}}]
+  (println "\nRunning low-level stream vs byte-buffer benchmark...")
+  (let [ref-frozen (nippy/fast-freeze bench-data)
+        cap        (+ (count ref-frozen) 64)
+
+        freeze-stream
+        (fn []
+          (let [baos (ByteArrayOutputStream. cap)
+                dos  (DataOutputStream. baos)]
+            (nippy/with-cache (nippy/freeze-to-out! dos bench-data))
+            (.toByteArray baos)))
+
+        freeze-bb
+        (fn []
+          (let [bb (ByteBuffer/allocate cap)]
+            (nippy/with-cache (nippy/freeze-to-byte-buffer! bb bench-data))
+            (let [len (.position bb)
+                  ba  (byte-array len)]
+              (.flip bb)
+              (.get bb ba 0 len)
+              ba)))
+
+        thaw-stream
+        (fn [^bytes ba]
+          (let [dis (DataInputStream. (ByteArrayInputStream. ba))]
+            (nippy/with-cache (nippy/thaw-from-in! dis))))
+
+        thaw-bb
+        (fn [^bytes ba]
+          (let [bb (ByteBuffer/wrap ba)]
+            (nippy/with-cache (nippy/thaw-from-byte-buffer! bb))))
+
+        data-stream (freeze-stream)
+        data-bb     (freeze-bb)]
+
+    (assert (= bench-data (thaw-stream data-stream)))
+    (assert (= bench-data (thaw-bb     data-bb)))
+
+    (let [time-freeze-stream (enc/bench laps {:warmup-laps warmup} (freeze-stream))
+          time-thaw-stream   (enc/bench laps {:warmup-laps warmup} (thaw-stream data-stream))
+          time-freeze-bb     (enc/bench laps {:warmup-laps warmup} (freeze-bb))
+          time-thaw-bb       (enc/bench laps {:warmup-laps warmup} (thaw-bb data-bb))
+
+          stream-round (+ time-freeze-stream time-thaw-stream)
+          bb-round     (+ time-freeze-bb     time-thaw-bb)
+
+          results
+          {:nippy/low-level-stream
+           {:round  stream-round
+            :freeze time-freeze-stream
+            :thaw   time-thaw-stream
+            :size   (count data-stream)}
+
+           :nippy/low-level-byte-buffer
+           {:round  bb-round
+            :freeze time-freeze-bb
+            :thaw   time-thaw-bb
+            :size   (count data-bb)}
+
+           :speedup
+           {:round  (enc/round2 (/ stream-round      bb-round))
+            :freeze (enc/round2 (/ time-freeze-stream time-freeze-bb))
+            :thaw   (enc/round2 (/ time-thaw-stream   time-thaw-bb))}}]
+
+      (println "\nLow-level stream vs byte-buffer benchmark done:")
+      (printed-results results))))
 
 (defn bench-serialization
   [{:keys [all? reader? fressian? fressian? lzma2? laps warmup bench-data]
@@ -189,6 +266,11 @@
 
   (enc/round2 (/ 8519 15880)) ; 0.54 of reader   output size
   (enc/round2 (/ 8519 12222)) ; 0.70 of fressian output size
+
+  (bench-byte-buffer-low-level {:laps 1e4 :warmup 2e4})
+  {:nippy/low-level-stream      {:round 628, :freeze 277, :thaw 351, :size 17098}
+   :nippy/low-level-byte-buffer {:round 496, :freeze 221, :thaw 275, :size 17098}
+   :speedup                     {:round 1.27, :freeze 1.25, :thaw 1.28}}
 
   (bench-compressors
     {:laps 1e4 :warmup 2e4}

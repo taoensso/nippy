@@ -112,6 +112,68 @@
 
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
 
+(deftype ByteBufferUTFType [s])
+
+(deftest _byte-buffer-low-level
+  [(testing "DataInput/DataOutput adapters"
+     (let [x  (with-meta {:k "v" :nums [1 2 3]} {:meta? true})
+           bb (java.nio.ByteBuffer/allocate 2048)]
+       (nippy/freeze-to-out! (nippy/buffer-data-output bb) x)
+       (let [written (.position bb)]
+         (.flip bb)
+         (is (pos? written))
+         (is (= x (nippy/thaw-from-in! (nippy/buffer-data-input bb))))
+         (is (= written (.position bb))))))
+
+   (testing "ByteBuffer entry points"
+     (let [bb (java.nio.ByteBuffer/allocate 2048)]
+       (nippy/freeze-to-byte-buffer! bb :a)
+       (nippy/freeze-to-byte-buffer! bb {:b [1 2 3]})
+       (let [written (.position bb)]
+         (.flip bb)
+         (is (= :a (nippy/thaw-from-byte-buffer! bb)))
+         (is (= {:b [1 2 3]} (nippy/thaw-from-byte-buffer! bb)))
+         (is (= written (.position bb))))))
+
+   (testing "Type fidelity for date variants"
+     (let [x  (java.sql.Date. 1700000000000)
+           bb (java.nio.ByteBuffer/allocate 256)]
+       (nippy/freeze-to-byte-buffer! bb x)
+       (.flip bb)
+       (let [y (nippy/thaw-from-byte-buffer! bb)]
+         (is (instance? java.sql.Date y))
+         (is (= x y)))))
+
+   (testing "UTF methods for custom extensions"
+     (nippy/extend-freeze ByteBufferUTFType :nippy-tests/byte-buffer-utf [x out]
+       (.writeUTF out (.s x)))
+
+     (nippy/extend-thaw :nippy-tests/byte-buffer-utf [in]
+       (ByteBufferUTFType. (.readUTF in)))
+
+     (let [x (ByteBufferUTFType. "abc-\u0000-\u07FF-\u0800")
+           bb (java.nio.ByteBuffer/allocate 2048)]
+       (nippy/freeze-to-byte-buffer! bb x)
+       (.flip bb)
+       (let [^ByteBufferUTFType y (nippy/thaw-from-byte-buffer! bb)]
+         (is (= (.s x) (.s y))))))
+
+   (testing "Bounds and byte-order checks"
+     (is (throws? java.io.EOFException
+           (nippy/freeze-to-byte-buffer!
+             (java.nio.ByteBuffer/allocate 1)
+             {:too "large"})))
+
+     (is (throws? IllegalArgumentException
+           (nippy/buffer-data-input
+             (doto (java.nio.ByteBuffer/allocate 8)
+               (.order java.nio.ByteOrder/LITTLE_ENDIAN)))))
+
+     (is (throws? IllegalArgumentException
+           (nippy/buffer-data-output
+             (doto (java.nio.ByteBuffer/allocate 8)
+               (.order java.nio.ByteOrder/LITTLE_ENDIAN))))))])
+
 ;;;; Custom types & records
 
 (deftype   MyType [basic_field fancy-field!]) ; Note `fancy-field!` field name will be munged
