@@ -76,8 +76,8 @@
 (def ^:private ^ThreadLocal tl:gcm-cipher (enc/threadlocal (javax.crypto.Cipher/getInstance "AES/GCM/NoPadding")))
 (def ^:private ^ThreadLocal tl:cbc-cipher (enc/threadlocal (javax.crypto.Cipher/getInstance "AES/CBC/PKCS5Padding")))
 
-(defn gcm-cipher ^javax.crypto.Cipher [] (.get tl:gcm-cipher))
-(defn cbc-cipher ^javax.crypto.Cipher [] (.get tl:cbc-cipher))
+(defn gcm-cipher ^javax.crypto.Cipher [] (.get ^ThreadLocal tl:gcm-cipher))
+(defn cbc-cipher ^javax.crypto.Cipher [] (.get ^ThreadLocal tl:cbc-cipher))
 ;
 (deftype CipherKit-AES-GCM []
   ICipherKit
