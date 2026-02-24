@@ -93,10 +93,15 @@
             (nippy/with-cache (nippy/freeze-to-out! dos bench-data))
             (.toByteArray baos)))
 
+        ;; Use runtime resolution: freeze-to-byte-buffer! is only available
+        ;; in the current branch, not in the released nippy v3.6.0.
+        freeze-to-bb! (requiring-resolve 'taoensso.nippy/freeze-to-byte-buffer!)
+        thaw-from-bb! (requiring-resolve 'taoensso.nippy/thaw-from-byte-buffer!)
+
         freeze-bb
         (fn []
           (let [bb (ByteBuffer/allocate cap)]
-            (nippy/with-cache (nippy/freeze-to-byte-buffer! bb bench-data))
+            (nippy/with-cache (freeze-to-bb! bb bench-data))
             (let [len (.position bb)
                   ba  (byte-array len)]
               (.flip bb)
@@ -111,7 +116,7 @@
         thaw-bb
         (fn [^bytes ba]
           (let [bb (ByteBuffer/wrap ba)]
-            (nippy/with-cache (nippy/thaw-from-byte-buffer! bb))))
+            (nippy/with-cache (thaw-from-bb! bb))))
 
         data-stream (freeze-stream)
         data-bb     (freeze-bb)]
@@ -148,8 +153,53 @@
       (println "\nLow-level stream vs byte-buffer benchmark done:")
       (printed-results results))))
 
+(defn bench-serialization-data
+  "Like `bench-serialization` but returns results without printing."
+  [{:keys [all? reader? fressian? lzma2? laps warmup bench-data]
+    :as   opts
+    :or
+    {laps   1e4
+     warmup 25e3}}]
+
+  (let [results_ (atom {})]
+    (when (or all? reader?)
+      (swap! results_ assoc :reader
+        (bench1-serialization freeze-reader thaw-reader
+          (fn [^String s] (count (.getBytes s "UTF-8")))
+          (assoc opts :laps laps, :warmup warmup))))
+
+    (when (or all? fressian?)
+      (swap! results_ assoc :fressian
+        (bench1-serialization freeze-fress thaw-fress count
+          (assoc opts :laps laps, :warmup warmup))))
+
+    (when (or all? lzma2?)
+      (swap! results_ assoc :nippy/lzma2
+        (bench1-serialization
+          #(nippy/freeze % {:compressor nippy/lzma2-compressor})
+          #(nippy/thaw   % {:compressor nippy/lzma2-compressor})
+          count
+          (assoc opts :laps laps, :warmup warmup))))
+
+    (swap! results_ assoc :nippy/encrypted
+      (bench1-serialization
+        #(nippy/freeze % {:password [:cached "p"]})
+        #(nippy/thaw   % {:password [:cached "p"]})
+        count
+        (assoc opts :laps laps, :warmup warmup)))
+
+    (swap! results_ assoc :nippy/default
+      (bench1-serialization nippy/freeze nippy/thaw count
+        (assoc opts :laps laps, :warmup warmup)))
+
+    (swap! results_ assoc :nippy/fast
+      (bench1-serialization nippy/fast-freeze nippy/fast-thaw count
+        (assoc opts :laps laps, :warmup warmup)))
+
+    @results_))
+
 (defn bench-serialization
-  [{:keys [all? reader? fressian? fressian? lzma2? laps warmup bench-data]
+  [{:keys [all? reader? fressian? lzma2? laps warmup bench-data]
     :as   opts
     :or
     {laps   1e4
@@ -201,6 +251,56 @@
     (println "\nBenchmarks done:")
     (printed-results @results_)))
 
+(defn bench-compare
+  "Compares current branch vs released nippy v3.6.0.
+
+  Spawns a subprocess using the :bench-v360 Lein profile (which swaps the
+  current nippy source for the released JAR) to obtain reference numbers.
+
+  Options are the same as `bench-serialization`."
+  [opts]
+  (println "\nBenchmarking current branch...")
+  (let [current (bench-serialization-data opts)
+
+        _ (println "\nBenchmarking released nippy v3.6.0 (subprocess)...")
+        proc    (-> (ProcessBuilder.
+                      ["lein" "with-profile" "+bench-v360"
+                       "run" "-m" "taoensso.nippy-bench-runner"])
+                    (.directory (java.io.File. (System/getProperty "user.dir")))
+                    .start)
+        ;; Let the subprocess print its progress/warnings to our stderr
+        _       (future (with-open [r (java.io.BufferedReader.
+                                        (java.io.InputStreamReader.
+                                          (.getErrorStream proc)))]
+                          (doseq [line (line-seq r)]
+                            (binding [*out* *err*] (println line)))))
+        edn-out (slurp (.getInputStream proc))
+        _       (.waitFor proc)
+        released (clojure.edn/read-string edn-out)
+
+        ks (sort (keys current))
+        pad (fn [s n] (let [s (str s)] (str s (apply str (repeat (- n (count s)) " ")))))]
+
+    (println "\n=== Serialization benchmark: current branch vs v3.6.0 ===")
+    (println "(times in µs, lower is better; speedup = v3.6.0/current, higher means current is faster)")
+    (println)
+    (printf "%-22s  %8s  %8s  %8s  %8s  %8s  %8s  %8s%n"
+      "" "cur-frz" "rls-frz" "cur-thw" "rls-thw" "cur-rnd" "rls-rnd" "speedup")
+    (println (apply str (repeat 90 "-")))
+    (doseq [k ks]
+      (let [c (get current  k)
+            r (get released k)]
+        (when (and c r)
+          (printf "%-22s  %8d  %8d  %8d  %8d  %8d  %8d  %8.2fx%n"
+            k
+            (:freeze c) (:freeze r)
+            (:thaw   c) (:thaw   r)
+            (:round  c) (:round  r)
+            (double (/ (:round r) (:round c)))))))
+    (println)
+    {:current  current
+     :released released}))
+
 ;;;; Compression
 
 (defn- bench1-compressor
@@ -241,6 +341,13 @@
 ;;;; Results
 
 (comment
+
+  ;; Compare current branch vs released v3.6.0 (runs a subprocess):
+  (bench-compare {})
+
+  ;; Single-version serialization benchmarks:
+  (bench-serialization {:all? true})
+
   {:last-updated    "2024-01-16"
    :system          "2020 Macbook Pro M1, 16 GB memory"
    :clojure-version "1.11.1"
