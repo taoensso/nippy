@@ -178,6 +178,7 @@
 
 (deftype   MyType [basic_field fancy-field!]) ; Note `fancy-field!` field name will be munged
 (defrecord MyRec  [basic_field fancy-field!])
+(defrecord LowLevelRec [id])
 
 (deftest _types
   [(testing "Extend to custom type"
@@ -221,7 +222,25 @@
 
          (nippy/extend-thaw :nippy-tests/MyRec [s] (MyRec. (.readUTF s) (.readUTF s)))
          (let [mr (MyRec. "basic" "fancy")]
-           (=  mr (thaw (freeze mr)))))))])
+           (=  mr (thaw (freeze mr)))))))
+
+   (testing "Low-level nested Nippy calls in custom extensions"
+     (is
+       (do
+         (nippy/extend-freeze LowLevelRec :nippy-tests/low-level-rec [x out]
+           (nippy/freeze-to-out! out (:id x)))
+
+         (nippy/extend-thaw :nippy-tests/low-level-rec [in]
+           (->LowLevelRec (nippy/thaw-from-in! in)))
+
+         (let [x  (->LowLevelRec 42)
+               bb (java.nio.ByteBuffer/allocate 256)]
+           (nippy/freeze-to-byte-buffer! bb x)
+           (.flip bb)
+           (and
+             (= x           (thaw (freeze x)))
+             (= {:wrapped x} (thaw (freeze {:wrapped x})))
+             (= x           (nippy/thaw-from-byte-buffer! bb)))))))])
 
 ;;;; Caching
 

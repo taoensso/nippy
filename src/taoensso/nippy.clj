@@ -1388,14 +1388,19 @@
   reused across calls to avoid per-call allocation."
   (proxy [ThreadLocal] [] (initialValue [] (ByteBuffer/allocate 512))))
 
-(defn- freeze-raw!
-  "Freezes x to a raw (headerless) byte array via the BB path.
-  Does NOT manage the cache thread-local — callers are responsible."
-  ^bytes [x]
-  (loop [^ByteBuffer bb (.get ^ThreadLocal -freeze-bb)]
-    ;; Reset cache state on each attempt so that retry after overflow doesn't
-    ;; produce stale references without their corresponding data.
-    (when-let [cache_ (.get -cache-proxy)] (vreset! cache_ nil))
+(def ^:private -freeze-depth
+  "Thread-local nesting depth for BB freeze operations.
+  Reentrant freeze calls from custom serializers must not reuse the active
+  buffer or they will clobber the parent payload."
+  (proxy [ThreadLocal] [] (initialValue [] 0)))
+
+(defn- freeze-raw-with-bb!
+  "Freezes x to a raw (headerless) byte array via the BB path using the given
+  ByteBuffer. Resets cache state before each retry so an overflow doesn't leave
+  stale cache references behind."
+  [x ^ByteBuffer bb cache_ cache-state]
+  (loop [^ByteBuffer bb bb]
+    (when cache_ (vreset! cache_ cache-state))
     (.clear bb)
     (let [out_ (volatile! nil)
           out* (fn [] (or @out_ (vreset! out_ (buffer-data-output bb))))
@@ -1405,10 +1410,35 @@
             (java.util.Arrays/copyOf (.array bb) (.position bb))
             (catch java.nio.BufferOverflowException _ nil))]
       (if result
-        result
-        (let [new-bb (ByteBuffer/allocate (* 2 (.capacity bb)))]
-          (.set ^ThreadLocal -freeze-bb new-bb)
-          (recur new-bb))))))
+        [result bb]
+        (recur (ByteBuffer/allocate (* 2 (.capacity bb))))))))
+
+(defn- freeze-raw!
+  "Freezes x to a raw (headerless) byte array via the BB path.
+  Does NOT manage the cache thread-local — callers are responsible."
+  ^bytes [x]
+  (let [^ThreadLocal freeze-depth -freeze-depth
+        depth (long (.get freeze-depth))
+        cache_ (.get -cache-proxy)
+        cache-state (when cache_ @cache_)]
+    (.set freeze-depth (inc depth))
+    (try
+      (if (zero? depth)
+        (let [^ByteBuffer bb (.get ^ThreadLocal -freeze-bb)
+              [result final-bb] (freeze-raw-with-bb! x bb cache_ cache-state)]
+          (when-not (identical? final-bb bb)
+            (.set ^ThreadLocal -freeze-bb final-bb))
+          result)
+        ;; Nested freezes need their own ByteBuffer so custom serializers can
+        ;; safely call `freeze`, `fast-freeze`, or `freeze-to-out!`.
+        (let [^ByteBuffer shared-bb (.get ^ThreadLocal -freeze-bb)]
+          (first (freeze-raw-with-bb!
+                   x
+                   (ByteBuffer/allocate (.capacity shared-bb))
+                   cache_
+                   cache-state))))
+      (finally
+        (.set freeze-depth depth)))))
 
 ;; Public `-freeze-with-meta!` with different arg order
 (defn freeze-to-out!
