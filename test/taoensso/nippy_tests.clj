@@ -112,10 +112,73 @@
 
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
 
+(deftype ByteBufferUTFType [s])
+
+(deftest _byte-buffer-low-level
+  [(testing "DataInput/DataOutput adapters"
+     (let [x  (with-meta {:k "v" :nums [1 2 3]} {:meta? true})
+           bb (java.nio.ByteBuffer/allocate 2048)]
+       (nippy/freeze-to-out! (nippy/buffer-data-output bb) x)
+       (let [written (.position bb)]
+         (.flip bb)
+         (is (pos? written))
+         (is (= x (nippy/thaw-from-in! (nippy/buffer-data-input bb))))
+         (is (= written (.position bb))))))
+
+   (testing "ByteBuffer entry points"
+     (let [bb (java.nio.ByteBuffer/allocate 2048)]
+       (nippy/freeze-to-byte-buffer! bb :a)
+       (nippy/freeze-to-byte-buffer! bb {:b [1 2 3]})
+       (let [written (.position bb)]
+         (.flip bb)
+         (is (= :a (nippy/thaw-from-byte-buffer! bb)))
+         (is (= {:b [1 2 3]} (nippy/thaw-from-byte-buffer! bb)))
+         (is (= written (.position bb))))))
+
+   (testing "Type fidelity for date variants"
+     (let [x  (java.sql.Date. 1700000000000)
+           bb (java.nio.ByteBuffer/allocate 256)]
+       (nippy/freeze-to-byte-buffer! bb x)
+       (.flip bb)
+       (let [y (nippy/thaw-from-byte-buffer! bb)]
+         (is (instance? java.sql.Date y))
+         (is (= x y)))))
+
+   (testing "UTF methods for custom extensions"
+     (nippy/extend-freeze ByteBufferUTFType :nippy-tests/byte-buffer-utf [x out]
+       (.writeUTF out (.s x)))
+
+     (nippy/extend-thaw :nippy-tests/byte-buffer-utf [in]
+       (ByteBufferUTFType. (.readUTF in)))
+
+     (let [x (ByteBufferUTFType. "abc-\u0000-\u07FF-\u0800")
+           bb (java.nio.ByteBuffer/allocate 2048)]
+       (nippy/freeze-to-byte-buffer! bb x)
+       (.flip bb)
+       (let [^ByteBufferUTFType y (nippy/thaw-from-byte-buffer! bb)]
+         (is (= (.s x) (.s y))))))
+
+   (testing "Bounds and byte-order checks"
+     (is (throws? java.io.EOFException
+           (nippy/freeze-to-byte-buffer!
+             (java.nio.ByteBuffer/allocate 1)
+             {:too "large"})))
+
+     (is (throws? IllegalArgumentException
+           (nippy/buffer-data-input
+             (doto (java.nio.ByteBuffer/allocate 8)
+               (.order java.nio.ByteOrder/LITTLE_ENDIAN)))))
+
+     (is (throws? IllegalArgumentException
+           (nippy/buffer-data-output
+             (doto (java.nio.ByteBuffer/allocate 8)
+               (.order java.nio.ByteOrder/LITTLE_ENDIAN))))))])
+
 ;;;; Custom types & records
 
 (deftype   MyType [basic_field fancy-field!]) ; Note `fancy-field!` field name will be munged
 (defrecord MyRec  [basic_field fancy-field!])
+(defrecord LowLevelRec [id])
 
 (deftest _types
   [(testing "Extend to custom type"
@@ -159,7 +222,25 @@
 
          (nippy/extend-thaw :nippy-tests/MyRec [s] (MyRec. (.readUTF s) (.readUTF s)))
          (let [mr (MyRec. "basic" "fancy")]
-           (=  mr (thaw (freeze mr)))))))])
+           (=  mr (thaw (freeze mr)))))))
+
+   (testing "Low-level nested Nippy calls in custom extensions"
+     (is
+       (do
+         (nippy/extend-freeze LowLevelRec :nippy-tests/low-level-rec [x out]
+           (nippy/freeze-to-out! out (:id x)))
+
+         (nippy/extend-thaw :nippy-tests/low-level-rec [in]
+           (->LowLevelRec (nippy/thaw-from-in! in)))
+
+         (let [x  (->LowLevelRec 42)
+               bb (java.nio.ByteBuffer/allocate 256)]
+           (nippy/freeze-to-byte-buffer! bb x)
+           (.flip bb)
+           (and
+             (= x           (thaw (freeze x)))
+             (= {:wrapped x} (thaw (freeze {:wrapped x})))
+             (= x           (nippy/thaw-from-byte-buffer! bb)))))))])
 
 ;;;; Caching
 

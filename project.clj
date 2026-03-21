@@ -24,12 +24,34 @@
 
    :graal-tests
    {:source-paths ["test"]
-    :main taoensso.graal-tests
-    :aot [taoensso.graal-tests]
+    :main         taoensso.graal-tests
+    :aot          [taoensso.graal-tests]
     :uberjar-name "graal-tests.jar"
     :dependencies
     [[org.clojure/clojure                  "1.11.3"]
      [com.github.clj-easy/graal-build-time "1.0.5"]]}
+
+   ;; Profile for benchmarking the released v3.6.0 via subprocess.
+   ;; Replaces current source with the released JAR so the same benchmark
+   ;; code runs against two different implementations.
+   ;; Usage: lein with-profile +bench-v360 run -m taoensso.nippy-bench-runner
+   :bench-v360
+   {:source-paths      ^:replace []
+    :java-source-paths ^:replace []
+    :resource-paths    ^:replace []
+    ;; Override dev's elide-deprecated flag — the released nippy v3.6.0 uses
+    ;; encore's deprecated `thread-local` macro, which encore 3.158.0+ elides
+    ;; when taoensso.elide-deprecated=true.
+    :jvm-opts          ^:replace ["-server" "-Xms1024m" "-Xmx2048m"]
+    :dependencies
+    [[org.clojure/clojure         "1.11.4"]
+     [com.taoensso/nippy          "3.6.0"]
+     [com.taoensso/encore         "3.158.0"]
+     [org.clojure/tools.reader    "1.5.2"]
+     [org.tukaani/xz              "1.10"]
+     [io.airlift/aircompressor    "2.0.2"]
+     [org.clojure/test.check      "1.1.1"]
+     [org.clojure/data.fressian   "1.1.0"]]}
 
    :dev
    {:jvm-opts
@@ -55,10 +77,10 @@
      [lein-ancient "0.7.0"]]}}
 
   :aliases
-  {"start-dev"     ["with-profile" "+dev" "repl" ":headless"]
+  {"start-dev"  ["with-profile" "+dev" "repl" ":headless"]
    ;; "build-once" ["do" ["clean"] ["cljsbuild" "once"]]
-   "deploy-lib"    ["do" #_["build-once"] ["deploy" "clojars"] ["install"]]
+   "deploy-lib" ["do" #_["build-once"] ["deploy" "clojars"] ["install"]]
 
-   "test-clj"     ["with-profile" "+c1.12:+c1.11:+c1.10" "test"]
+   "test-clj" ["with-profile" "+c1.12:+c1.11:+c1.10" "test"]
    ;; "test-cljs" ["with-profile" "+c1.12" "cljsbuild"   "test"]
-   "test-all"     ["do" ["clean"] ["test-clj"] #_["test-cljs"]]})
+   "test-all" ["do" ["clean"] ["test-clj"] #_["test-cljs"]]})
