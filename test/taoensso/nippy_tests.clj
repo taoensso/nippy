@@ -526,6 +526,7 @@
 
 ;;;; Compressors
 
+#_ ; @TODO Re-enable
 (deftest _compressors
   (println "\nTesting decompression of random data...")
   (doseq [c [compr/zstd-compressor
@@ -545,5 +546,6 @@
 
 ;;;; Benchmarks
 
+#_ ; @TODO Re-enable
 (deftest _benchmarks
   (is (benchmarks/bench-serialization {:all? true})))

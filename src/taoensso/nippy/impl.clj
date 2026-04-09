@@ -280,3 +280,17 @@
           (vec (sort (clojure.set/difference (id-history new-release) (id-history old-release)))))]
 
     (diff 350 340)))
+
+;;;;
+
+(def get-basis-fields
+  "Returns [`java.lang.reflect.Field` ...] for given class."
+  (enc/fmemoize
+    (fn [^Class c] ; Auto invalidated on `deftype` redef, etc.
+      (let [basis (.invoke (.getMethod c "getBasis" nil) nil nil)]
+        (mapv
+          (fn [f]
+            (let [field (.getDeclaredField c (munge (name f)))]
+              (.setAccessible field true)
+              (do             field)))
+          basis)))))

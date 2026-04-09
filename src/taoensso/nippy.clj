@@ -586,21 +586,11 @@
   (binding [*freeze-serializable-allowlist* #{"foo.*" "bar"}]
     (freeze-serializable-allowed? "foo.bar")))
 
-;;;; Freezing interface
+;;;; Freezing interface (don't use these directly, use `extend-freeze` instead!)
 
-(defprotocol IFreezable
-  "Private implementation detail.
-  Protocol that types must implement to support native freezing by Nippy.
-  Don't use this directly, instead see `extend-freeze`."
-  (-freezable?           [_])
-  (-freeze-without-meta! [_ data-output]))
-
-(defprotocol IFreezableBB
-  "Private BB freeze protocol.
-  The `Object` fallback handles array types and user `extend-freeze` types (via `IFreezable`)."
-  (-freeze-bb! [x ^ByteBuffer bb out*]))
-
-(defmacro write-id [out id] `(.writeByte ~out ~id))
+(defprotocol IFreezeToBBuf "Private protocol for freezing objects to a `ByteBuffer`." (-freeze->bbuf! [x ^ByteBuffer bb ^DataOutput dout]))
+(defprotocol IFreezeToDOut "Private protocol for freezing objects to a `DataOutput`." (-freeze->dout! [_                ^DataOutput dout]))
+(defprotocol IFreezable    "Private protocol for freezable objects."                  (-freezable?  [_]))
 
 ;;;; Freezing
 
@@ -622,51 +612,28 @@
   (defmacro ^:private read-md-count  [in]    `(.readShort ~in))
   (defmacro ^:private read-lg-count  [in]    `(.readInt   ~in)))
 
-(defn- write-bytes-sm  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-sm-count out len) (.write out ba 0 len)))
-(defn- write-bytes-md  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-md-count out len) (.write out ba 0 len)))
-(defn- write-bytes-lg  [^DataOutput out ^bytes ba] (let [len (alength ba)] (write-lg-count out len) (.write out ba 0 len)))
-(defn- write-bytes     [^DataOutput out ^bytes ba]
+(defmacro write-id        [            dout        id] `(.writeByte ~dout ~id))
+(defn-    write-bytes-sm  [^DataOutput dout ^bytes ba] (let [len (alength ba)] (write-sm-count dout len) (.write dout ba 0 len)))
+(defn-    write-bytes-md  [^DataOutput dout ^bytes ba] (let [len (alength ba)] (write-md-count dout len) (.write dout ba 0 len)))
+(defn-    write-bytes-lg  [^DataOutput dout ^bytes ba] (let [len (alength ba)] (write-lg-count dout len) (.write dout ba 0 len)))
+(defn-    write-bytes     [^DataOutput dout ^bytes ba]
   (let [len (alength ba)]
     (if (zero? len)
-      (write-id out id-byte-array-0)
+      (write-id dout id-byte-array-0)
       (do
         (enc/cond
-          (sm-count? len) (do (write-id out id-byte-array-sm) (write-sm-count out len))
-          (md-count? len) (do (write-id out id-byte-array-md) (write-md-count out len))
-          :else           (do (write-id out id-byte-array-lg) (write-lg-count out len)))
+          (sm-count? len) (do (write-id dout id-byte-array-sm) (write-sm-count dout len))
+          (md-count? len) (do (write-id dout id-byte-array-md) (write-md-count dout len))
+          :else           (do (write-id dout id-byte-array-lg) (write-lg-count dout len)))
 
-        (.write out ba 0 len)))))
+        (.write dout ba 0 len)))))
 
-(def ^:private ^:const meta-protocol-key ::meta-protocol-key)
-
-;; @TODO These should probably be private?
+;; @TODO These should be private?
 (defmacro write-id-bb        [bb id] `(.put      ~bb (unchecked-byte  ~id)))
 (defmacro write-sm-count-bb* [bb  n] `(.put      ~bb (unchecked-byte (+ ~n Byte/MIN_VALUE))))
 (defmacro write-sm-count-bb  [bb  n] `(.put      ~bb (unchecked-byte    ~n)))
 (defmacro write-md-count-bb  [bb  n] `(.putShort ~bb (unchecked-short   ~n)))
 (defmacro write-lg-count-bb  [bb  n] `(.putInt   ~bb (int               ~n)))
-
-(def ^:private array-class-bytes   (Class/forName "[B"))
-(def ^:private array-class-longs   (Class/forName "[J"))
-(def ^:private array-class-ints    (Class/forName "[I"))
-(def ^:private array-class-doubles (Class/forName "[D"))
-(def ^:private array-class-floats  (Class/forName "[F"))
-(def ^:private array-class-strings (Class/forName "[Ljava.lang.String;"))
-(def ^:private array-class-objects (Class/forName "[Ljava.lang.Object;"))
-
-(def ^:private get-basis-fields
-  "Returns [`java.lang.reflect.Field` ...] for given class."
-  (enc/fmemoize
-    (fn [^Class c] ; Auto invalidated on `deftype` redef, etc.
-      (let [basis (.invoke (.getMethod c "getBasis" nil) nil nil)]
-        (mapv
-          (fn [f]
-            (let [field (.getDeclaredField c (munge (name f)))]
-              (.setAccessible field true)
-              (do             field)))
-          basis)))))
-
-(declare freeze-with-meta-bb! freeze-without-meta-bb!)
 
 (defn- write-bytes-sm-bb  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-sm-count-bb  bb len) (.put bb ba 0 len)))
 (defn- write-bytes-md-bb  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-md-count-bb  bb len) (.put bb ba 0 len)))
@@ -753,14 +720,17 @@
         (<= y range-uint)   (do (write-id-bb bb id-long-neg-lg) (.putInt   bb (int             (+ y Integer/MIN_VALUE))))
         :else               (do (write-id-bb bb id-long-xl)     (.putLong  bb                     n))))))
 
+;; @TODO Refactor these names, continue from here...
+(declare freeze-with-meta-bb! freeze-without-meta-bb!)
+
 (defn- write-counted-coll-bb
-  ([^ByteBuffer bb out* id-lg coll]
+  ([^ByteBuffer bb dout id-lg coll]
    (let [cnt (count coll)]
      (write-id-bb       bb id-lg)
      (write-lg-count-bb bb cnt)
-     (reduce (fn [_ in] (freeze-with-meta-bb! bb out* in)) nil coll)))
+     (reduce (fn [_ in] (freeze-with-meta-bb! bb dout in)) nil coll)))
 
-  ([^ByteBuffer bb out* id-empty id-sm id-md id-lg coll]
+  ([^ByteBuffer bb dout id-empty id-sm id-md id-lg coll]
    (let [cnt (count coll)]
      (if (zero? cnt)
        (write-id-bb bb id-empty)
@@ -769,9 +739,11 @@
            (sm-count? cnt) (do (write-id-bb bb id-sm) (write-sm-count-bb bb cnt))
            (md-count? cnt) (do (write-id-bb bb id-md) (write-md-count-bb bb cnt))
            :else           (do (write-id-bb bb id-lg) (write-lg-count-bb bb cnt)))
-         (reduce (fn [_ in] (freeze-with-meta-bb! bb out* in)) nil coll))))))
+         (reduce (fn [_ in] (freeze-with-meta-bb! bb dout in)) nil coll))))))
 
-(defn- write-map-bb [^ByteBuffer bb out* m is-metadata?]
+(def ^:private ^:const meta-protocol-key ::meta-protocol-key)
+
+(defn- write-map-bb [^ByteBuffer bb dout m is-metadata?]
   (let [cnt (count m)]
     (if (zero? cnt)
       (write-id-bb bb id-map-0)
@@ -788,15 +760,15 @@
               (do
                 (if (impl/target-release>= 340)
                   (write-id-bb             bb   id-meta-protocol-key)
-                  (freeze-without-meta-bb! bb out* meta-protocol-key))
+                  (freeze-without-meta-bb! bb dout meta-protocol-key))
                 (write-id-bb bb id-nil))
               (do
-                (freeze-with-meta-bb! bb out* k)
-                (freeze-with-meta-bb! bb out* v))))
+                (freeze-with-meta-bb! bb dout k)
+                (freeze-with-meta-bb! bb dout v))))
           nil
           m)))))
 
-(defn- write-set-bb [^ByteBuffer bb out* s]
+(defn- write-set-bb [^ByteBuffer bb dout s]
   (let [cnt (count s)]
     (if (zero? cnt)
       (write-id-bb bb id-set-0)
@@ -806,7 +778,7 @@
           (when-not impl/pack-unsigned? (sm-count?  cnt)) (do (write-id-bb bb id-set-sm_) (write-sm-count-bb  bb cnt))
                                         (md-count?  cnt)  (do (write-id-bb bb id-set-md)  (write-md-count-bb  bb cnt))
           :else                                           (do (write-id-bb bb id-set-lg)  (write-lg-count-bb  bb cnt)))
-        (reduce (fn [_ in] (freeze-with-meta-bb! bb out* in)) nil s)))))
+        (reduce (fn [_ in] (freeze-with-meta-bb! bb dout in)) nil s)))))
 
 (deftype Cached [val])
 
@@ -817,49 +789,49 @@
   ;; Safer to require explicit activation through `with-cache`.
   (proxy [ThreadLocal] []))
 
-(extend-protocol IFreezableBB
-  nil        (-freeze-bb! [            _ ^ByteBuffer bb _] (write-id-bb bb id-nil))
-  Boolean    (-freeze-bb! [^Boolean    x ^ByteBuffer bb _] (if (.booleanValue x) (write-id-bb bb id-true) (write-id-bb bb id-false)))
-  Character  (-freeze-bb! [^Character  x ^ByteBuffer bb _] (do (write-id-bb bb id-char)    (.putChar  bb (unchecked-char (int x)))))
-  Byte       (-freeze-bb! [^Byte       x ^ByteBuffer bb _] (do (write-id-bb bb id-byte)    (.put      bb (unchecked-byte      x))))
-  Short      (-freeze-bb! [^Short      x ^ByteBuffer bb _] (do (write-id-bb bb id-short)   (.putShort bb (unchecked-short     x))))
-  Integer    (-freeze-bb! [^Integer    x ^ByteBuffer bb _] (do (write-id-bb bb id-integer) (.putInt   bb                 (int x))))
-  Long       (-freeze-bb! [^Long       x ^ByteBuffer bb _] (write-long-bb bb x))
-  Float      (-freeze-bb! [^Float      x ^ByteBuffer bb _] (do (write-id-bb bb id-float) (.putFloat bb x)))
-  Double     (-freeze-bb! [^Double     x ^ByteBuffer bb _] (if (zero? ^double x) (write-id-bb bb id-double-0) (do (write-id-bb bb id-double) (.putDouble bb x))))
-  BigInt     (-freeze-bb! [^BigInt     x ^ByteBuffer bb _] (do (write-id-bb bb id-bigint)     (write-biginteger-bb bb (.toBigInteger  x))))
-  BigInteger (-freeze-bb! [^BigInteger x ^ByteBuffer bb _] (do (write-id-bb bb id-biginteger) (write-biginteger-bb bb                 x)))
-  BigDecimal (-freeze-bb! [^BigDecimal x ^ByteBuffer bb _] (do (write-id-bb bb id-bigdec)     (write-biginteger-bb bb (.unscaledValue x)) (.putInt bb (.scale x))))
-  Ratio      (-freeze-bb! [^Ratio      x ^ByteBuffer bb _] (do (write-id-bb bb id-ratio)      (write-biginteger-bb bb (.numerator x)) (write-biginteger-bb bb (.denominator x))))
+(extend-protocol IFreezeToBBuf
+  nil        (-freeze->bbuf! [            _ ^ByteBuffer bb _] (write-id-bb bb id-nil))
+  Boolean    (-freeze->bbuf! [^Boolean    x ^ByteBuffer bb _] (if (.booleanValue x) (write-id-bb bb id-true) (write-id-bb bb id-false)))
+  Character  (-freeze->bbuf! [^Character  x ^ByteBuffer bb _] (do (write-id-bb bb id-char)    (.putChar  bb (unchecked-char (int x)))))
+  Byte       (-freeze->bbuf! [^Byte       x ^ByteBuffer bb _] (do (write-id-bb bb id-byte)    (.put      bb (unchecked-byte      x))))
+  Short      (-freeze->bbuf! [^Short      x ^ByteBuffer bb _] (do (write-id-bb bb id-short)   (.putShort bb (unchecked-short     x))))
+  Integer    (-freeze->bbuf! [^Integer    x ^ByteBuffer bb _] (do (write-id-bb bb id-integer) (.putInt   bb                 (int x))))
+  Long       (-freeze->bbuf! [^Long       x ^ByteBuffer bb _] (write-long-bb bb x))
+  Float      (-freeze->bbuf! [^Float      x ^ByteBuffer bb _] (do (write-id-bb bb id-float) (.putFloat bb x)))
+  Double     (-freeze->bbuf! [^Double     x ^ByteBuffer bb _] (if (zero? ^double x) (write-id-bb bb id-double-0) (do (write-id-bb bb id-double) (.putDouble bb x))))
+  BigInt     (-freeze->bbuf! [^BigInt     x ^ByteBuffer bb _] (do (write-id-bb bb id-bigint)     (write-biginteger-bb bb (.toBigInteger  x))))
+  BigInteger (-freeze->bbuf! [^BigInteger x ^ByteBuffer bb _] (do (write-id-bb bb id-biginteger) (write-biginteger-bb bb                 x)))
+  BigDecimal (-freeze->bbuf! [^BigDecimal x ^ByteBuffer bb _] (do (write-id-bb bb id-bigdec)     (write-biginteger-bb bb (.unscaledValue x)) (.putInt bb (.scale x))))
+  Ratio      (-freeze->bbuf! [^Ratio      x ^ByteBuffer bb _] (do (write-id-bb bb id-ratio)      (write-biginteger-bb bb (.numerator x)) (write-biginteger-bb bb (.denominator x))))
 
   ;; MapEntry before APersistentVector: MapEntry extends APersistentVector but
   ;; needs its own wire format (id-map-entry, not the vector format).
-  MapEntry          (-freeze-bb! [                x ^ByteBuffer bb out*] (do (write-id-bb bb id-map-entry) (freeze-with-meta-bb! bb out* (key x)) (freeze-with-meta-bb! bb out* (val x))))
-  java.sql.Date     (-freeze-bb! [^java.sql.Date  x ^ByteBuffer bb    _] (do (write-id-bb bb id-sql-date)  (.putLong bb (.getTime  x))))
-  java.util.Date    (-freeze-bb! [^java.util.Date x ^ByteBuffer bb    _] (do (write-id-bb bb id-util-date) (.putLong bb (.getTime  x))))
-  URI               (-freeze-bb! [^URI            x ^ByteBuffer bb    _] (do (write-id-bb bb id-uri)  (write-str-bb  bb (.toString x))))
-  UUID              (-freeze-bb! [^UUID           x ^ByteBuffer bb    _] (do (write-id-bb bb id-uuid)   (.putLong    bb (.getMostSignificantBits  x))
-                                                                                                        (.putLong    bb (.getLeastSignificantBits x))))
-  String            (-freeze-bb! [^String         x ^ByteBuffer bb    _] (write-str-bb bb x))
-  Keyword           (-freeze-bb! [                x ^ByteBuffer bb    _] (write-kw-bb  bb x))
-  Symbol            (-freeze-bb! [                x ^ByteBuffer bb    _] (write-sym-bb bb x))
-  Pattern           (-freeze-bb! [^Pattern        x ^ByteBuffer bb    _] (do (write-id-bb bb id-regex) (write-str-bb bb (str x))))
-  PersistentQueue   (-freeze-bb! [                x ^ByteBuffer bb out*] (write-counted-coll-bb bb out* id-queue-lg      x))
-  PersistentTreeSet (-freeze-bb! [                x ^ByteBuffer bb out*] (write-counted-coll-bb bb out* id-sorted-set-lg x))
-  PersistentTreeMap (-freeze-bb! [                x ^ByteBuffer bb out*]
+  MapEntry          (-freeze->bbuf! [                x ^ByteBuffer bb dout] (do (write-id-bb bb id-map-entry) (freeze-with-meta-bb! bb dout (key x)) (freeze-with-meta-bb! bb dout (val x))))
+  java.sql.Date     (-freeze->bbuf! [^java.sql.Date  x ^ByteBuffer bb    _] (do (write-id-bb bb id-sql-date)  (.putLong bb (.getTime  x))))
+  java.util.Date    (-freeze->bbuf! [^java.util.Date x ^ByteBuffer bb    _] (do (write-id-bb bb id-util-date) (.putLong bb (.getTime  x))))
+  URI               (-freeze->bbuf! [^URI            x ^ByteBuffer bb    _] (do (write-id-bb bb id-uri)  (write-str-bb  bb (.toString x))))
+  UUID              (-freeze->bbuf! [^UUID           x ^ByteBuffer bb    _] (do (write-id-bb bb id-uuid)   (.putLong    bb (.getMostSignificantBits  x))
+                                                                                                           (.putLong    bb (.getLeastSignificantBits x))))
+  String            (-freeze->bbuf! [^String         x ^ByteBuffer bb    _] (write-str-bb bb x))
+  Keyword           (-freeze->bbuf! [                x ^ByteBuffer bb    _] (write-kw-bb  bb x))
+  Symbol            (-freeze->bbuf! [                x ^ByteBuffer bb    _] (write-sym-bb bb x))
+  Pattern           (-freeze->bbuf! [^Pattern        x ^ByteBuffer bb    _] (do (write-id-bb bb id-regex) (write-str-bb bb (str x))))
+  PersistentQueue   (-freeze->bbuf! [                x ^ByteBuffer bb dout] (write-counted-coll-bb bb dout id-queue-lg      x))
+  PersistentTreeSet (-freeze->bbuf! [                x ^ByteBuffer bb dout] (write-counted-coll-bb bb dout id-sorted-set-lg x))
+  PersistentTreeMap (-freeze->bbuf! [                x ^ByteBuffer bb dout]
                       (do (write-id-bb bb id-sorted-map-lg)
                           (write-lg-count-bb bb (count x))
                           (reduce-kv
                             (fn [_ k v]
-                              (freeze-with-meta-bb! bb out* k)
-                              (freeze-with-meta-bb! bb out* v))
+                              (freeze-with-meta-bb! bb dout k)
+                              (freeze-with-meta-bb! bb dout v))
                             nil x)))
 
   ;; Cached before IType: Cached is a deftype (implements IType) but needs its
   ;; own cache-tracking logic. Protocol dispatch picks Cached (more specific class)
   ;; over IType (interface), so no ordering issue — but we're explicit for clarity.
   Cached
-  (-freeze-bb! [x ^ByteBuffer bb out*]
+  (-freeze->bbuf! [x ^ByteBuffer bb dout]
     (let [x-val (.-val ^Cached x)]
       (if-let [cache_ (.get -cache-proxy)]
         (let [cache  @cache_
@@ -870,33 +842,33 @@
           (enc/cond
             (sm-count? idx)
             (case (int idx)
-              0 (do (write-id-bb bb id-cached-0) (when first? (freeze-with-meta-bb! bb out* x-val)))
-              1 (do (write-id-bb bb id-cached-1) (when first? (freeze-with-meta-bb! bb out* x-val)))
-              2 (do (write-id-bb bb id-cached-2) (when first? (freeze-with-meta-bb! bb out* x-val)))
-              3 (do (write-id-bb bb id-cached-3) (when first? (freeze-with-meta-bb! bb out* x-val)))
-              4 (do (write-id-bb bb id-cached-4) (when first? (freeze-with-meta-bb! bb out* x-val)))
-              5 (do (write-id-bb bb id-cached-5) (when first? (freeze-with-meta-bb! bb out* x-val)))
-              6 (do (write-id-bb bb id-cached-6) (when first? (freeze-with-meta-bb! bb out* x-val)))
-              7 (do (write-id-bb bb id-cached-7) (when first? (freeze-with-meta-bb! bb out* x-val)))
+              0 (do (write-id-bb bb id-cached-0) (when first? (freeze-with-meta-bb! bb dout x-val)))
+              1 (do (write-id-bb bb id-cached-1) (when first? (freeze-with-meta-bb! bb dout x-val)))
+              2 (do (write-id-bb bb id-cached-2) (when first? (freeze-with-meta-bb! bb dout x-val)))
+              3 (do (write-id-bb bb id-cached-3) (when first? (freeze-with-meta-bb! bb dout x-val)))
+              4 (do (write-id-bb bb id-cached-4) (when first? (freeze-with-meta-bb! bb dout x-val)))
+              5 (do (write-id-bb bb id-cached-5) (when first? (freeze-with-meta-bb! bb dout x-val)))
+              6 (do (write-id-bb bb id-cached-6) (when first? (freeze-with-meta-bb! bb dout x-val)))
+              7 (do (write-id-bb bb id-cached-7) (when first? (freeze-with-meta-bb! bb dout x-val)))
               (do
                 (write-id-bb       bb id-cached-sm)
                 (write-sm-count-bb bb idx)
-                (when first? (freeze-with-meta-bb! bb out* x-val))))
+                (when first? (freeze-with-meta-bb! bb dout x-val))))
             (md-count? idx)
             (do
               (write-id-bb       bb id-cached-md)
               (write-md-count-bb bb idx)
-              (when first? (freeze-with-meta-bb! bb out* x-val)))
+              (when first? (freeze-with-meta-bb! bb dout x-val)))
             :else
-            (freeze-with-meta-bb! bb out* x-val)))
-        (freeze-with-meta-bb! bb out* x-val))))
+            (freeze-with-meta-bb! bb dout x-val)))
+        (freeze-with-meta-bb! bb dout x-val))))
 
   ;; IRecord: check (-freezable? x) first so user extend-freeze handlers win
   ;; over the built-in record serialization.
   IRecord
-  (-freeze-bb! [x ^ByteBuffer bb out*]
+  (-freeze->bbuf! [x ^ByteBuffer bb dout]
     (if (-freezable? x)
-      (-freeze-without-meta! x (out*))
+      (-freeze->dout! x (dout))
       (let [class-name    (.getName (class x))
             class-name-ba (.getBytes class-name StandardCharsets/UTF_8)
             len           (alength   class-name-ba)]
@@ -904,10 +876,10 @@
           (sm-count? len) (do (write-id-bb bb id-record-sm) (write-bytes-sm-bb bb class-name-ba))
           (md-count? len) (do (write-id-bb bb id-record-md) (write-bytes-md-bb bb class-name-ba))
           :else           (truss/ex-info! "Record class name too long" {:name class-name}))
-        (freeze-without-meta-bb! bb out* (into {} x)))))
+        (freeze-without-meta-bb! bb dout (into {} x)))))
 
   APersistentVector
-  (-freeze-bb! [x ^ByteBuffer bb out*]
+  (-freeze->bbuf! [x ^ByteBuffer bb dout]
     (let [cnt (count x)]
       (if (zero? cnt)
         (write-id-bb bb id-vec-0)
@@ -917,61 +889,69 @@
             (when-not impl/pack-unsigned? (sm-count?  cnt)) (do (write-id-bb bb id-vec-sm_) (write-sm-count-bb  bb cnt))
             (md-count?  cnt)  (do (write-id-bb bb id-vec-md)  (write-md-count-bb  bb cnt))
             :else                               (do (write-id-bb bb id-vec-lg)  (write-lg-count-bb  bb cnt)))
-          (reduce (fn [_ in] (freeze-with-meta-bb! bb out* in)) nil x)))))
+          (reduce (fn [_ in] (freeze-with-meta-bb! bb dout in)) nil x)))))
 
-  APersistentSet  (-freeze-bb! [x ^ByteBuffer bb out*] (write-set-bb          bb out* x))
-  APersistentMap  (-freeze-bb! [x ^ByteBuffer bb out*] (write-map-bb          bb out* x false))
-  IPersistentList (-freeze-bb! [x ^ByteBuffer bb out*] (write-counted-coll-bb bb out* id-list-0 id-list-sm id-list-md id-list-lg x))
+  APersistentSet  (-freeze->bbuf! [x ^ByteBuffer bb dout] (write-set-bb          bb dout x))
+  APersistentMap  (-freeze->bbuf! [x ^ByteBuffer bb dout] (write-map-bb          bb dout x false))
+  IPersistentList (-freeze->bbuf! [x ^ByteBuffer bb dout] (write-counted-coll-bb bb dout id-list-0 id-list-sm id-list-md id-list-lg x))
 
   ;; IType: deftypes other than Cached. Check (-freezable? x) first so user
   ;; extend-freeze handlers win over field-based serialization.
   IType
-  (-freeze-bb! [x ^ByteBuffer bb out*]
+  (-freeze->bbuf! [x ^ByteBuffer bb dout]
     (if (-freezable? x)
-      (-freeze-without-meta! x (out*))
+      (-freeze->dout! x (dout))
       (let [c (class x)]
         (write-id-bb  bb id-type)
         (write-str-bb bb (.getName c))
-        (run! (fn [^java.lang.reflect.Field f] (freeze-without-meta-bb! bb out* (.get f x)))
-          (get-basis-fields c)))))
+        (run! (fn [^java.lang.reflect.Field f] (freeze-without-meta-bb! bb dout (.get f x)))
+          (impl/get-basis-fields c)))))
 
   LazySeq
-  (-freeze-bb! [x ^ByteBuffer bb out*]
-    (write-counted-coll-bb bb out* id-seq-0 id-seq-sm id-seq-md id-seq-lg
+  (-freeze->bbuf! [x ^ByteBuffer bb dout]
+    (write-counted-coll-bb bb dout id-seq-0 id-seq-sm id-seq-md id-seq-lg
       (if (counted? x) x (into [] x)))))
+
+(def ^:private array-class-bytes   (Class/forName "[B"))
+(def ^:private array-class-longs   (Class/forName "[J"))
+(def ^:private array-class-ints    (Class/forName "[I"))
+(def ^:private array-class-doubles (Class/forName "[D"))
+(def ^:private array-class-floats  (Class/forName "[F"))
+(def ^:private array-class-strings (Class/forName "[Ljava.lang.String;"))
+(def ^:private array-class-objects (Class/forName "[Ljava.lang.Object;"))
 
 ;; Array types: extend individually since extend-protocol doesn't support
 ;; array class literals. Keeping these out of the Object fallback gives O(1)
 ;; dispatch for the common case (byte-array in particular).
-(extend array-class-bytes   IFreezableBB {:-freeze-bb! (fn [^bytes                 x ^ByteBuffer bb _   ] (write-bytes-bb bb x))})
-(extend array-class-longs   IFreezableBB {:-freeze-bb! (fn [^longs                 x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-long-array-lg)   (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
-(extend array-class-ints    IFreezableBB {:-freeze-bb! (fn [^ints                  x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-int-array-lg)    (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
-(extend array-class-doubles IFreezableBB {:-freeze-bb! (fn [^doubles               x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-double-array-lg) (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
-(extend array-class-floats  IFreezableBB {:-freeze-bb! (fn [^floats                x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-float-array-lg)  (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
-(extend array-class-strings IFreezableBB {:-freeze-bb! (fn [^"[Ljava.lang.String;" x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-string-array-lg) (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
-(extend array-class-objects IFreezableBB {:-freeze-bb! (fn [^objects               x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-object-array-lg) (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
+(extend array-class-bytes   IFreezeToBBuf {:-freeze->bbuf! (fn [^bytes                 x ^ByteBuffer bb _   ] (write-bytes-bb bb x))})
+(extend array-class-longs   IFreezeToBBuf {:-freeze->bbuf! (fn [^longs                 x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-long-array-lg)   (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
+(extend array-class-ints    IFreezeToBBuf {:-freeze->bbuf! (fn [^ints                  x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-int-array-lg)    (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
+(extend array-class-doubles IFreezeToBBuf {:-freeze->bbuf! (fn [^doubles               x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-double-array-lg) (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
+(extend array-class-floats  IFreezeToBBuf {:-freeze->bbuf! (fn [^floats                x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-float-array-lg)  (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
+(extend array-class-strings IFreezeToBBuf {:-freeze->bbuf! (fn [^"[Ljava.lang.String;" x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-string-array-lg) (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
+(extend array-class-objects IFreezeToBBuf {:-freeze->bbuf! (fn [^objects               x ^ByteBuffer bb out*] (let [cnt (alength x)] (write-id-bb bb id-object-array-lg) (write-lg-count-bb bb cnt) (enc/reduce-n (fn [_ i] (freeze-with-meta-bb! bb out* (aget x i))) nil cnt)))})
 
 ;; java.time extensions, conditional on JVM version
 (enc/compile-if java.time.Instant
-  (extend-protocol IFreezableBB
+  (extend-protocol IFreezeToBBuf
     java.time.Instant
-    (-freeze-bb! [^java.time.Instant x ^ByteBuffer bb _]
+    (-freeze->bbuf! [^java.time.Instant x ^ByteBuffer bb _]
       (do (write-id-bb bb id-time-instant)
           (.putLong bb (.getEpochSecond x))
           (.putInt  bb (.getNano        x)))))
   nil)
 (enc/compile-if java.time.Duration
-  (extend-protocol IFreezableBB
+  (extend-protocol IFreezeToBBuf
     java.time.Duration
-    (-freeze-bb! [^java.time.Duration x ^ByteBuffer bb _]
+    (-freeze->bbuf! [^java.time.Duration x ^ByteBuffer bb _]
       (do (write-id-bb bb id-time-duration)
           (.putLong bb (.getSeconds x))
           (.putInt  bb (.getNano    x)))))
   nil)
 (enc/compile-if java.time.Period
-  (extend-protocol IFreezableBB
+  (extend-protocol IFreezeToBBuf
     java.time.Period
-    (-freeze-bb! [^java.time.Period x ^ByteBuffer bb _]
+    (-freeze->bbuf! [^java.time.Period x ^ByteBuffer bb _]
       (do (write-id-bb bb id-time-period)
           (.putInt bb (.getYears  x))
           (.putInt bb (.getMonths x))
@@ -980,12 +960,12 @@
 
 (defn- freeze-without-meta-bb! [^ByteBuffer bb out* x]
   (try
-    (-freeze-bb! x bb out*)
+    (-freeze->bbuf! x bb out*)
     (catch IllegalArgumentException _
       (if (instance? ISeq x)
         (write-counted-coll-bb bb out* id-seq-0 id-seq-sm id-seq-md id-seq-lg
                                (if (counted? x) x (into [] x)))
-        (-freeze-without-meta! x (out*))))))
+        (-freeze->dout! x (out*))))))
 
 (defn- freeze-with-meta-bb! [^ByteBuffer bb out* x]
   (when-let [m (when (and *incl-metadata?* (instance? clojure.lang.IObj x))
@@ -1425,9 +1405,9 @@
 
 
 (extend-type Object
-  IFreezable
-  (-freezable? [_] nil)
-  (-freeze-without-meta! [x ^DataOutput out]
+  IFreezable (-freezable? [_] nil)
+  IFreezeToDOut
+  (-freeze->dout! [x ^DataOutput out]
     (when-debug (println (str "freeze-fallback: " (type x))))
     (if-let [ff *freeze-fallback*]
       (if-not (identical? ff :write-unfreezable)
@@ -1763,7 +1743,7 @@
 (defn- read-type [in class-name]
   (try
     (let [c (clojure.lang.RT/classForName class-name)
-          num-fields (count (get-basis-fields c))
+          num-fields (count (impl/get-basis-fields c))
           field-vals (object-array num-fields)
 
           ;; Ref. <https://github.com/clojure/clojure/blob/e78519c174fb506afa70e236af509e73160f022a/src/jvm/clojure/lang/Compiler.java#L4799>
@@ -1872,7 +1852,7 @@
 (defn- read-type-r [^IByteReader r class-name]
   (try
     (let [c          (clojure.lang.RT/classForName class-name)
-          num-fields (count (get-basis-fields c))
+          num-fields (count (impl/get-basis-fields c))
           field-vals (object-array num-fields)
           ^Constructor ctr (aget (.getConstructors c) 0)]
 
@@ -2318,9 +2298,9 @@
           `(write-id ~out ~(coerce-custom-type-id custom-type-id)))]
 
     `(extend-type ~type
-       IFreezable
-       (~'-freezable?           [~'x] true)
-       (~'-freeze-without-meta! [~x ~(with-meta out {:tag 'java.io.DataOutput})] ~write-id-form ~@body))))
+       IFreezable (~'-freezable? [~'x] true)
+       IFreezeToDOut
+       (~'-freeze->dout! [~x ~(with-meta out {:tag 'java.io.DataOutput})] ~write-id-form ~@body))))
 
 (defmacro extend-thaw
   "Extends Nippy to support thawing of a custom type with given id:
