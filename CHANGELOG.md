@@ -2,6 +2,19 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.6.1` (2026-04-09)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.6.1)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+This is a minor **hotfix release** that updates dependencies.
+
+It resolves a [security vulnerability](https://github.com/airlift/aircompressor/security/advisories/GHSA-vx9q-rhv9-3jvg) in [the library](https://github.com/airlift/aircompressor) Nippy uses for compression. The vulnerability should [NOT be a concern](https://github.com/taoensso/nippy/issues/188#issuecomment-3719667450) for Nippy users, but it's anyway nice to avoid possible automated warnings, etc.
+
+This should be a **safe update** for everyone on v3.6.0.
+
+---
+
 # `v3.6.0` (2025-06-17)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.6.0)
