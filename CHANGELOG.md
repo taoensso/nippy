@@ -2,9 +2,9 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
-# `v3.6.1` (2026-04-09)
+# `v3.6.2` (2026-04-09)
 
-- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.6.1)
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.6.2)
 - **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
 
 This is a minor **hotfix release** that updates dependencies.
