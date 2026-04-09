@@ -11,7 +11,7 @@
   [[org.clojure/tools.reader "1.6.0"]
    [com.taoensso/encore      "3.160.0"]
    [org.tukaani/xz           "1.12"]
-   [io.airlift/aircompressor "2.0.2"]]
+   [io.airlift/aircompressor "2.0.3"]]
 
   :test-paths ["test" #_"src"]
 
