@@ -1,8 +1,9 @@
 (ns ^:no-doc taoensso.nippy.compression
-  "Private, implementation detail."
+  "Private compression utils, don't use."
   (:require
    [taoensso.truss  :as truss]
    [taoensso.encore :as enc])
+
   (:import
    [java.nio ByteBuffer]
    [java.io
@@ -216,3 +217,15 @@
   "Different LZ4 modes no longer supported, prefer `lz4-compressor`."
   {:deprecated "v3.4.0-RC1 (2024-02-06)"}
   (LZ4Compressor.))
+
+(defn get-auto-compressor [compressor-id]
+  (case compressor-id
+    nil        nil
+    :snappy    snappy-compressor
+    :lzma2     lzma2-compressor
+    :lz4       lz4-compressor
+    :zstd      zstd-compressor
+    :no-header (truss/ex-info! ":auto not supported on headerless data." {})
+    :else      (truss/ex-info! ":auto not supported for non-standard compressors." {})
+    (do        (truss/ex-info! (str "Unrecognized :auto compressor id: " compressor-id)
+                 {:compressor-id compressor-id}))))
