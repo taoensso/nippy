@@ -959,12 +959,9 @@
 
 ;;;; Caching
 
-(def ^ThreadLocal -cache-proxy
+(def ^ThreadLocal -tl:cache
   "{[<x> <meta>] <idx>} for freezing, {<idx> <x-with-meta>} for thawing."
-  ;; Nb: don't use an auto initialValue; can cause thread-local state to
-  ;; accidentally hang around with the use of `freeze-to-out!`, etc.
-  ;; Safer to require explicit activation through `with-cache`.
-  (proxy [ThreadLocal] []))
+  (enc/threadlocal))
 
 (defmacro with-cache
   "Executes body with support for freezing/thawing cached values.
@@ -975,9 +972,9 @@
   See also `cache`."
   [& body]
   `(try
-     (.set -cache-proxy (volatile! nil))
+     (.set -tl:cache (volatile! nil))
      (do ~@body)
-     (finally (.remove -cache-proxy))))
+     (finally (.remove -tl:cache))))
 
 (deftype Cached [val])
 (defn cache
@@ -993,7 +990,7 @@
 
 (freezer Cached nil true
   (let [x-val (.-val x)]
-    (if-let [cache_ (.get -cache-proxy)]
+    (if-let [cache_ (.get -tl:cache)]
       (let [cache @cache_
             k     #_x-val [x-val (meta x-val)] ; Also check meta for equality
             ?idx  (get cache k)
@@ -1039,7 +1036,7 @@
 (def ^:private thaw-cached
   (let [not-found (Object.)]
     (fn [idx in]
-      (if-let [cache_ (.get -cache-proxy)]
+      (if-let [cache_ (.get -tl:cache)]
         (let [v (get @cache_ idx not-found)]
           (if (identical? v not-found)
             (let [x (thaw-from-in! in)]
