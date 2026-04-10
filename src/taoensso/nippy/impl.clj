@@ -1,179 +1,13 @@
 (ns ^:no-doc taoensso.nippy.impl
-  "Private, implementation detail."
+  "Private misc utils, don't use."
   (:require
    [clojure.string  :as str]
    [taoensso.truss  :as truss]
    [taoensso.encore :as enc]))
 
-;;;; Fallback type tests
+;;;;
 
-(defn cache-by-type [f]
-  (let [cache_ (enc/latom {})] ; {<type> <result_>}
-    (fn [x]
-      (let [t (if (fn? x) ::fn (type x))]
-        (if-let [result_ (get (cache_) t)]
-          @result_
-          (if-let [uncacheable-type? (re-find #"\d" (str t))]
-            (do                      (f x))
-            @(cache_ t #(or % (delay (f x))))))))))
-
-(def seems-readable?
-  (cache-by-type
-    (fn [x]
-      (try
-        (enc/read-edn (enc/pr-edn x))
-        true
-        (catch Throwable _ false)))))
-
-(def seems-serializable?
-  (cache-by-type
-    (fn [x]
-      (enc/cond
-        (fn? x) false ; Falsely reports as Serializable
-
-        (instance? java.io.Serializable x)
-        (try
-          (let [c   (Class/forName (.getName (class x))) ; Try 1st (fail fast)
-                bas (java.io.ByteArrayOutputStream.)
-                _   (.writeObject (java.io.ObjectOutputStream. bas) x)
-                ba  (.toByteArray bas)]
-            #_
-            (cast c
-              (.readObject ; Unsafe + usu. unnecessary to check
-                (ObjectInputStream. (ByteArrayInputStream. ba))))
-            true)
-          (catch Throwable _ false))
-
-        :else false))))
-
-(comment
-  (enc/qb 1e6 ; [60.83 61.16 59.86 57.37]
-    (seems-readable?     "Hello world")
-    (seems-serializable? "Hello world")
-    (seems-readable?     (fn []))
-    (seems-serializable? (fn []))))
-
-;;;; Java Serializable
-
-(def ^:const ^:private allow-and-record          "allow-and-record")
-(defn-                 allow-and-record? [x] (= x allow-and-record))
-
-(defn- classname-set
-  "Returns ?#{<classname>}."
-  [x]
-  (when x
-    (if (string? x)
-      (if (= x "") #{} (set (mapv str/trim (str/split x #"[,:]"))))
-      (truss/have set? x))))
-
-(comment
-  (mapv classname-set [nil #{"foo"} "" "foo, bar:baz"])
-  (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
-
-(defn parse-allowlist
-  "Returns #{<classname>}, or `allow-and-record`."
-  [default base add]
-  (if (or
-        (allow-and-record? base)
-        (allow-and-record? add))
-    allow-and-record
-    (into
-      (or (classname-set base) default)
-      (do (classname-set add)))))
-
-(comment (parse-allowlist #{"default"} "base1,base2" "add1"))
-
-(let [nmax    1000
-      ngc     16000
-      state_  (enc/latom {})  ; {<class-name> <frequency>}
-      lock_   (enc/latom nil) ; ?promise
-      trim
-      (fn [nmax state]
-        (persistent!
-          (enc/reduce-top nmax val enc/rcompare conj!
-            (transient {}) state)))]
-
-  ;; Note: trim strategy isn't perfect: it can be tough for new
-  ;; classes to break into the top set since frequencies are being
-  ;; reset only for classes outside the top set.
-  ;;
-  ;; In practice this is probably good enough since the main objective
-  ;; is to discard one-off anonymous classes to protect state from
-  ;; endlessly growing. Also `gc-rate` allows state to temporarily grow
-  ;; significantly beyond `nmax` size, which helps to give new classes
-  ;; some chance to accumulate a competitive frequency before next GC.
-
-  (defn ^{:-state_ state_} ; Undocumented
-    allow-and-record-any-serializable-class-unsafe
-    "A predicate (fn allow-class? [class-name]) fn that can be assigned
-    to `*freeze-serializable-allowlist*` and/or
-         `*thaw-serializable-allowlist*` that:
-
-      - Will allow ANY class to use Nippy's `Serializable` support (unsafe).
-      - And will record {<class-name> <frequency-allowed>} for the <=1000
-        classes that ~most frequently made use of this support.
-
-    `get-recorded-serializable-classes` returns the recorded state.
-
-    This predicate is provided as a convenience for users upgrading from
-    previous versions of Nippy that allowed the use of `Serializable` for all
-    classes by default.
-
-    While transitioning from an unsafe->safe configuration, you can use
-    this predicate (unsafe) to record information about which classes have
-    been using Nippy's `Serializable` support in your environment.
-
-    Once some time has passed, you can check the recorded state. If you're
-    satisfied that all recorded classes are safely `Serializable`, you can
-    then merge the recorded classes into Nippy's default allowlist/s, e.g.:
-
-    (alter-var-root #'thaw-serializable-allowlist*
-      (fn [_] (into default-thaw-serializable-allowlist
-                (keys (get-recorded-serializable-classes)))))"
-
-    [class-name]
-    (when-let [p (lock_)] @p)
-    (let [n (count (state_ #(assoc % class-name (inc (long (or (get % class-name) 0))))))]
-      ;; Garbage collection (GC): may be serializing anonymous classes, etc.
-      ;; so input domain could be infinite
-      (when (> n ngc) ; Too many classes recorded, uncommon
-        (let [p (promise)]
-          (when (compare-and-set! lock_ nil p) ; Acquired GC lock
-            (try
-              (do      (reset! state_ (trim nmax (state_)))) ; GC state
-              (finally (reset! lock_  nil) (deliver p nil))))))
-      n))
-
-  (defn get-recorded-serializable-classes
-    "Returns {<class-name> <frequency>} of the <=1000 classes that ~most
-    frequently made use of Nippy's `Serializable` support via
-    `allow-and-record-any-serializable-class-unsafe`.
-
-    See that function's docstring for more info."
-    [] (trim nmax (state_))))
-
-(comment
-  (count (get-recorded-serializable-classes))
-  (enc/reduce-n
-    (fn [_ n] (allow-and-record-any-serializable-class-unsafe (str n)))
-    nil 0 1e5))
-
-(let [compile
-      (enc/fmemoize
-        (fn [x]
-          (if (allow-and-record? x)
-            allow-and-record-any-serializable-class-unsafe
-            (enc/name-filter x))))
-
-      fn? fn?
-      conform?
-      (fn [x cn]
-        (if (fn? x)
-          (x cn) ; Intentionally uncached, can be handy
-          ((compile x) cn)))]
-
-  (defn serializable-allowed? [allow-list class-name]
-    (conform? allow-list class-name)))
+(defmacro when-debug [& body] (when #_true false `(do ~@body)))
 
 ;;;; Compatibility config
 
@@ -280,3 +114,322 @@
           (vec (sort (clojure.set/difference (id-history new-release) (id-history old-release)))))]
 
     (diff 350 340)))
+
+;;;; Java Serializable config
+
+(def ^:const ^:private allow-and-record          "allow-and-record")
+(defn-                 allow-and-record? [x] (= x allow-and-record))
+
+(defn- classname-set
+  "Returns ?#{<classname>}."
+  [x]
+  (when x
+    (if (string? x)
+      (if (= x "") #{} (set (mapv str/trim (str/split x #"[,:]"))))
+      (truss/have set? x))))
+
+(comment
+  (mapv classname-set [nil #{"foo"} "" "foo, bar:baz"])
+  (.getName (.getSuperclass (.getClass (java.util.concurrent.TimeoutException.)))))
+
+(defn parse-allowlist
+  "Returns #{<classname>}, or `allow-and-record`."
+  [default base add]
+  (if (or
+        (allow-and-record? base)
+        (allow-and-record? add))
+    allow-and-record
+    (into
+      (or (classname-set base) default)
+      (do (classname-set add)))))
+
+(comment (parse-allowlist #{"default"} "base1,base2" "add1"))
+
+(let [nmax    1000
+      ngc     16000
+      state_  (enc/latom {})  ; {<class-name> <frequency>}
+      lock_   (enc/latom nil) ; ?promise
+      trim
+      (fn [nmax state]
+        (persistent!
+          (enc/reduce-top nmax val enc/rcompare conj!
+            (transient {}) state)))]
+
+  ;; Note: trim strategy isn't perfect: it can be tough for new
+  ;; classes to break into the top set since frequencies are being
+  ;; reset only for classes outside the top set.
+  ;;
+  ;; In practice this is probably good enough since the main objective
+  ;; is to discard one-off anonymous classes to protect state from
+  ;; endlessly growing. Also `gc-rate` allows state to temporarily grow
+  ;; significantly beyond `nmax` size, which helps to give new classes
+  ;; some chance to accumulate a competitive frequency before next GC.
+
+  (defn ^{:-state_ state_} ; Undocumented
+    ^:public allow-and-record-any-serializable-class-unsafe
+    "A predicate (fn allow-class? [class-name]) fn that can be assigned
+    to `*freeze-serializable-allowlist*` and/or
+         `*thaw-serializable-allowlist*` that:
+
+      - Will allow ANY class to use Nippy's `Serializable` support (unsafe).
+      - And will record {<class-name> <frequency-allowed>} for the <=1000
+        classes that ~most frequently made use of this support.
+
+    `get-recorded-serializable-classes` returns the recorded state.
+
+    This predicate is provided as a convenience for users upgrading from
+    previous versions of Nippy that allowed the use of `Serializable` for all
+    classes by default.
+
+    While transitioning from an unsafe->safe configuration, you can use
+    this predicate (unsafe) to record information about which classes have
+    been using Nippy's `Serializable` support in your environment.
+
+    Once some time has passed, you can check the recorded state. If you're
+    satisfied that all recorded classes are safely `Serializable`, you can
+    then merge the recorded classes into Nippy's default allowlist/s, e.g.:
+
+    (alter-var-root #'thaw-serializable-allowlist*
+      (fn [_] (into default-thaw-serializable-allowlist
+                (keys (get-recorded-serializable-classes)))))"
+
+    [class-name]
+    (when-let [p (lock_)] @p)
+    (let [n (count (state_ #(assoc % class-name (inc (long (or (get % class-name) 0))))))]
+      ;; Garbage collection (GC): may be serializing anonymous classes, etc.
+      ;; so input domain could be infinite
+      (when (> n ngc) ; Too many classes recorded, uncommon
+        (let [p (promise)]
+          (when (compare-and-set! lock_ nil p) ; Acquired GC lock
+            (try
+              (do      (reset! state_ (trim nmax (state_)))) ; GC state
+              (finally (reset! lock_  nil) (deliver p nil))))))
+      n))
+
+  (defn ^:public get-recorded-serializable-classes
+    "Returns {<class-name> <frequency>} of the <=1000 classes that ~most
+    frequently made use of Nippy's `Serializable` support via
+    `allow-and-record-any-serializable-class-unsafe`.
+
+    See that function's docstring for more info."
+    [] (trim nmax (state_))))
+
+(comment
+  (count (get-recorded-serializable-classes))
+  (enc/reduce-n
+    (fn [_ n] (allow-and-record-any-serializable-class-unsafe (str n)))
+    nil 0 1e5))
+
+(enc/declare-remote
+  ^:dynamic taoensso.nippy/*serializable-whitelist*
+  ^:dynamic taoensso.nippy/*freeze-serializable-allowlist*
+  ^:dynamic taoensso.nippy/*thaw-serializable-allowlist*)
+
+(let [compile
+      (enc/fmemoize
+        (fn [x]
+          (if (allow-and-record? x)
+            allow-and-record-any-serializable-class-unsafe
+            (enc/name-filter x))))
+
+      fn? fn?
+      conform?
+      (fn [x cn]
+        (if (fn? x)
+          (x cn) ; Intentionally uncached, can be handy
+          ((compile x) cn)))]
+
+  (defn-       serializable-allowed? [class-name allow-list] (conform? allow-list class-name))
+  (defn freeze-serializable-allowed? [x] (serializable-allowed? x taoensso.nippy/*freeze-serializable-allowlist*))
+  (defn   thaw-serializable-allowed? [x] (serializable-allowed? x
+                                           (or
+                                             taoensso.nippy/*serializable-whitelist*
+                                             taoensso.nippy/*thaw-serializable-allowlist*))))
+
+(comment
+  (enc/qb 1e6 (freeze-serializable-allowed? "foo")) ; 46.03
+  (binding [taoensso.nippy/*freeze-serializable-allowlist* #{"foo.*" "bar"}]
+    (freeze-serializable-allowed? "foo.bar")))
+
+;;;; Fallback type tests
+
+(defn cache-by-type [f]
+  (let [cache_ (enc/latom {})] ; {<type> <result_>}
+    (fn [x]
+      (let [t (if (fn? x) ::fn (type x))]
+        (if-let [result_ (get (cache_) t)]
+          @result_
+          (if-let [uncacheable-type? (re-find #"\d" (str t))]
+            (do                      (f x))
+            @(cache_ t #(or % (delay (f x))))))))))
+
+(def seems-readable?
+  (cache-by-type
+    (fn [x]
+      (try
+        (enc/read-edn (enc/pr-edn x))
+        true
+        (catch Throwable _ false)))))
+
+(def seems-serializable?
+  (cache-by-type
+    (fn [x]
+      (enc/cond
+        (fn? x) false ; Falsely reports as Serializable
+
+        (instance? java.io.Serializable x)
+        (try
+          (let [c   (Class/forName (.getName (class x))) ; Try 1st (fail fast)
+                bas (java.io.ByteArrayOutputStream.)
+                _   (.writeObject (java.io.ObjectOutputStream. bas) x)
+                ba  (.toByteArray bas)]
+            #_
+            (cast c
+              (.readObject ; Unsafe + usu. unnecessary to check
+                (ObjectInputStream. (ByteArrayInputStream. ba))))
+            true)
+          (catch Throwable _ false))
+
+        :else false))))
+
+(comment
+  (enc/qb 1e6 ; [60.83 61.16 59.86 57.37]
+    (seems-readable?     "Hello world")
+    (seems-serializable? "Hello world")
+    (seems-readable?     (fn []))
+    (seems-serializable? (fn []))))
+
+;;;; Object cache
+
+(deftype Cached [val])
+(defn ^:public cache
+  "Wraps value so that future writes of the same wrapped value with same
+  metadata will be efficiently encoded as references to this one.
+
+  (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
+    will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
+  [x] (if (instance? Cached x) x (Cached. x)))
+
+(def ^ThreadLocal tl:cache
+  "{[<x> <meta>] <idx>} for freezing, {<idx> <x-with-meta>} for thawing."
+  (enc/threadlocal))
+
+(defmacro ^:public with-cache
+  "Executes body with support for freezing/thawing cached values.
+
+  This is a low-level util: you won't need to use this yourself unless
+  you're using `freeze-to-out!` or `thaw-from-in!` (also low-level utils).
+
+  See also `cache`."
+  [& body]
+  `(try
+     (.set tl:cache (volatile! nil))
+     (do ~@body)
+     (finally (.remove tl:cache))))
+
+;;;;
+
+(def ^:const range-ubyte  (-    Byte/MAX_VALUE    Byte/MIN_VALUE))
+(def ^:const range-ushort (-   Short/MAX_VALUE   Short/MIN_VALUE))
+(def ^:const range-uint   (- Integer/MAX_VALUE Integer/MIN_VALUE))
+
+(defmacro sm-ucount? [n] `(<= ~n     range-ubyte)) ; Unsigned
+(defmacro sm-count?  [n] `(<= ~n  Byte/MAX_VALUE))
+(defmacro md-count?  [n] `(<= ~n Short/MAX_VALUE))
+
+(def array-class-ints    (Class/forName "[I")) ; ^ints
+(def array-class-longs   (Class/forName "[J")) ; ^longs
+(def array-class-floats  (Class/forName "[F")) ; ^floats
+(def array-class-doubles (Class/forName "[D")) ; ^doubles
+(def array-class-bytes   (Class/forName "[B")) ; ^bytes
+(def array-class-objects (Class/forName "[Ljava.lang.Object;")) ; ^objects
+(def array-class-strings (Class/forName "[Ljava.lang.String;")) ; ^"[L..."
+
+(def ^:const meta-protocol-key :taoensso.nippy/meta-protocol-key)
+
+;; Marker protocols would be clearer but are unfortunately slower due to CLJ-1814
+(defprotocol     INativeFreezable        (native-freezable? [_] "Returns truthy iff given arg's type has a native Nippy freeze implementation."))
+(defprotocol     ICustomFreezable        (custom-freezable? [_] "Returns truthy iff given arg's type has a custom Nippy freeze implementation."))
+(extend-protocol ICustomFreezable Object (custom-freezable? [_] false))
+
+(defmacro editable? [coll] `(instance? clojure.lang.IEditableCollection ~coll))
+(defn xform* [xform] (truss/catching-xform {:error/msg "Error thrown via `*thaw-xform*`"} xform))
+
+(def get-basis-fields
+  "Returns [`java.lang.reflect.Field` ...] for given class."
+  (enc/fmemoize
+    (fn [^Class c] ; Auto invalidated on `deftype` redef, etc.
+      (let [basis (.invoke (.getMethod c "getBasis" nil) nil nil)]
+        (mapv
+          (fn [f]
+            (let [field (.getDeclaredField c (munge (name f)))]
+              (.setAccessible field true)
+              (do             field)))
+          basis)))))
+
+(comment
+  (do (deftype T1 [x])                          (let [t1 (T1. :x)] (get-basis-fields (class t1))))
+  (do (deftype T2 [^:unsynchronized-mutable x]) (let [t2 (T2. :x)] (get-basis-fields (class t2)))))
+
+(defn try-pr-edn [x]
+  (try
+    (enc/pr-edn x)
+    (catch Throwable _
+      (try
+        (str x)
+        (catch Throwable _
+          :nippy/unprintable)))))
+
+(defn wrap-unfreezable [x]
+  {:nippy/unfreezable
+   {:type    (type       x)
+    :content (try-pr-edn x)}})
+
+(defn assert-custom-type-id [custom-type-id]
+  (assert (or      (keyword? custom-type-id)
+              (and (integer? custom-type-id) (<= 1 custom-type-id 128)))))
+
+(defn coerce-custom-type-id
+  "* +ive byte id ->  -ive byte id (for unprefixed custom types)
+   *   Keyword id -> Short hash id (for   prefixed custom types)"
+  [custom-type-id]
+  (assert-custom-type-id      custom-type-id)
+  (if-not           (keyword? custom-type-id)
+    (int             (- ^long custom-type-id))
+    (let [^int hash-id  (hash custom-type-id)
+          short-hash-id
+          (if (pos? hash-id)
+            (mod hash-id Short/MAX_VALUE)
+            (mod hash-id Short/MIN_VALUE))]
+
+      ;; Make sure hash ids can't collide with byte ids (unlikely anyway):
+      (assert (not (<= Byte/MIN_VALUE short-hash-id -1))
+        "Custom type id hash collision; please choose a different id")
+
+      (int short-hash-id))))
+
+(comment
+  (coerce-custom-type-id 77)
+  (coerce-custom-type-id :foo/bar))
+
+(defn read-edn [edn]
+  (try
+    (enc/read-edn {:readers *data-readers*} edn)
+    (catch Exception e
+      {:nippy/unthawable
+       {:type  :reader
+        :cause :exception
+
+        :content   edn
+        :exception e}})))
+
+(let [not-found (Object.)]
+  (defn read-cached [read-typed idx input-arg]
+    (if-let [cache_ (.get tl:cache)]
+      (let [v (get @cache_ idx not-found)]
+        (if (identical? v not-found)
+          (let [x (read-typed input-arg)]
+            (vswap! cache_ assoc idx x)
+            x)
+          v))
+      (truss/ex-info! "Can't thaw without cache available. See `with-cache`." {}))))
