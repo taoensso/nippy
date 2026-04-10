@@ -6,12 +6,16 @@
    [clojure.test.check.properties :as tc-props]
    [taoensso.truss                :as truss :refer [throws?]]
    [taoensso.encore               :as enc   :refer [ba=]]
+   [taoensso.nippy-benchmarks     :as benchmarks]
    [taoensso.nippy                :as nippy :refer [freeze thaw]]
-   [taoensso.nippy.impl           :as impl]
-   [taoensso.nippy.tools          :as tools]
-   [taoensso.nippy.compression    :as compr]
-   [taoensso.nippy.crypto         :as crypto]
-   [taoensso.nippy-benchmarks     :as benchmarks]))
+   [taoensso.nippy
+    [schema      :as sc]
+    [impl        :as impl]
+    [io          :as io]
+    [compression :as compr]
+    [encryption  :as encry]
+    [tools       :as tools]
+    [crypto      :as crypto]]))
 
 (comment
   (remove-ns      'taoensso.nippy-tests)
@@ -85,8 +89,8 @@
      "CBC auto-encryptor compatibility")
 
    (testing "Unsigned long types"
-     (let [range-ushort+ (+ (long @#'nippy/range-ushort) 128)
-           range-uint+   (+ (long @#'nippy/range-uint)   128)]
+     (let [range-ushort+ (+ (long impl/range-ushort) 128)
+           range-uint+   (+ (long impl/range-uint)   128)]
 
        [(let [r (range (long -2.5e6) (long 2.5e6))]      (= (thaw (freeze r)) r))
         (let [r (range (- range-ushort+) range-ushort+)] (= (thaw (freeze r)) r))
