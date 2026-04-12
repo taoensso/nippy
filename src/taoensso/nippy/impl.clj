@@ -433,3 +433,15 @@
             x)
           v))
       (truss/ex-info! "Can't thaw without cache available. See `with-cache`." {}))))
+
+(def ^ThreadLocal tl:freeze-bb
+  "ThreadLocal `ByteBuffer` used for freeze ops.
+  Grows as needed, reused across calls to avoid per-call allocation.
+  Buffers currently only freed via GC when thread dies."
+  (enc/threadlocal (java.nio.ByteBuffer/allocate 512)))
+
+(def ^ThreadLocal tl:freeze-depth
+  "ThreadLocal nesting depth counter for freeze ops.
+  Reentrant freeze calls from custom freezers must NOT reuse the active
+  buffer or they'll clobber the parent payload!"
+  (enc/threadlocal 0))
