@@ -1095,3 +1095,56 @@
 
                    ;; else
                    (do (.append sb (char b)) (recur))))))))))))
+
+(let [^ThreadLocal tl:bb    (enc/threadlocal (java.nio.ByteBuffer/allocate 512))
+      ^ThreadLocal tl:depth (enc/threadlocal 0)]
+
+  ;; @LATER: Consider using a simple pool here, with auto GC
+
+  (defn with-bb
+    "Executes `(f bb dout_)` and returns ?ba of bb when `f` returns truthy.
+      `bb` ---- Auto-expanding `ByteBuffer`. Will reuse ThreadLocal when possible,
+                currently only freed via GC when thread dies.
+      `dout_` - Call (dout_) to get a `DataOutput` view on `bb`."
+    ([          f] (with-bb 512 f))
+    ([init-size f]
+     (let [init-depth (long (.get      tl:depth))
+           cache_           (.get impl/tl:cache)
+           init-cache (when cache_ @cache_)]
+
+       (.set tl:depth (inc init-depth))
+       (try
+         (enc/cond
+           (zero? init-depth) ; Unnested call
+           (let [^ByteBuffer bb (.get tl:bb)]
+             (when-let [[ba final-bb] (with-bb bb cache_ init-cache f)]
+               (when-not (identical? bb final-bb)
+                 (.set            tl:bb final-bb)) ; May have grown
+               ba))
+
+           :else ; Nested call
+           (let [private-bb (ByteBuffer/allocate (.capacity ^ByteBuffer (.get tl:bb)))] ; Isolate from parent bb
+             (when-let [[ba _bb] (with-bb private-bb cache_ init-cache f)]
+               ba)))
+
+         (finally (.set tl:depth init-depth)))))
+
+    ([bb cache_ cache f]
+     (loop [^ByteBuffer bb bb]
+       (.clear bb)                          ; Reset buffer before (re)use
+       (when cache_ (vreset! cache_ cache)) ; Reset cache  before (re)use
+       (let [dout_  (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (bb->dout bb)))))
+             result
+             (try
+               (when (f bb dout_)
+                 (java.util.Arrays/copyOf (.array bb) (.position bb)))
+               (catch java.nio.BufferOverflowException _ ::grow))]
+
+         (if (identical? result ::grow)
+           (recur (ByteBuffer/allocate (* 2 (.capacity bb))))
+           [result bb]))))))
+
+(comment
+  (enc/qb 1e6 ; [115.8 125.5]
+    (with-bb 512 (fn [_ _] false))
+    (with-bb 512 (fn [_ _] true))))
