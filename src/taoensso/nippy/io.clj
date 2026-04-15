@@ -212,8 +212,8 @@
 
   ([^ByteBuffer bb dout_ id-empty id-sm id-md id-lg coll]
    (if (counted? coll)
-     (write-counted-coll   bb dout_   id-empty   id-sm   id-md id-lg coll)
-     (write-uncounted-coll bb dout_ #_id-empty #_id-sm #_id-md id-lg coll))))
+     (write-counted-coll   bb dout_ id-empty id-sm id-md id-lg coll)
+     (write-uncounted-coll bb dout_ id-empty id-sm id-md id-lg coll))))
 
 (defn write-map
   "Micro-optimized `write-kvs` w/ id-map-0 id-map-sm id-map-md id-map-lg."
@@ -426,9 +426,9 @@
 (writer clojure.lang.APersistentVector  nil (write-vec            bb dout_                     x))
 (writer clojure.lang.APersistentSet     nil (write-set            bb dout_                     x))
 (writer clojure.lang.APersistentMap     nil (write-map            bb dout_                     x false))
-(writer clojure.lang.PersistentList     nil (write-counted-coll   bb dout_  sc/id-list-0   sc/id-list-sm   sc/id-list-md sc/id-list-lg x))
-(writer clojure.lang.LazySeq            nil (write-uncounted-coll bb dout_ #_sc/id-seq-0  #_sc/id-seq-sm  #_sc/id-seq-md  sc/id-seq-lg x))
-(writer clojure.lang.ISeq               nil (write-coll           bb dout_   sc/id-seq-0    sc/id-seq-sm    sc/id-seq-md  sc/id-seq-lg x))
+(writer clojure.lang.PersistentList     nil (write-counted-coll   bb dout_ sc/id-list-0 sc/id-list-sm sc/id-list-md sc/id-list-lg x))
+(writer clojure.lang.LazySeq            nil (write-uncounted-coll bb dout_  sc/id-seq-0  sc/id-seq-sm  sc/id-seq-md  sc/id-seq-lg x))
+(writer clojure.lang.ISeq               nil (write-coll           bb dout_  sc/id-seq-0  sc/id-seq-sm  sc/id-seq-md  sc/id-seq-lg x))
 (writer clojure.lang.IRecord            nil
   (if (impl/custom-freezable? x)
     (write-typed-din x (dout_))
