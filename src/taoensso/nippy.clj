@@ -359,9 +359,8 @@
 
 ;;;; Freeze API
 
-(declare freeze-raw)
-
-(defn freeze
+(defn- freeze-raw ^bytes [x] (io/with-bb 512 (fn [bb dout_] (io/write-typed+meta x bb dout_) true)))
+(defn  freeze
   "Main freezing util.
 
   Serializes given arg (any Clojure data type) to a byte array.
@@ -409,49 +408,6 @@
                (sc/wrap-header ba
                  {:compressor-id (when-let [c compressor] (or (compression/standard-header-ids (compression/header-id c)) :else))
                   :encryptor-id  (when-let [e encryptor]  (or (encryption/standard-header-ids  (encryption/header-id  e)) :else))})))))))))
-
-(defn- freeze-raw
-  "Freezes given arg to current ThreadLocal `ByteBuffer`.
-  Expands buffer as needed. No header or `with-cache`."
-  (^bytes [x]
-   (let [init-depth (long (.get impl/tl:freeze-depth))
-         cache_           (.get impl/tl:cache)
-         init-cache (when cache_ @cache_)]
-
-     (.set impl/tl:freeze-depth (inc init-depth))
-     (try
-       (enc/cond
-         (zero? init-depth) ; Unnested freeze call
-         (let [^ByteBuffer   bb  (.get impl/tl:freeze-bb)
-               [result final-bb] (freeze-raw x bb cache_ init-cache)]
-
-           (when-not (identical?  bb final-bb)
-             (.set impl/tl:freeze-bb final-bb)) ; May have grown
-
-           result)
-
-         :else ; Nested freeze call
-         ;; Use private buffer so custom freezers can call `freeze` without clobbering shared buffer
-         (let [private-bb   (ByteBuffer/allocate (.capacity ^ByteBuffer (.get impl/tl:freeze-bb)))
-               [result _bb] (freeze-raw x private-bb cache_ init-cache)]
-           result))
-
-       (finally (.set impl/tl:freeze-depth init-depth)))))
-
-  ([x     ^ByteBuffer bb cache_ cache]
-   (loop [^ByteBuffer bb bb]
-     (.clear bb)                          ; Reset buffer before (re)use
-     (when cache_ (vreset! cache_ cache)) ; Reset cache  before (re)use
-     (let [dout_ (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (io/bb->dout bb)))))
-           result
-           (try
-             (io/write-typed+meta bb dout_ x)
-             (java.util.Arrays/copyOf (.array bb) (.position bb))
-             (catch java.nio.BufferOverflowException _ nil))]
-
-       (if result
-         [result bb]
-         (recur (ByteBuffer/allocate (* 2 (.capacity bb)))))))))
 
 (defn fast-freeze
   "Like `freeze` but:
@@ -818,10 +774,12 @@
     (mapv meta
       (thaw (freeze [(cache v1) (cache v2) (cache v1) (cache v2)])))))
 
-;; @TODO Adapt these for dout->bb
-;; (defn ^:no-doc ^:deprecated try-write-serializable [dout x] (truss/catching :all (io/write-sz         dout x)))
-;; (defn ^:no-doc ^:deprecated try-write-readable     [dout x] (truss/catching :all (io/write-readable   dout x)))
-;; (defn ^:no-doc ^:deprecated     write-unfreezable  [dout x] (io/write-typed (impl/wrap-unfreezable x) dout))
+(defn ^:no-doc ^:deprecated try-write-serializable [^DataOutput dout x] (truss/catching :all (when-let [^bytes ba (io/with-bb 512 (fn [bb dout_] (io/write-sz       bb x)))] (.write dout ba 0 (alength ba)) true)))
+(defn ^:no-doc ^:deprecated try-write-readable     [^DataOutput dout x] (truss/catching :all (when-let [^bytes ba (io/with-bb 512 (fn [bb dout_] (io/write-readable bb x)))] (.write dout ba 0 (alength ba)) true)))
+(defn ^:no-doc ^:deprecated     write-unfreezable  [^DataOutput dout x]
+  (let [x*        (impl/wrap-unfreezable x)
+        ^bytes ba (io/with-bb 512 (fn [bb dout_] (io/write-typed x* bb dout_) true))]
+    (.write dout ba 0 (alength ba))))
 
 ;;;; Stress data (for tests, benching, etc.)
 
