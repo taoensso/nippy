@@ -45,7 +45,7 @@
 (defn write-array-lg [^DataOutput dout array array-len id]
   (write-id       dout id)
   (write-lg-count dout array-len)
-  (run! (fn [el] (write-typed+meta el dout)) array))
+  (enc/reduce-n (fn [_ idx] (write-typed+meta (aget array idx) dout)) nil array-len))
 
 (defn write-biginteger [^DataOutput dout ^BigInteger n] (write-bytes-lg dout (.toByteArray n)))
 
