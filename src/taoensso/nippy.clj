@@ -13,7 +13,9 @@
     [encryption  :as encryption]])
 
   (:import
+   [taoensso.nippy.io ByteBufferReader DataInputReader]
    [java.nio.charset StandardCharsets]
+   [java.nio ByteBuffer]
    [java.io
     DataOutput       DataInput
     DataOutputStream DataInputStream
@@ -357,6 +359,8 @@
 
 ;;;; Freeze API
 
+(declare freeze-raw)
+
 (defn freeze
   "Main freezing util.
 
@@ -375,44 +379,79 @@
      (fn []
        (let [no-header? (or (get opts :no-header?) (get opts :skip-header?)) ; Undocumented
              encryptor  (when password encryptor)
-             baos (ByteArrayOutputStream. 64)
-             dos  (DataOutputStream. baos)]
+             ^bytes ba  (impl/with-cache (freeze-raw x))]
 
          (if (and (nil? compressor) (nil? encryptor))
-           (do ; Optimized case
-             (when-not no-header? ; Avoid `wrap-header`'s array copy:
-               (let [head-ba (sc/get-head-ba {:compressor-id nil :encryptor-id nil})]
-                 (.write dos head-ba 0 4)))
-             (impl/with-cache (io/write-typed+meta x dos))
-             (.toByteArray baos))
+           (if no-header?
+             (do             ba)
+             (sc/wrap-header ba {:compressor-id nil :encryptor-id nil}))
 
-           (do
-             (impl/with-cache (io/write-typed+meta x dos))
-             (let [ba (.toByteArray baos)
+           (let [compressor
+                 (if (identical? compressor :auto)
+                   (if no-header?
+                     lz4-compressor
+                     (if-let [fc *auto-freeze-compressor*]
+                       (fc ba)
+                       ;; Intelligently enable compression only if benefit
+                       ;; is likely to outweigh cost:
+                       (when (> (alength ba) 8192) lz4-compressor)))
 
-                   compressor
-                   (if (identical? compressor :auto)
-                     (if no-header?
-                       lz4-compressor
-                       (if-let [fc *auto-freeze-compressor*]
-                         (fc ba)
-                         ;; Intelligently enable compression only if benefit
-                         ;; is likely to outweigh cost:
-                         (when (> (alength ba) 8192) lz4-compressor)))
+                   (if (fn? compressor)
+                     (compressor ba) ; Assume compressor selector fn
+                     compressor      ; Assume compressor
+                     ))
 
-                     (if (fn? compressor)
-                       (compressor ba) ; Assume compressor selector fn
-                       compressor      ; Assume compressor
-                       ))
+                 ba (if compressor (compress compressor         ba) ba)
+                 ba (if encryptor  (encrypt  encryptor password ba) ba)]
 
-                   ba (if compressor (compress compressor         ba) ba)
-                   ba (if encryptor  (encrypt  encryptor password ba) ba)]
+             (if no-header?
+               (do             ba)
+               (sc/wrap-header ba
+                 {:compressor-id (when-let [c compressor] (or (compression/standard-header-ids (compression/header-id c)) :else))
+                  :encryptor-id  (when-let [e encryptor]  (or (encryption/standard-header-ids  (encryption/header-id  e)) :else))})))))))))
 
-               (if no-header?
-                 ba
-                 (sc/wrap-header ba
-                   {:compressor-id (when-let [c compressor] (or (compression/standard-header-ids (compression/header-id c)) :else))
-                    :encryptor-id  (when-let [e encryptor]  (or (encryption/standard-header-ids  (encryption/header-id  e)) :else))}))))))))))
+(defn- freeze-raw
+  "Freezes given arg to current ThreadLocal `ByteBuffer`.
+  Expands buffer as needed. No header or `with-cache`."
+  (^bytes [x]
+   (let [init-depth (long (.get impl/tl:freeze-depth))
+         cache_           (.get impl/tl:cache)
+         init-cache (when cache_ @cache_)]
+
+     (.set impl/tl:freeze-depth (inc init-depth))
+     (try
+       (enc/cond
+         (zero? init-depth) ; Unnested freeze call
+         (let [^ByteBuffer   bb  (.get impl/tl:freeze-bb)
+               [result final-bb] (freeze-raw x bb cache_ init-cache)]
+
+           (when-not (identical?  bb final-bb)
+             (.set impl/tl:freeze-bb final-bb)) ; May have grown
+
+           result)
+
+         :else ; Nested freeze call
+         ;; Use private buffer so custom freezers can call `freeze` without clobbering shared buffer
+         (let [private-bb   (ByteBuffer/allocate (.capacity ^ByteBuffer (.get impl/tl:freeze-bb)))
+               [result _bb] (freeze-raw x private-bb cache_ init-cache)]
+           result))
+
+       (finally (.set impl/tl:freeze-depth init-depth)))))
+
+  ([x     ^ByteBuffer bb cache_ cache]
+   (loop [^ByteBuffer bb bb]
+     (.clear bb)                          ; Reset buffer before (re)use
+     (when cache_ (vreset! cache_ cache)) ; Reset cache  before (re)use
+     (let [dout_ (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (io/bb->dout bb)))))
+           result
+           (try
+             (io/write-typed+meta bb dout_ x)
+             (java.util.Arrays/copyOf (.array bb) (.position bb))
+             (catch java.nio.BufferOverflowException _ nil))]
+
+       (if result
+         [result bb]
+         (recur (ByteBuffer/allocate (* 2 (.capacity bb)))))))))
 
 (defn fast-freeze
   "Like `freeze` but:
@@ -430,16 +469,25 @@
     - The performance difference between `freeze` and `fast-freeze` is
       often negligible in practice."
 
-  ^bytes [x]
-  (let [baos (ByteArrayOutputStream. 64)
-        dos  (DataOutputStream. baos)]
-    (impl/with-cache (io/write-typed+meta x dos))
-    (.toByteArray baos)))
+  ^bytes [x] (impl/with-cache (freeze-raw x)))
 
 (defn freeze-to-out!
   "Low-level util. Serializes given arg (any Clojure data type) to given `DataOutput`.
   In most cases you want `freeze` instead."
-  [^DataOutput dout x] (io/write-typed+meta x dout))
+  [^DataOutput dout x] (let [ba (freeze-raw x)] (.write dout ba 0 (alength ba))))
+
+(defn freeze-to-bb!
+  "Low-level util. Serializes given arg (any Clojure data type) to given `ByteBuffer`.
+  In most cases you want `freeze` instead."
+  [^ByteBuffer bb x]
+  (let [bb    (io/bb-big-endian! bb)
+        dout_ (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (io/bb->dout bb)))))]
+    (try
+      (io/write-typed+meta x bb dout_)
+      (catch java.nio.BufferOverflowException _
+        (throw
+          (java.io.EOFException.
+            (str "ByteBuffer overflow while freezing: remaining " (.remaining bb) " bytes.")))))))
 
 (defn freeze-to-string
   "Like `freeze`, but returns a Base64-encoded string.
@@ -463,6 +511,8 @@
 
 (def ^:private err-msg-unknown-thaw-failure "Possible decryption/decompression error, unfrozen/damaged data, etc.")
 (def ^:private err-msg-unrecognized-header  "Unrecognized (but apparently well-formed) header. Data frozen with newer Nippy version?")
+
+(declare thaw-from-bb*)
 
 (defn thaw
   "Main thawing util.
@@ -522,11 +572,8 @@
                  (try
                    (let [ba data-ba
                          ba (if encryptor  (decrypt    encryptor password ba) ba)
-                         ba (if compressor (decompress compressor         ba) ba)
-                         dis (DataInputStream. (ByteArrayInputStream. ba))]
-
-                     (impl/with-cache (io/read-typed dis)))
-
+                         ba (if compressor (decompress compressor         ba) ba)]
+                     (impl/with-cache (thaw-from-bb* (ByteBuffer/wrap ba))))
                    (catch Exception e (ex-fn e)))))
 
              ;; Hacky + can actually segfault JVM due to Snappy bug,
@@ -575,14 +622,20 @@
 
   Equivalent to (but a little faster than) `thaw` with opts:
     {:no-header? true, :compressor nil, :encryptor nil}."
-  [^bytes ba]
-  (let [dis (DataInputStream. (ByteArrayInputStream. ba))]
-    (impl/with-cache (io/read-typed dis))))
+  [^bytes ba] (impl/with-cache (thaw-from-bb* (ByteBuffer/wrap ba))))
+
+(defn- thaw-from-bb* [^ByteBuffer bb] (io/read-typed (ByteBufferReader. bb)))
+(defn  thaw-from-bb!
+  "Low-level util. Deserializes a frozen object from given `ByteBuffer` to
+  its original Clojure data type. In most cases you want `thaw` instead."
+  [^ByteBuffer bb]
+  (io/bb-big-endian! bb)
+  (thaw-from-bb*     bb))
 
 (defn thaw-from-in!
   "Low-level util. Deserializes a frozen object from given `DataInput` to
   its original Clojure data type. In most cases you want `thaw` instead."
-  [^DataInput din] (io/read-typed din))
+  [^DataInput din] (io/read-typed (DataInputReader. din)))
 
 (defn thaw-from-string
   "Like `thaw`, but takes a Base64-encoded string.
@@ -649,15 +702,15 @@
   (let [write-id-form
         (if (keyword? custom-type-id)
           ;; Prefixed [const byte id][cust hash id][payload]:
-          `(do (io/write-id ~dout ~sc/id-prefixed-custom-md)
+          `(do (.writeByte  ~dout (unchecked-byte ~sc/id-prefixed-custom-md))
                (.writeShort ~dout ~(impl/coerce-custom-type-id custom-type-id)))
           ;; Unprefixed [cust byte id][payload]:
-          `(io/write-id ~dout ~(impl/coerce-custom-type-id custom-type-id)))]
+          `(.writeByte ~dout (unchecked-byte ~(impl/coerce-custom-type-id custom-type-id))))]
 
     `(extend-type ~type
-       impl/INativeFreezable (~'native-freezable? [~'_] true)
-       impl/ICustomFreezable (~'custom-freezable? [~'_] true)
-       io/IWriteTypedNoMeta  (~'write-typed       [~x ~(with-meta dout {:tag 'java.io.DataOutput})] ~write-id-form ~@body))))
+       impl/INativeFreezable   (~'native-freezable? [~'_] true)
+       impl/ICustomFreezable   (~'custom-freezable? [~'_] true)
+       io/IWriteTypedNoMetaDin (~'write-typed-din   [~x ~(with-meta dout {:tag 'java.io.DataOutput})] ~write-id-form ~@body))))
 
 (defmacro extend-thaw
   "Extends Nippy to support thawing of a custom type with given id:
@@ -765,9 +818,10 @@
     (mapv meta
       (thaw (freeze [(cache v1) (cache v2) (cache v1) (cache v2)])))))
 
-(defn ^:no-doc ^:deprecated try-write-serializable [dout x] (truss/catching :all (io/write-sz         dout x)))
-(defn ^:no-doc ^:deprecated try-write-readable     [dout x] (truss/catching :all (io/write-readable   dout x)))
-(defn ^:no-doc ^:deprecated     write-unfreezable  [dout x] (io/write-typed (impl/wrap-unfreezable x) dout))
+;; @TODO Adapt these for dout->bb
+;; (defn ^:no-doc ^:deprecated try-write-serializable [dout x] (truss/catching :all (io/write-sz         dout x)))
+;; (defn ^:no-doc ^:deprecated try-write-readable     [dout x] (truss/catching :all (io/write-readable   dout x)))
+;; (defn ^:no-doc ^:deprecated     write-unfreezable  [dout x] (io/write-typed (impl/wrap-unfreezable x) dout))
 
 ;;;; Stress data (for tests, benching, etc.)
 
