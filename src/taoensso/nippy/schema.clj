@@ -164,14 +164,13 @@
    15  [:byte-array-md   [[:elements {:read 2}]]]
    2   [:byte-array-lg   [[:elements {:read 4}]]]
 
-   109 [:int-array-lg    [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
-   108 [:long-array-lg   [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
-
-   117 [:float-array-lg  [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
-   116 [:double-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
-
    107 [:string-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
    115 [:object-array-lg [[:elements {:read 4}]]]
+
+   118 [:int-array-lg    [[:elements {:read 4}]]] ; Added v3.7.0 (TBD)
+   119 [:long-array-lg   [[:elements {:read 4}]]]
+   120 [:float-array-lg  [[:elements {:read 4}]]]
+   121 [:double-array-lg [[:elements {:read 4}]]]
 
    ;; Serializable
    75  [:sz-sm [[:bytes {:read 1}] [:elements 1]]]
@@ -198,6 +197,11 @@
 
    ;;; DEPRECATED (only support thawing)
    ;; Desc-sorted by deprecation date
+
+   109 [:int-array-lg_    [[:elements {:read 4}]]] ; [2026-04-16 v3.7.0-alpha2] Switched to xBuffer impln
+   108 [:long-array-lg_   [[:elements {:read 4}]]] ; ''
+   117 [:float-array-lg_  [[:elements {:read 4}]]] ; ''
+   116 [:double-array-lg_ [[:elements {:read 4}]]] ; ''
 
    105 [:str-sm_  [[:bytes    {:read 1}]]]               ; [2023-08-02 v3.3.0] Switch to unsigned sm*
    110 [:vec-sm_  [[:elements {:read 1}]]]               ; ''
