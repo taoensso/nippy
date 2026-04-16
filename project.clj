@@ -14,6 +14,7 @@
    [io.airlift/aircompressor "2.0.3"]]
 
   :test-paths ["test" #_"src"]
+  :test-selectors {:default (complement :no-auto)}
 
   :profiles
   {;; :default [:base :system :user :provided :dev]
