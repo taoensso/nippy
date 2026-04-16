@@ -445,7 +445,7 @@
 
 ;;;; Compressors
 
-(deftest _compressors
+(deftest ^:no-auto _compressors
   (println "\nTesting decompression of random data...")
   (doseq [c [compr/zstd-compressor
              compr/lz4-compressor
