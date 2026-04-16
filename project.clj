@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "3.6.2"
+(defproject com.taoensso/nippy "3.7.0-alpha2"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "Fast serialization library for Clojure"
   :url "https://www.taoensso.com/nippy"
@@ -40,7 +40,7 @@
      "-Dtaoensso.nippy.thaw-serializable-allowlist-base=base.1, base.2"
      "-Dtaoensso.nippy.thaw-serializable-allowlist-add=add.1 , add.2"
      #_"-Dtaoensso.nippy.pack-unsigned=true"
-     #_"-Dtaoensso.nippy.target-release=350"]
+     "-Dtaoensso.nippy.target-release=370"]
 
     :global-vars
     {*warn-on-reflection* true
