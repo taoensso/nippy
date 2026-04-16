@@ -18,6 +18,7 @@
 
 ;;;;
 
+(defn- bb-advance   [^ByteBuffer bb ^long n] (.position bb (+ (.position bb) n)) bb)
 (defn- bb-readable! [^ByteBuffer bb ^long n] (when (> n (.remaining bb)) (throw (java.io.EOFException. (str "ByteBuffer underflow: need " n " bytes, have " (.remaining bb) ".")))))
 (defn- bb-writable! [^ByteBuffer bb ^long n] (when (> n (.remaining bb)) (throw (BufferOverflowException.))))
 (defn  bb-big-endian!
@@ -56,7 +57,9 @@
 
         (.put bb ba 0 len)))))
 
-(defmacro write-array-lg [^ByteBuffer bb dout_ arr alen id]
+(defmacro write-dyn-array-lg
+  "Writes an array of dynamic (individually type-prefixed) elements."
+  [^ByteBuffer bb dout_ arr alen id]
   `(do
      (write-id       ~bb ~id)
      (write-lg-count ~bb ~alen)
@@ -406,15 +409,17 @@
       (write-cached           bb dout_ x-val cache_)
       (write-typed+meta x-val bb dout_))))
 
-(writer "[B"                  nil (write-bytes    bb x))
-(writer "[Ljava.lang.Object;" nil (write-array-lg bb dout_ x (alength x) sc/id-object-array-lg))
+(writer "[B"                    nil (write-bytes        bb x))
+(writer "[Ljava.lang.Object;"   nil (write-dyn-array-lg bb dout_ x (alength x) sc/id-object-array-lg))
 
-(when (impl/target-release>= 350)
-  (writer "[I"                  nil (write-array-lg bb dout_ x (alength x) sc/id-int-array-lg))
-  (writer "[J"                  nil (write-array-lg bb dout_ x (alength x) sc/id-long-array-lg))
-  (writer "[F"                  nil (write-array-lg bb dout_ x (alength x) sc/id-float-array-lg))
-  (writer "[D"                  nil (write-array-lg bb dout_ x (alength x) sc/id-double-array-lg))
-  (writer "[Ljava.lang.String;" nil (write-array-lg bb dout_ x (alength x) sc/id-string-array-lg)))
+(when (impl/target-release>= 350) ; Otherwise handled via Serializable
+  (writer "[Ljava.lang.String;" nil (write-dyn-array-lg bb dout_ x (alength x) sc/id-string-array-lg)))
+
+(when (impl/target-release>= 370) ; Otherwise handled via Serializable
+  (writer "[I"    sc/id-int-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asIntBuffer    bb) x) (bb-advance bb (* alen Integer/BYTES))))
+  (writer "[J"   sc/id-long-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asLongBuffer   bb) x) (bb-advance bb (* alen    Long/BYTES))))
+  (writer "[F"  sc/id-float-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asFloatBuffer  bb) x) (bb-advance bb (* alen   Float/BYTES))))
+  (writer "[D" sc/id-double-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asDoubleBuffer bb) x) (bb-advance bb (* alen  Double/BYTES)))))
 
 (writer clojure.lang.MapEntry sc/id-map-entry
   (write-typed+meta (key x) bb dout_)
@@ -519,7 +524,8 @@
   (readFully     [^bytes ba ^int off ^int len])
   (skipBytes     [^int n])
   (toDataInput   [])
-  (toInputStream []))
+  (toInputStream [])
+  (toByteBuffer  []))
 
 (declare bb->din)
 
@@ -533,9 +539,10 @@
   (readDouble    [_] (.getDouble bb))
   (readChar      [_] (.getChar   bb))
   (readFully     [_ ^bytes ba ^int off ^int len] (.get bb ba off len))
-  (skipBytes     [_ ^int n] (let [pos (.position bb)] (.position bb (+ pos n)) n))
+  (skipBytes     [_ ^int n] (bb-advance bb n))
   (toDataInput   [_] (bb->din bb))
-  (toInputStream [_] (java.io.ByteArrayInputStream. (.array bb) (.position bb) (.remaining bb))))
+  (toInputStream [_] (java.io.ByteArrayInputStream. (.array bb) (.position bb) (.remaining bb)))
+  (toByteBuffer  [_] bb))
 
 (deftype DataInputReader [^DataInput din]
   IByteReader
@@ -549,7 +556,8 @@
   (readFully     [_ ^bytes ba ^int off ^int len] (.readFully din ba off len))
   (skipBytes     [_ ^int n] (.skipBytes din n))
   (toDataInput   [_] din)
-  (toInputStream [_] din))
+  (toInputStream [_] din)
+  (toByteBuffer  [_] (throw (IllegalArgumentException. (str "DataInputReader cannot be used as ByteBuffer")))))
 
 (defmacro read-sm-ucount [ibr] `(- (int (.readByte  ~ibr)) Byte/MIN_VALUE))
 (defmacro read-sm-count  [ibr]    `(int (.readByte  ~ibr)))
@@ -591,7 +599,7 @@
 
 (defn read-biginteger [^IByteReader ibr] (BigInteger. ^bytes (read-bytes ibr (.readInt ibr))))
 
-(defmacro read-array [ibr thaw-type array-type array]
+(defmacro read-dyn-array [ibr thaw-type array-type array]
   (let [thawed-sym (with-meta 'thawed-sym {:tag thaw-type})
         array-sym  (with-meta 'array-sym  {:tag array-type})]
     `(let [~array-sym ~array]
@@ -800,14 +808,17 @@
         sc/id-byte-array-md   (read-bytes ibr (read-md-count ibr))
         sc/id-byte-array-lg   (read-bytes ibr (read-lg-count ibr))
 
-        sc/id-long-array-lg   (read-array ibr long   "[J" (long-array   (read-lg-count ibr)))
-        sc/id-int-array-lg    (read-array ibr int    "[I" (int-array    (read-lg-count ibr)))
+        sc/id-string-array-lg  (read-dyn-array ibr String "[Ljava.lang.String;" (make-array String (read-lg-count ibr)))
+        sc/id-object-array-lg  (read-dyn-array ibr Object "[Ljava.lang.Object;" (object-array      (read-lg-count ibr)))
+        sc/id-int-array-lg_    (read-dyn-array ibr int    "[I"                  (int-array         (read-lg-count ibr)))
+        sc/id-long-array-lg_   (read-dyn-array ibr long   "[J"                  (long-array        (read-lg-count ibr)))
+        sc/id-float-array-lg_  (read-dyn-array ibr float  "[F"                  (float-array       (read-lg-count ibr)))
+        sc/id-double-array-lg_ (read-dyn-array ibr double "[D"                  (double-array      (read-lg-count ibr)))
 
-        sc/id-double-array-lg (read-array ibr double "[D" (double-array (read-lg-count ibr)))
-        sc/id-float-array-lg  (read-array ibr float  "[F" (float-array  (read-lg-count ibr)))
-
-        sc/id-string-array-lg (read-array ibr String "[Ljava.lang.String;" (make-array String (read-lg-count ibr)))
-        sc/id-object-array-lg (read-array ibr Object "[Ljava.lang.Object;" (object-array      (read-lg-count ibr)))
+        sc/id-int-array-lg     (let [^ByteBuffer bb (.toByteBuffer ibr), alen (.getInt bb), arr (int-array    alen)] (.get (.asIntBuffer    bb) arr) (bb-advance bb (* alen Integer/BYTES)) arr)
+        sc/id-long-array-lg    (let [^ByteBuffer bb (.toByteBuffer ibr), alen (.getInt bb), arr (long-array   alen)] (.get (.asLongBuffer   bb) arr) (bb-advance bb (* alen    Long/BYTES)) arr)
+        sc/id-float-array-lg   (let [^ByteBuffer bb (.toByteBuffer ibr), alen (.getInt bb), arr (float-array  alen)] (.get (.asFloatBuffer  bb) arr) (bb-advance bb (* alen   Float/BYTES)) arr)
+        sc/id-double-array-lg  (let [^ByteBuffer bb (.toByteBuffer ibr), alen (.getInt bb), arr (double-array alen)] (.get (.asDoubleBuffer bb) arr) (bb-advance bb (* alen  Double/BYTES)) arr)
 
         sc/id-str-0       ""
         sc/id-str-sm*              (read-str ibr (read-sm-ucount ibr))
@@ -1061,8 +1072,8 @@
       (^int skipBytes [_ ^int n]
        (let [n       (max n 0)
              skipped (min n (.remaining bb))]
-         (.position bb (+ (.position bb) skipped))
-         skipped))
+         (bb-advance bb skipped)
+         (do            skipped)))
 
       (^boolean   readBoolean [_] (bb-readable! bb 1) (not (zero?   (int (.get bb)))))
       (^byte         readByte [_] (bb-readable! bb 1)                    (.get bb))
@@ -1090,7 +1101,7 @@
                    13
                    (do
                      (when (and (.hasRemaining bb) (= 10 (bit-and 0xFF (int (.get bb (.position bb))))))
-                       (.position bb (inc (.position bb))))
+                       (bb-advance bb 1))
                      (.toString sb))
 
                    ;; else
