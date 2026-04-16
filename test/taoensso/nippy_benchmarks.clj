@@ -1,9 +1,11 @@
 (ns taoensso.nippy-benchmarks
   (:require
-   [clojure.data.fressian      :as fress]
-   [taoensso.encore            :as enc]
-   [taoensso.nippy             :as nippy]
-   [taoensso.nippy.compression :as compr]))
+   [clojure.data.fressian :as fress]
+   [taoensso.encore       :as enc]
+   [taoensso.nippy        :as nippy]
+   [taoensso.nippy
+    [impl        :as impl]
+    [compression :as compr]]))
 
 ;;;; Reader
 
@@ -78,7 +80,7 @@
     {laps   1e4
      warmup 25e3}}]
 
-  (println "\nRunning benchmarks...")
+  (println (str "\nRunning benchmarks (target release: " impl/target-release ")..."))
 
   (let [results_ (atom {})]
     (when (or all? reader?)
@@ -164,31 +166,25 @@
 ;;;; Results
 
 (comment
-  {:last-updated    "2024-01-16"
+  {:last-updated    "2026-04-16"
    :system          "2020 Macbook Pro M1, 16 GB memory"
-   :clojure-version "1.11.1"
-   :java-version    "OpenJDK 21"
+   :clojure-version "1.12.4"
+   :java-version    "OpenJDK 25"
    :deps
-   '[[com.taoensso/nippy        "3.4.0-beta1"]
-     [org.clojure/tools.reader  "1.3.7"]
-     [org.clojure/data.fressian "1.0.0"]
-     [org.tukaani/xz            "1.9"]
-     [io.airlift/aircompressor  "0.25"]]}
+   '[[com.taoensso/nippy        "3.7.0-alpha1"]
+     [org.clojure/tools.reader  "1.6.0"]
+     [org.clojure/data.fressian "1.1.1"]
+     [org.tukaani/xz            "1.12"]
+     [io.airlift/aircompressor  "2.0.3"]]}
 
   (bench-serialization {:all? true})
 
-  {:reader          {:round 13496, :freeze 5088, :thaw 8408, :size 15880}
-   :fressian        {:round 3898,  :freeze 2350, :thaw 1548, :size 12222}
-   :nippy/lzma2     {:round 12341, :freeze 7809, :thaw 4532, :size 3916}
-   :nippy/encrypted {:round 2939,  :freeze 1505, :thaw 1434, :size 8547}
-   :nippy/default   {:round 2704,  :freeze 1330, :thaw 1374, :size 8519}
-   :nippy/fast      {:round 2425,  :freeze 1117, :thaw 1308, :size 17088}}
-
-  (enc/round2 (/ 2704 13496)) ; 0.20 of reader   roundtrip time
-  (enc/round2 (/ 2704  3898)) ; 0.69 of fressian roundtrip time
-
-  (enc/round2 (/ 8519 15880)) ; 0.54 of reader   output size
-  (enc/round2 (/ 8519 12222)) ; 0.70 of fressian output size
+  {:reader          {:round 11411, :freeze 3485, :thaw 7926, :size 15880}
+   :fressian        {:round 3160,  :freeze 2120, :thaw 1040, :size 12222}
+   :nippy/lzma2     {:round 11054, :freeze 6733, :thaw 4321, :size 3888}
+   :nippy/encrypted {:round 2529,  :freeze 1202, :thaw 1327, :size 8546}
+   :nippy/default   {:round 2286,  :freeze 1009, :thaw 1277, :size 8518}
+   :nippy/fast      {:round 2014,  :freeze 792,  :thaw 1222, :size 17105}}
 
   (bench-compressors
     {:laps 1e4 :warmup 2e4}
