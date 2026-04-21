@@ -2,6 +2,35 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.7.0-beta1` (2026-04-21)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.7.0-beta1)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+This is a **major performance upgrade** for **early testers only**!
+
+It includes a significant refactor of Nippy's internals to switch to a more efficient ByteBuffer implementation that's >20% faster in Nippy's standard benchmarks. Huge thanks to @huahaiy for his excellent work on this release! 🎉
+
+Please **test carefully** and report any unexpected problems, thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## 👉 Migration info
+
+When doing a **rolling update** (>1 coexisting version) from Nippy <v3.6, please **FIRST** update to v3.6 **THEN** to v3.7. This allows read support for new types to fully roll out BEFORE new types may be written.
+
+## 👉 Change in byte output
+
+This release includes a change in Nippy's byte output for **uncounted collections** (mostly lazy seqs). Almost no one should care about this, mentioning for the tiny minority of users that depend on Nippy's byte output remaining stable.
+
+## Since v3.6.2 (2026-04-09)
+
+- [new] Faster uncounted coll freezing (new binary output) \[940b40a]
+- [new] Initial (read) support for MUCh faster primitive num arrays \[57616cb]
+- [new] [#140] [#190] NB Switch to ByteBuffer implementation (@huahaiy) \[2c1a487]
+
+---
+
 # `v3.6.2` (2026-04-09)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.6.2)
