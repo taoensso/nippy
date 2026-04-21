@@ -21,7 +21,7 @@ When doing a **rolling update** (>1 coexisting version) from Nippy <v3.6, please
 
 ## 👉 Change in byte output
 
-This release includes a change in Nippy's byte output for **uncounted collections** (mostly lazy seqs). Almost no one should care about this, mentioning for the tiny minority of users that depend on Nippy's byte output remaining stable.
+This release includes a change in Nippy's byte output for **uncounted collections** (mostly lazy seqs). Almost no one should care about this, but mentioning for the tiny minority of users that depend on Nippy's byte output remaining stable.
 
 ## Since v3.6.2 (2026-04-09)
 
