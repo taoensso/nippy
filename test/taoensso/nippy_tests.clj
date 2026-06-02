@@ -21,6 +21,10 @@
   (remove-ns      'taoensso.nippy-tests)
   (test/run-tests 'taoensso.nippy-tests))
 
+(comment
+  (nippy/freeze-to-file (java.io.File. (str "v3.7.0-RC2.npy")) test-data)
+  (nippy/thaw-from-file (java.io.File. (str "v3.6.2.npy"))))
+
 ;;;; Config, etc.
 
 (def test-data (nippy/stress-data {:comparable? true}))
@@ -47,6 +51,7 @@
 
 (deftest _core
   (println (str "Clojure version: " *clojure-version*))
+  (println (str "Target release: " impl/target-release))
   [(is (= test-data test-data) "Test data is comparable")
    (is (=
          (nippy/stress-data {:comparable? true})
@@ -303,9 +308,6 @@
 (def ref-hashes {:deftype -671450876, :lazy-seq-empty -574080456, :true -1809580601, :long 598276629, :double -454270428, :lazy-seq -856460618, :short 1152993378, :meta -858252893, :str-long -1970041891, :instant -1401948864, :many-keywords 665654816, :bigint 2033662230, :sym-ns 769802402, :queue 447747779, :float 603100813, :sorted-set 2005004017, :many-strings 1738215727, :nested -1350538572, :queue-empty 1760934486, :duration -775528642, :false 1506926383, :vector 813550992, :util-date 1326218051, :kw 389651898, :sym -1742024487, :str-short -921330463,  :subvec 709331681,   :kw-long 852232872, :integer 624865727, :sym-long -1535730190, :list -1207486853, :ratio 1186850097, :byte -1041979678, :bigdec -1846988137, :nil 2005042235, :defrecord 842721251, :sorted-map -1160380145, :sql-date 80018667, :map-entry 1219306839,  :false-boxed 1506926383, :uri 870148616,   :period -2043530540, :many-longs -1109794519, :uuid -338331115, :set 1649942133,  :kw-ns 1050084331, :map 1989337680, :many-doubles -827569787, :char 858269588})
 
 (comment (cmp-hashes (gen-hashes) ref-hashes)) ; []
-
-(deftest     _target-release
-  (is (= impl/target-release 370) "Default target release"))
 
 (deftest   _stable-serialized-output
   (testing "Stable serialized output"

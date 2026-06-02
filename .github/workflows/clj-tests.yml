@@ -6,8 +6,11 @@ jobs:
     strategy:
       matrix:
         java: ['17', '19', '21']
+        target-release: ['370', '360', '350']
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      TAOENSSO_NIPPY_TARGET_RELEASE: ${{ matrix.target-release }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
