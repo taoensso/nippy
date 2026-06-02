@@ -599,7 +599,9 @@
 
 (defn read-biginteger [^IByteReader ibr] (BigInteger. ^bytes (read-bytes ibr (.readInt ibr))))
 
-(defmacro read-dyn-array [ibr thaw-type array-type array]
+(defmacro ^:private read-dyn-array
+  "Reads an array of individually type-prefixed elements."
+  [ibr thaw-type array-type array]
   (let [thawed-sym (with-meta 'thawed-sym {:tag thaw-type})
         array-sym  (with-meta 'array-sym  {:tag array-type})]
     `(let [~array-sym ~array]
@@ -608,6 +610,21 @@
            (let [~thawed-sym (read-typed ~ibr)]
              (aset ~'array-sym idx# ~'thawed-sym)))
          nil (alength ~'array-sym))
+       ~'array-sym)))
+
+(defmacro ^:private read-prim-array
+  "Reads a primitive array of homogeneous elements."
+  [ibr array-type array-fn as-buffer bytes read-el]
+  (let [array-sym (with-meta 'array-sym {:tag array-type})]
+    `(let [alen#      (read-lg-count ~ibr)
+           ~array-sym (~array-fn alen#)]
+       (if (instance? ByteBufferReader ~ibr) ; Fast bulk read
+         (let [^ByteBuffer bb# (.toByteBuffer ~ibr)]
+           (.get (~as-buffer bb#) ~'array-sym)
+           (bb-advance bb# (* alen# ~bytes)))
+         (enc/reduce-n ; Element-wise read for legacy `DataInput` support
+           (fn [_# idx#] (aset ~'array-sym idx# (~read-el ~ibr)))
+           nil alen#))
        ~'array-sym)))
 
 (enc/declare-remote ^:dynamic taoensso.nippy/*thaw-xform*)
@@ -815,10 +832,10 @@
         sc/id-float-array-lg_  (read-dyn-array ibr float  "[F"                  (float-array       (read-lg-count ibr)))
         sc/id-double-array-lg_ (read-dyn-array ibr double "[D"                  (double-array      (read-lg-count ibr)))
 
-        sc/id-int-array-lg     (let [^ByteBuffer bb (.toByteBuffer ibr), alen (.getInt bb), arr (int-array    alen)] (.get (.asIntBuffer    bb) arr) (bb-advance bb (* alen Integer/BYTES)) arr)
-        sc/id-long-array-lg    (let [^ByteBuffer bb (.toByteBuffer ibr), alen (.getInt bb), arr (long-array   alen)] (.get (.asLongBuffer   bb) arr) (bb-advance bb (* alen    Long/BYTES)) arr)
-        sc/id-float-array-lg   (let [^ByteBuffer bb (.toByteBuffer ibr), alen (.getInt bb), arr (float-array  alen)] (.get (.asFloatBuffer  bb) arr) (bb-advance bb (* alen   Float/BYTES)) arr)
-        sc/id-double-array-lg  (let [^ByteBuffer bb (.toByteBuffer ibr), alen (.getInt bb), arr (double-array alen)] (.get (.asDoubleBuffer bb) arr) (bb-advance bb (* alen  Double/BYTES)) arr)
+        sc/id-int-array-lg     (read-prim-array ibr "[I" int-array    .asIntBuffer    Integer/BYTES .readInt)
+        sc/id-long-array-lg    (read-prim-array ibr "[J" long-array   .asLongBuffer      Long/BYTES .readLong)
+        sc/id-float-array-lg   (read-prim-array ibr "[F" float-array  .asFloatBuffer    Float/BYTES .readFloat)
+        sc/id-double-array-lg  (read-prim-array ibr "[D" double-array .asDoubleBuffer  Double/BYTES .readDouble)
 
         sc/id-str-0       ""
         sc/id-str-sm*              (read-str ibr (read-sm-ucount ibr))
