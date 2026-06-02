@@ -177,7 +177,18 @@
       (is (throws? IllegalArgumentException
             (io/bb->dout
               (doto    (java.nio.ByteBuffer/allocate 8)
-                (.order java.nio.ByteOrder/LITTLE_ENDIAN)))))])])
+                (.order java.nio.ByteOrder/LITTLE_ENDIAN)))))])
+
+   (testing "Streaming thaw"
+     ;; We want to confirm that `thaw-from-in!` (which uses legacy `DataInput`)
+     ;; thaws the same as `fast-thaw`. Comparing the thawed values can be tricky
+     ;; since they incl. uncomparable elements, so we instead compare the
+     ;; RE-freezes are identical
+     (let [ba (nippy/fast-freeze (nippy/stress-data {}))]
+       (is (ba=
+             (nippy/freeze (nippy/fast-thaw ba))
+             (nippy/freeze (nippy/thaw-from-in! (java.io.DataInputStream. (java.io.ByteArrayInputStream. ba)))))
+         "`DataInput` reader agrees with `ByteBuffer` reader on all stress data")))])
 
 ;;;; Custom types & records
 
