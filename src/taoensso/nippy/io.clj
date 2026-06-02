@@ -412,14 +412,29 @@
 (writer "[B"                    nil (write-bytes        bb x))
 (writer "[Ljava.lang.Object;"   nil (write-dyn-array-lg bb dout_ x (alength x) sc/id-object-array-lg))
 
-(when (impl/target-release>= 350) ; Otherwise handled via Serializable
-  (writer "[Ljava.lang.String;" nil (write-dyn-array-lg bb dout_ x (alength x) sc/id-string-array-lg)))
+(cond ; String arrays
+  (impl/target-release>= 350)
+  (writer "[Ljava.lang.String;" nil (write-dyn-array-lg bb dout_ x (alength x) sc/id-string-array-lg))
+  :else nil ; Handle via Serializable
+  )
 
-(when (impl/target-release>= 370) ; Otherwise handled via Serializable
-  (writer "[I"    sc/id-int-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asIntBuffer    bb) x) (bb-advance bb (* alen Integer/BYTES))))
-  (writer "[J"   sc/id-long-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asLongBuffer   bb) x) (bb-advance bb (* alen    Long/BYTES))))
-  (writer "[F"  sc/id-float-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asFloatBuffer  bb) x) (bb-advance bb (* alen   Float/BYTES))))
-  (writer "[D" sc/id-double-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asDoubleBuffer bb) x) (bb-advance bb (* alen  Double/BYTES)))))
+(cond ; Numeric arrays
+  (impl/target-release>= 370)
+  (do
+    (writer "[I"    sc/id-int-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asIntBuffer    bb) x) (bb-advance bb (* alen Integer/BYTES))))
+    (writer "[J"   sc/id-long-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asLongBuffer   bb) x) (bb-advance bb (* alen    Long/BYTES))))
+    (writer "[F"  sc/id-float-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asFloatBuffer  bb) x) (bb-advance bb (* alen   Float/BYTES))))
+    (writer "[D" sc/id-double-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asDoubleBuffer bb) x) (bb-advance bb (* alen  Double/BYTES)))))
+
+  (impl/target-release>= 350)
+  (do
+    (writer "[I" nil (write-dyn-array-lg bb dout_ x (alength x)    sc/id-int-array-lg_))
+    (writer "[J" nil (write-dyn-array-lg bb dout_ x (alength x)   sc/id-long-array-lg_))
+    (writer "[F" nil (write-dyn-array-lg bb dout_ x (alength x)  sc/id-float-array-lg_))
+    (writer "[D" nil (write-dyn-array-lg bb dout_ x (alength x) sc/id-double-array-lg_)))
+
+  :else nil ; Handle via Serializable
+  )
 
 (writer clojure.lang.MapEntry sc/id-map-entry
   (write-typed+meta (key x) bb dout_)
