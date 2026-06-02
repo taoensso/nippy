@@ -182,7 +182,7 @@
    104 [:meta-protocol-key []]
 
    ;; Necessarily without size information
-   81  [:type               nil]
+   122 [:deftype            nil]
    82  [:prefixed-custom-md nil]
    59  [:cached-0           nil]
    63  [:cached-1           nil]
@@ -198,6 +198,7 @@
    ;;; DEPRECATED (only support thawing)
    ;; Desc-sorted by deprecation date
 
+   81  [:deftype_         nil]                     ; [2026-06-02 v3.7.0] Added field count prefix
    109 [:int-array-lg_    [[:elements {:read 4}]]] ; [2026-04-16 v3.7.0-alpha2] Switched to xBuffer impln
    108 [:long-array-lg_   [[:elements {:read 4}]]] ; ''
    117 [:float-array-lg_  [[:elements {:read 4}]]] ; ''

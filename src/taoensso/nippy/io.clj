@@ -466,11 +466,19 @@
 (writer clojure.lang.IType nil
   (if (impl/custom-freezable? x)
     (write-typed-din x (dout_))
-    (let [c (class x)]
-      (write-id  bb sc/id-type)
-      (write-str bb (.getName c))
-      (run! (fn [^java.lang.reflect.Field f] (write-typed (.get f x) bb dout_))
-        (impl/get-basis-fields c)))))
+    (let [c      (class x)
+          fields (impl/get-basis-fields c)
+          wf     (fn [^java.lang.reflect.Field f] (write-typed (.get f x) bb dout_))]
+      (if (impl/target-release>= 370)
+        (do ; With field count prefix
+          (write-id        bb sc/id-deftype)
+          (write-str       bb (.getName c))
+          (write-sm-ucount bb (count fields))
+          (run! wf fields))
+        (do ; Without field count prefix
+          (write-id  bb sc/id-deftype_)
+          (write-str bb (.getName c))
+          (run! wf fields))))))
 
 (enc/compile-if java.time.Instant
   (writer       java.time.Instant sc/id-time-instant
@@ -763,27 +771,52 @@
             :content    content
             :exception  e}})))))
 
-(defn read-type [^IByteReader ibr class-name]
-  (try
-    (let [c          (clojure.lang.RT/classForName class-name)
-          num-fields (count (impl/get-basis-fields c))
-          field-vals (object-array num-fields)
+(defn- read-deftype-fields ^objects [^IByteReader ibr n]
+  (let [vals (object-array n)]
+    (enc/reduce-n (fn [_ i] (aset vals i (read-typed ibr))) nil n)
+    vals))
 
-          ;; Ref. <https://github.com/clojure/clojure/blob/e78519c174fb506afa70e236af509e73160f022a/src/jvm/clojure/lang/Compiler.java#L4799>
-          ^java.lang.reflect.Constructor ctr (aget (.getConstructors c) 0)]
+(defn read-deftype [^IByteReader ibr class-name legacy?]
+  (if legacy? ; No field count in payload
+    (try
+      (let [c   (clojure.lang.RT/classForName class-name)
+            ctr (aget (.getConstructors c) 0)
+            num-fields-exp (count (impl/get-basis-fields c))]
 
-      (enc/reduce-n
-        (fn [_ i] (aset field-vals i (read-typed ibr)))
-        nil num-fields)
+        (.newInstance ^java.lang.reflect.Constructor ctr
+          (read-deftype-fields ibr num-fields-exp)))
 
-      (.newInstance ctr field-vals))
+      (catch Exception e
+        {:nippy/unthawable
+         {:type       :deftype
+          :class-name class-name
+          :cause      :exception
+          :exception  e}}))
 
-    (catch Exception e
-      {:nippy/unthawable
-       {:type  :type
-        :cause :exception
-        :class-name class-name
-        :exception  e}})))
+    (let [num-fields (read-sm-ucount      ibr)
+          field-vals (read-deftype-fields ibr num-fields) ; Always read all fields first
+          ]
+      (try
+        (let [c   (clojure.lang.RT/classForName class-name)
+              ctr (aget (.getConstructors c) 0)
+              num-fields-exp (count (impl/get-basis-fields c))]
+
+          (if (== num-fields num-fields-exp)
+            (.newInstance ^java.lang.reflect.Constructor ctr field-vals)
+            {:nippy/unthawable
+             {:type       :deftype
+              :class-name class-name
+              :cause      :field-num-mismatch
+              :field-num  {:expected num-fields-exp, :actual num-fields}
+              :content    (vec field-vals)}}))
+
+        (catch Exception e ; e.g. class not found, constructor failure
+          {:nippy/unthawable
+           {:type       :deftype
+            :class-name class-name
+            :cause      :exception
+            :content    (vec field-vals)
+            :exception  e}})))))
 
 (enc/declare-remote ^:dynamic taoensso.nippy/*incl-metadata?*)
 
@@ -814,8 +847,9 @@
         sc/id-sz-md_ (read-sz ibr (read-str ibr (read-md-count ibr)) :legacy)
         sc/id-sz-lg_ (read-sz ibr (read-str ibr (read-lg-count ibr)) :legacy)
 
-        sc/id-type (read-type ibr (read-typed ibr))
-        sc/id-char (.readChar ibr)
+        sc/id-deftype  (read-deftype ibr (read-typed ibr) false)
+        sc/id-deftype_ (read-deftype ibr (read-typed ibr) :legacy)
+        sc/id-char     (.readChar    ibr)
 
         sc/id-meta
         (let [m (read-typed ibr) ; Always consume from stream
