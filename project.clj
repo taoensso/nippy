@@ -9,7 +9,7 @@
 
   :dependencies
   [[org.clojure/tools.reader "1.6.0"]
-   [com.taoensso/encore      "3.160.1"]
+   [com.taoensso/encore      "3.161.0"]
    [org.tukaani/xz           "1.12"]
    [io.airlift/aircompressor "2.0.3"]]
 
@@ -18,8 +18,8 @@
 
   :profiles
   {;; :default [:base :system :user :provided :dev]
-   :provided {:dependencies [[org.clojure/clojure "1.12.4"]]}
-   :c1.12    {:dependencies [[org.clojure/clojure "1.12.4"]]}
+   :provided {:dependencies [[org.clojure/clojure "1.12.5"]]}
+   :c1.12    {:dependencies [[org.clojure/clojure "1.12.5"]]}
    :c1.11    {:dependencies [[org.clojure/clojure "1.11.4"]]}
    :c1.10    {:dependencies [[org.clojure/clojure "1.10.3"]]}
 
@@ -30,7 +30,7 @@
     :uberjar-name "graal-tests.jar"
     :dependencies
     [[org.clojure/clojure                  "1.11.3"]
-     [com.github.clj-easy/graal-build-time "1.0.5"]]}
+     [com.github.clj-easy/graal-build-time "1.0.6"]]}
 
    :dev
    {:jvm-opts
@@ -53,7 +53,7 @@
 
     :plugins
     [[lein-pprint  "1.3.2"]
-     [lein-ancient "0.7.0"]]}}
+     [lein-ancient "1.0.0"]]}}
 
   :aliases
   {"start-dev"     ["with-profile" "+dev" "repl" ":headless"]
