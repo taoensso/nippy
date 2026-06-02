@@ -21,13 +21,17 @@
   (remove-ns      'taoensso.nippy-tests)
   (test/run-tests 'taoensso.nippy-tests))
 
-(comment
-  (nippy/freeze-to-file (java.io.File. (str "v3.7.0-RC2.npy")) test-data)
-  (nippy/thaw-from-file (java.io.File. (str "v3.6.2.npy"))))
-
 ;;;; Config, etc.
 
 (def test-data (nippy/stress-data {:comparable? true}))
+
+(comment
+  [(nippy/freeze-to-file (java.io.File. "test/data/v3.7.0-RC2.npy") test-data)
+   (nippy/thaw-from-file (java.io.File. "test/data/v3.7.0-RC2.npy"))
+   (nippy/thaw-from-file (java.io.File. "test/data/v3.7.0-RC1.npy"))
+   (nippy/thaw-from-file (java.io.File. "test/data/v3.7.0-beta1.npy"))
+   (nippy/thaw-from-file (java.io.File. "test/data/v3.6.2.npy"))])
+
 (def tc-gen-recursive-any-equatable
   (tc-gens/recursive-gen tc-gens/container-type
     tc-gens/any-equatable))
