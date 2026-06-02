@@ -39,6 +39,10 @@
   (tc-gens/sample tc-gen-recursive-any-equatable 10)
   (gen-test 10 [gen-data] true))
 
+(defn array= [x y] (java.util.Arrays/equals ^objects (to-array x) ^objects (to-array y)))
+
+(comment (array= [1 2 3 ##NaN ##Inf] [1 2 3 ##NaN ##Inf])) ; true
+
 ;;;; Core
 
 (deftest _core
@@ -111,7 +115,7 @@
 
    (testing "Arrays"
      (binding [nippy/*thaw-serializable-allowlist* nippy/default-freeze-serializable-allowlist]
-       (mapv (fn [[k aval]] (is (= (vec aval) (-> aval nippy/freeze nippy/thaw vec)) (name k)))
+       (mapv (fn [[k aval]] (is (array= aval (-> aval nippy/freeze nippy/thaw)) (name k)))
          (get-in (nippy/stress-data {}) [:non-comparable :arrays]))))
 
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
