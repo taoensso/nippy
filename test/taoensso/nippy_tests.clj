@@ -1,5 +1,6 @@
 (ns taoensso.nippy-tests
   (:require
+   [clojure.java.io :as jio]
    [clojure.test :as test :refer [deftest testing is]]
    [clojure.test.check            :as tc]
    [clojure.test.check.generators :as tc-gens]
@@ -25,12 +26,50 @@
 
 (def test-data (nippy/stress-data {:comparable? true}))
 
+(def historical-v362-data
+  {:nil         nil
+   :booleans    [true false]
+   :numbers     [(byte -7) (short 30000) 42 1234567890123456789
+                 123456789012345678901234567890N 22/7 (float 1.25) 1.25M]
+   :text        ["Nippy \u2603" :nippy/keyword 'nippy/symbol \u03bb]
+   :collections {:vector [1 2 3]
+                 :list   '(:a :b :c)
+                 :set    #{:a :b :c}
+                 :map    {:nested {:x 1 :y 2}}}
+   :meta        (with-meta [:payload] {:source :v3.6.2})
+   :date        (java.util.Date. 1700000000000)
+   :uuid        (java.util.UUID. 123 456)
+   :uri         (java.net.URI. "https://example.com/nippy")})
+
+(defn- read-resource-bytes ^bytes [resource-name]
+  (with-open [in  (jio/input-stream (jio/resource resource-name))
+              out (java.io.ByteArrayOutputStream.)]
+    (jio/copy in  out)
+    (.toByteArray out)))
+
 (comment
   [(nippy/freeze-to-file (java.io.File. "test/data/v3.7.0-RC2.npy") test-data)
-   (nippy/thaw-from-file (java.io.File. "test/data/v3.7.0-RC2.npy"))
-   (nippy/thaw-from-file (java.io.File. "test/data/v3.7.0-RC1.npy"))
-   (nippy/thaw-from-file (java.io.File. "test/data/v3.7.0-beta1.npy"))
-   (nippy/thaw-from-file (java.io.File. "test/data/v3.6.2.npy"))])
+   (nippy/thaw-from-resource "data/v3.7.0-RC2.npy")
+   (nippy/thaw-from-resource "data/v3.7.0-RC1.npy")
+   (nippy/thaw-from-resource "data/v3.7.0-beta1.npy")
+   (nippy/thaw-from-resource "data/v3.6.2.npy")])
+
+(deftest _historical-fixtures
+  [(doseq [version ["v3.7.0-beta1" "v3.7.0-RC1" "v3.7.0-RC2"]]
+     (is (= test-data (nippy/thaw-from-resource (str "data/" version ".npy"))) version))
+
+   (let [legacy (nippy/thaw-from-resource "data/v3.6.2.npy")]
+     (is (=
+           (dissoc test-data :deftype :defrecord)
+           (dissoc legacy    :deftype :defrecord))
+       "v3.6.2 stable values"))
+
+   (let [legacy (nippy/thaw-from-resource "data/v3.6.2-compat.npy")]
+     [(is (= historical-v362-data legacy) "v3.6.2 focused values")
+      (is (=
+            (meta (:meta historical-v362-data))
+            (meta (:meta legacy)))
+        "v3.6.2 focused metadata")])])
 
 (def tc-gen-recursive-any-equatable
   (tc-gens/recursive-gen tc-gens/container-type
@@ -591,8 +630,7 @@
         "Special \"allow-and-record\" allowlist records classes")])
 
    (testing "Legacy unlength-prefixed payloads"
-     (let [path "test/data/legacy-serializable-v2.14.0.npy"
-           ba   (java.nio.file.Files/readAllBytes (.toPath (java.io.File. path)))
+     (let [ba (read-resource-bytes "data/legacy-serializable-v2.14.0.npy")
            expected {:class java.util.ArrayList
                      :items [1 2 3]
                      :tail  :legacy-sentinel}

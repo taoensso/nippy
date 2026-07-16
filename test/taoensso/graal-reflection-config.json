@@ -1,0 +1,16 @@
+[
+  {
+    "name": "taoensso.graal_tests.GraalType",
+    "fields": [
+      {"name": "x"},
+      {"name": "y"}
+    ],
+    "methods": [
+      {"name": "getBasis", "parameterTypes": []},
+      {
+        "name": "<init>",
+        "parameterTypes": ["java.lang.Object", "java.lang.Object"]
+      }
+    ]
+  }
+]

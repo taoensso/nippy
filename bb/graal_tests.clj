@@ -29,9 +29,10 @@
         bin-dir (str (fs/file graalvm-home "bin"))]
     (shell (executable bin-dir "native-image")
       "--features=clj_easy.graal_build_time.InitClojureClasses"
+      "-H:ReflectionConfigurationFiles=test/taoensso/graal-reflection-config.json"
       "--no-fallback" "-jar" "target/graal-tests.jar" "graal_tests")))
 
 (defn run-tests []
   (let [{:keys [out]} (shell {:out :string} (executable "." "graal_tests"))]
-    (assert (str/includes? out "loaded") out)
+    (assert (str/includes? out "freeze/thaw passed") out)
     (println "Native image works!")))
