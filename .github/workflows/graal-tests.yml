@@ -12,25 +12,30 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: graalvm/setup-graalvm@v1.5.2
+      - uses: actions/checkout@v6
+      - uses: graalvm/setup-graalvm@v1.5.5
         with:
           java-version: ${{ matrix.java }}
           distribution: graalvm-community
           components: native-image
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: DeLaGuardo/setup-clojure@12.5
+      - uses: DeLaGuardo/setup-clojure@13.6.0
         with:
-          lein: latest
+          lein: 2.12.0 # Pinned 2026-06-11: `latest` (2.13.0) currently breaks setup-clojure's Windows lein.ps1 shim
           bb: latest
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.m2/repository
           key: deps-${{ runner.os }}-${{ hashFiles('project.clj') }}
           restore-keys: |
             deps-${{ runner.os }}-
+
+      # Pre-initialize MSVC toolchain env
+      - name: Set up MSVC dev environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Run Graal tests
         run: bb graal-tests
