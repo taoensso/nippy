@@ -692,9 +692,15 @@
         (let [rf ((impl/xform* xf) rf1)] (rf (enc/reduce-n (fn [acc _] (rf acc (enc/map-entry (read-typed ibr) (read-typed ibr)))) init n)))
         (let [rf                   rf2 ] (rf (enc/reduce-n (fn [acc _] (rf acc                (read-typed ibr) (read-typed ibr)))  init n)))))))
 
+(def ^:private map-empty
+  ;; PAMs have their own id at target 370, so generic map ids must thaw as PHMs for stable refreezing.
+  (if (impl/target-release>= 370)
+    clojure.lang.PersistentHashMap/EMPTY
+    {}))
+
 (defn read-pam [^IByteReader ibr ^long n]
   (if taoensso.nippy/*thaw-xform*
-    (read-kvs-into {} ibr n)
+    (read-kvs-into map-empty ibr n)
     (let [kvs (object-array (* 2 n))]
       (enc/reduce-n
         (fn [_ idx]
@@ -946,10 +952,10 @@
 
         sc/id-map-0       {}
         sc/id-pam-sm*     (read-pam         ibr (read-sm-ucount ibr))
-        sc/id-map-sm*     (read-kvs-into {} ibr (read-sm-ucount ibr))
-        sc/id-map-sm_     (read-kvs-into {} ibr (read-sm-count  ibr))
-        sc/id-map-md      (read-kvs-into {} ibr (read-md-count  ibr))
-        sc/id-map-lg      (read-kvs-into {} ibr (read-lg-count  ibr))
+        sc/id-map-sm*     (read-kvs-into map-empty ibr (read-sm-ucount ibr))
+        sc/id-map-sm_     (read-kvs-into map-empty ibr (read-sm-count  ibr))
+        sc/id-map-md      (read-kvs-into map-empty ibr (read-md-count  ibr))
+        sc/id-map-lg      (read-kvs-into map-empty ibr (read-lg-count  ibr))
 
         sc/id-queue-lg      (read-into     clojure.lang.PersistentQueue/EMPTY ibr (read-lg-count ibr))
         sc/id-sorted-set-lg (read-into     (sorted-set)                       ibr (read-lg-count ibr))

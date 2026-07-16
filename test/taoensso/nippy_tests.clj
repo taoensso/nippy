@@ -186,6 +186,14 @@
           (is (not= (aget (nippy/fast-freeze (into clojure.lang.PersistentHashMap/EMPTY pam)) 0)
                 sc/id-pam-sm*))]))
 
+     (testing "PersistentHashMaps use stable generic encoding"
+       (let [phm    (into clojure.lang.PersistentHashMap/EMPTY (take 2 pam))
+             frozen (nippy/fast-freeze phm)
+             thawed (nippy/fast-thaw frozen)]
+         [(is (not= (aget frozen 0) sc/id-pam-sm*))
+          (when (impl/target-release>= 370) (is (instance? clojure.lang.PersistentHashMap thawed)))
+          (is (ba= frozen (nippy/fast-freeze thawed)))]))
+
      (testing "Duplicate keys use assoc semantics"
        (let [thawed (nippy/fast-thaw (freeze-raw-pam [[:a 1] [:b 2] [:a 3]]))]
          [(is (instance? clojure.lang.PersistentArrayMap thawed))
