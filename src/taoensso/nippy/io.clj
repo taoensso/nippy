@@ -1238,6 +1238,8 @@
                    ;; else
                    (do (.append sb (char b)) (recur))))))))))))
 
+(def ^:private ^:const max-cached-bb-capacity (* 1024 1024))
+
 (let [^ThreadLocal tl:bb    (enc/threadlocal (java.nio.ByteBuffer/allocate 512))
       ^ThreadLocal tl:depth (enc/threadlocal 0)]
 
@@ -1246,7 +1248,7 @@
   (defn with-bb
     "Executes `(f bb dout_)` and returns ?ba of bb when `f` returns truthy.
       `bb` ---- Auto-expanding `ByteBuffer`. Will reuse ThreadLocal when possible,
-                currently only freed via GC when thread dies.
+                retaining up to 1 MiB per thread for reuse.
       `dout_` - Call (dout_) to get a `DataOutput` view on `bb`."
     ([          f] (with-bb 512 f))
     ([init-size f]
@@ -1260,8 +1262,14 @@
            (zero? init-depth) ; Unnested call
            (let [^ByteBuffer bb (.get tl:bb)]
              (when-let [[ba final-bb] (with-bb bb cache_ init-cache f)]
-               (when-not (identical? bb final-bb)
-                 (.set            tl:bb final-bb)) ; May have grown
+               (let [^ByteBuffer cached-bb
+                     (cond
+                       (<= (.capacity ^ByteBuffer final-bb) max-cached-bb-capacity) final-bb
+                       (<= (.capacity                   bb) max-cached-bb-capacity)       bb
+                       :else (ByteBuffer/allocate 512))]
+
+                 (when-not (identical? bb cached-bb)
+                   (.set tl:bb cached-bb)))
                ba))
 
            :else ; Nested call

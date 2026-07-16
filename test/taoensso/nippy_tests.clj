@@ -291,6 +291,16 @@
               (doto    (java.nio.ByteBuffer/allocate 8)
                 (.order java.nio.ByteOrder/LITTLE_ENDIAN)))))])
 
+   (testing "Thread-local buffer retention"
+     (let [max-capacity @(ns-resolve 'taoensso.nippy.io 'max-cached-bb-capacity)
+           observed    (volatile! nil)]
+       (nippy/fast-freeze (byte-array (inc max-capacity)))
+       (io/with-bb 512
+         (fn [^java.nio.ByteBuffer bb _]
+           (vreset! observed (.capacity bb))
+           false))
+       (is (<= @observed max-capacity))))
+
    (testing "Streaming thaw"
      ;; We want to confirm that `thaw-from-in!` (which uses legacy `DataInput`)
      ;; thaws the same as `fast-thaw`. Comparing the thawed values can be tricky
