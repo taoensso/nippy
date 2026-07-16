@@ -221,6 +221,9 @@
 
 (deftype ByteBufferUTFType [s])
 
+(nippy/extend-freeze java.sql.Time :nippy-tests/sql-time [x out] (.writeLong out (.getTime x)))
+(nippy/extend-thaw                 :nippy-tests/sql-time [in] (java.sql.Time. (.readLong in)))
+
 (deftest _byte-buffer-low-level
   [(testing "DataInput/DataOutput adapters"
      (let [x  (with-meta {:k "v" :nums [1 2 3]} {:meta? true})
@@ -250,6 +253,16 @@
        (let [y (nippy/thaw-from-bb! bb)]
          (is (instance? java.sql.Date y))
          (is (= x y)))))
+
+   (testing "Custom extensions override inherited native writers"
+     (let [x      (java.sql.Time. 1700000000123)
+           raw-ba (nippy/fast-freeze x)]
+       [(is (= (int (aget raw-ba 0)) sc/id-prefixed-custom-md))
+        (is (instance? java.sql.Time (nippy/fast-thaw raw-ba)))
+        (is (= x (nippy/fast-thaw raw-ba)))
+        (is (instance? java.sql.Time (thaw (freeze x))))
+        (is (= x (thaw (freeze x))))
+        (is (= java.util.Date (class (thaw (freeze (java.util.Date. 1700000000123))))))]))
 
    (testing "UTF methods for custom extensions"
      (nippy/extend-freeze ByteBufferUTFType :nippy-tests/byte-buffer-utf [x out]

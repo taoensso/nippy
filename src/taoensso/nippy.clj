@@ -126,7 +126,10 @@
 
     3. [Advanced] Custom (fn [^java.io.DataOutput dout obj]) that must
         write an appropriate object type id and payload to the given
-       `DataOutput` stream."
+       `DataOutput` stream. The fn may be replayed from the beginning when
+        Nippy grows its internal buffer, so it must be deterministic and
+        replayable: avoid consuming one-shot mutable state or relying on
+        exactly-once side effects."
 
   nil)
 
@@ -646,6 +649,10 @@
 
   NB: be careful about extending to interfaces, Ref. <http://goo.gl/6gGRlU>.
 
+  The body may be replayed from the beginning when Nippy grows its internal
+  buffer. Custom writers must therefore be deterministic and replayable: avoid
+  consuming one-shot mutable state or relying on exactly-once side effects.
+
   (defrecord MyRec [data])
   (extend-freeze MyRec :foo/my-type [x ^DataOutput dout] ; Keyword id
     (.writeUTF [dout] (:data x)))
@@ -666,6 +673,7 @@
     `(extend-type ~type
        impl/INativeFreezable   (~'native-freezable? [~'_] true)
        impl/ICustomFreezable   (~'custom-freezable? [~'_] true)
+       io/IWriteTypedNoMeta    (~'write-typed       [~x ~'_ ~'dout_] (io/write-typed-din ~x (~'dout_)))
        io/IWriteTypedNoMetaDin (~'write-typed-din   [~x ~(with-meta dout {:tag 'java.io.DataOutput})] ~write-id-form ~@body))))
 
 (defmacro extend-thaw
