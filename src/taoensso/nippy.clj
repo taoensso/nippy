@@ -793,7 +793,20 @@
   [{:keys [comparable?] :as opts}]
   (let [rng      (java.util.Random. 123456) ; Seeded for determinism
         rand-nth (fn [coll] (nth coll (.nextInt rng (count coll))))
-        base
+
+        ;; Reproduce the historical Clojure 1.12 PersistentHashMap evaluation order
+        many-keywords
+        (vec
+          (repeatedly 512
+            #(keyword
+               (rand-nth ["foo" "bar" "baz" "qux" nil])
+               (rand-nth ["foo" "bar" "baz" "qux"    ]))))
+
+        many-strings  (vec (repeatedly 512         #(rand-nth ["foo" "bar" "baz" "qux"])))
+        many-longs    (vec (repeatedly 512         #(rand-nth (range 10))))
+        many-doubles  (vec (repeatedly 512 #(double (rand-nth (range 10)))))
+
+        base*
         {:nil                   nil
          :true                  true
          :false                 false
@@ -848,13 +861,13 @@
          :duration  (enc/compile-if java.time.Duration (java.time.Duration/ofSeconds 100 100)              ::skip)
          :period    (enc/compile-if java.time.Period   (java.time.Period/of 1 1 1)                         ::skip)
 
-         :many-longs    (vec (repeatedly 512         #(rand-nth (range 10))))
-         :many-doubles  (vec (repeatedly 512 #(double (rand-nth (range 10)))))
-         :many-strings  (vec (repeatedly 512         #(rand-nth ["foo" "bar" "baz" "qux"])))
-         :many-keywords (vec (repeatedly 512
-                               #(keyword
-                                  (rand-nth ["foo" "bar" "baz" "qux" nil])
-                                  (rand-nth ["foo" "bar" "baz" "qux"    ]))))}]
+         :many-longs    many-longs
+         :many-doubles  many-doubles
+         :many-strings  many-strings
+         :many-keywords many-keywords}
+
+        ;; Explicit type for stable test/bench output across Clojure versions, Ref. #191
+        base (into clojure.lang.PersistentHashMap/EMPTY base*)]
 
     (if comparable?
       base
