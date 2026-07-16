@@ -565,7 +565,53 @@
 
       (is
         (contains? (nippy/get-recorded-serializable-classes) semcn)
-        "Special \"allow-and-record\" allowlist records classes")])])
+        "Special \"allow-and-record\" allowlist records classes")])
+
+   (testing "Legacy unlength-prefixed payloads"
+     (let [path "test/data/legacy-serializable-v2.14.0.npy"
+           ba   (java.nio.file.Files/readAllBytes (.toPath (java.io.File. path)))
+           expected {:class java.util.ArrayList
+                     :items [1 2 3]
+                     :tail  :legacy-sentinel}
+           check-result
+           (fn [x]
+             (is (= expected
+                   {:class (class (first x))
+                    :items (vec   (first x))
+                    :tail  (second x)})))
+           check-bb
+           (fn [^java.nio.ByteBuffer bb]
+             (let [expected-position (.limit bb)]
+               (check-result (nippy/thaw-from-bb! bb))
+               (is (= expected-position (.position bb)))))]
+
+       (binding [nippy/*thaw-serializable-allowlist* #{"java.util.ArrayList"}]
+         (check-result (nippy/fast-thaw ba))
+         (check-result
+           (thaw
+             (sc/wrap-header ba {:compressor-id nil :encryptor-id nil})
+             {:serializable-allowlist #{"java.util.ArrayList"}}))
+
+         (let [bais (java.io.ByteArrayInputStream. ba)]
+           (check-result (nippy/thaw-from-in! (java.io.DataInputStream. bais)))
+           (is (zero? (.available bais))))
+
+         (check-bb (java.nio.ByteBuffer/wrap ba))
+         (check-bb (.asReadOnlyBuffer (java.nio.ByteBuffer/wrap ba)))
+
+         (let [bb
+               (doto (java.nio.ByteBuffer/allocate (+ (alength ba) 8))
+                 (.position 4)
+                 (.put ba)
+                 (.flip)
+                 (.position 4))]
+           (check-bb (.slice bb)))
+
+         (let [bb
+               (doto (java.nio.ByteBuffer/allocateDirect (alength ba))
+                 (.put ba)
+                 (.flip))]
+           (check-bb bb)))))])
 
 ;;;; Metadata
 

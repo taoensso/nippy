@@ -579,8 +579,39 @@
   (readFully     [_ ^bytes ba ^int off ^int len] (.get bb ba off len))
   (skipBytes     [_ ^int n] (bb-advance bb n))
   (toDataInput   [_] (bb->din bb))
-  (toInputStream [_] (java.io.ByteArrayInputStream. (.array bb) (.position bb) (.remaining bb)))
-  (toByteBuffer  [_] bb))
+  (toByteBuffer  [_]          bb)
+  (toInputStream [_]
+    (proxy [java.io.InputStream] []
+      (available [] (.remaining bb))
+      (skip [n]
+        (let [n (long (min (max (long n) 0) (.remaining bb)))]
+          (bb-advance bb n)
+          n))
+
+      (read
+        ([         ] (if (.hasRemaining bb) (bit-and 0xff (int (.get bb))) -1))
+        ([^bytes ba]
+         (let [len (alength ba)]
+           (cond
+             (zero? len)               0
+             (not (.hasRemaining bb)) -1
+             :else
+             (let [n (min len (.remaining bb))]
+               (.get bb ba 0 n)
+               n))))
+
+        ([^bytes ba off len]
+         (let [ba-len (alength ba)]
+           (cond
+             (or (neg? off) (neg? len) (> off ba-len) (> len (- ba-len off)))
+             (throw (IndexOutOfBoundsException.))
+
+             (zero? len)               0
+             (not (.hasRemaining bb)) -1
+             :else
+             (let [n (min len (.remaining bb))]
+               (.get bb ba off n)
+               n))))))))
 
 (deftype DataInputReader [^DataInput din]
   IByteReader
