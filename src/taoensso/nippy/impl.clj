@@ -26,6 +26,9 @@
 
   Used to help ease data migration for changes to core data types.
 
+  This setting is consumed while Nippy's writer implementations compile. Run a
+  clean build whenever changing it so stale compiled writers are not reused.
+
   When support is added for a new type in Nippy version X, it necessarily means
   that data containing that new type and frozen with Nippy version X is unthawable
   with Nippy versions < X.
