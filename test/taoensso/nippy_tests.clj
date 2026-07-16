@@ -48,14 +48,15 @@
     (.toByteArray out)))
 
 (comment
-  [(nippy/freeze-to-file (java.io.File. "test/data/v3.7.0-RC2.npy") test-data)
+  [(nippy/freeze-to-file (java.io.File. "test/data/v3.7.0-RC3.npy") test-data)
+   (nippy/thaw-from-resource "data/v3.7.0-RC3.npy")
    (nippy/thaw-from-resource "data/v3.7.0-RC2.npy")
    (nippy/thaw-from-resource "data/v3.7.0-RC1.npy")
    (nippy/thaw-from-resource "data/v3.7.0-beta1.npy")
    (nippy/thaw-from-resource "data/v3.6.2.npy")])
 
 (deftest _historical-fixtures
-  [(doseq [version ["v3.7.0-beta1" "v3.7.0-RC1" "v3.7.0-RC2"]]
+  [(doseq [version ["v3.7.0-beta1" "v3.7.0-RC1" "v3.7.0-RC2" "v3.7.0-RC3"]]
      (is (= test-data (nippy/thaw-from-resource (str "data/" version ".npy"))) version))
 
    (let [legacy (nippy/thaw-from-resource "data/v3.6.2.npy")]

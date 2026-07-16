@@ -126,7 +126,7 @@
    23  [:set-lg    [[:elements {:read 4}]]]
 
    19  [:map-0     []]
-   123 [:pam-sm*   [[:elements {:read 1 :multiplier 2 :unsigned? true}]]] ; Added v3.7.0 (TBD)
+   123 [:pam-sm*   [[:elements {:read 1 :multiplier 2 :unsigned? true}]]] ; Added v3.7.0 (2026-07-16)
    99  [:map-sm*   [[:elements {:read 1 :multiplier 2 :unsigned? true}]]]
    33  [:map-md    [[:elements {:read 2 :multiplier 2}]]]
    30  [:map-lg    [[:elements {:read 4 :multiplier 2}]]]
@@ -168,7 +168,7 @@
    107 [:string-array-lg [[:elements {:read 4}]]] ; Added v3.5.0 (2025-04-15)
    115 [:object-array-lg [[:elements {:read 4}]]]
 
-   118 [:int-array-lg    [[:elements {:read 4}]]] ; Added v3.7.0 (TBD)
+   118 [:int-array-lg    [[:elements {:read 4}]]] ; Added v3.7.0 (2026-07-16)
    119 [:long-array-lg   [[:elements {:read 4}]]]
    120 [:float-array-lg  [[:elements {:read 4}]]]
    121 [:double-array-lg [[:elements {:read 4}]]]
