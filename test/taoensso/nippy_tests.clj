@@ -51,6 +51,22 @@
 
 (comment (array= [1 2 3 ##NaN ##Inf] [1 2 3 ##NaN ##Inf])) ; true
 
+(defn force-pam [entries]
+  (clojure.lang.PersistentArrayMap/createAsIfByAssoc
+    (object-array (mapcat identity entries))))
+
+(defn freeze-raw-pam [entries]
+  (io/with-bb 512
+    (fn [^java.nio.ByteBuffer bb dout_]
+      (io/write-id        bb sc/id-pam-sm*)
+      (io/write-sm-ucount bb (count entries))
+      (run!
+        (fn [[k v]]
+          (io/write-typed+meta k bb dout_)
+          (io/write-typed+meta v bb dout_))
+        entries)
+      true)))
+
 ;;;; Core
 
 (deftest _core
@@ -128,6 +144,72 @@
          (get-in (nippy/stress-data {}) [:non-comparable :arrays]))))
 
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
+
+(deftest _persistent-array-map
+  (let [entries (mapv (fn [idx] [(keyword (str "k" idx)) idx]) (range 12))
+        pam     (force-pam entries)
+        raw-ba  (freeze-raw-pam entries)
+        raw-bb  (nippy/fast-thaw raw-ba)
+        raw-in
+        (nippy/thaw-from-in!
+          (java.io.DataInputStream.
+            (java.io.ByteArrayInputStream. raw-ba)))]
+
+    [(testing "Read support is unconditional"
+       [(is (= pam raw-bb raw-in))
+        (is (instance? clojure.lang.PersistentArrayMap raw-bb))
+        (is (instance? clojure.lang.PersistentArrayMap raw-in))
+        (is (= (seq pam) (seq raw-bb)))])
+
+     (testing "Write support follows target release"
+       (let [frozen (nippy/fast-freeze pam)
+             thawed (nippy/fast-thaw frozen)]
+         [(is (= pam thawed))
+          (is (= (impl/target-release>= 370) (= (aget frozen 0) sc/id-pam-sm*)))
+          (when  (impl/target-release>= 370)
+            [(is (instance? clojure.lang.PersistentArrayMap thawed))
+             (is (= (seq pam) (seq thawed)))
+             (is (ba= frozen (nippy/fast-freeze thawed)))])]))
+
+     (testing "Encoding boundaries"
+       (let [pam-255 (force-pam (mapv (fn [idx] [idx idx]) (range 255)))
+             pam-256 (force-pam (mapv (fn [idx] [idx idx]) (range 256)))
+             frozen-255 (nippy/fast-freeze pam-255)
+             frozen-256 (nippy/fast-freeze pam-256)
+             thawed-255 (nippy/fast-thaw frozen-255)]
+         [(is (= (aget  (nippy/fast-freeze clojure.lang.PersistentArrayMap/EMPTY) 0) sc/id-map-0))
+          (is (= (impl/target-release>= 370) (= (aget frozen-255 0) sc/id-pam-sm*)))
+          (is (= pam-255 thawed-255))
+          (when (impl/target-release>= 370) (is (instance? clojure.lang.PersistentArrayMap thawed-255)))
+          (is (not= (aget frozen-256 0) sc/id-pam-sm*))
+          (is (= pam-256  (nippy/fast-thaw frozen-256)))
+          (is (not= (aget (nippy/fast-freeze (into clojure.lang.PersistentHashMap/EMPTY pam)) 0)
+                sc/id-pam-sm*))]))
+
+     (testing "Duplicate keys use assoc semantics"
+       (let [thawed (nippy/fast-thaw (freeze-raw-pam [[:a 1] [:b 2] [:a 3]]))]
+         [(is (instance? clojure.lang.PersistentArrayMap thawed))
+          (is (= thawed {:a 3, :b 2}))
+          (is (= (vec thawed) [[:a 3] [:b 2]]))]))
+
+     (testing "Thaw transforms use generic map construction"
+       (let [thawed
+             (binding
+               [nippy/*thaw-xform*
+                (comp
+                  (remove (fn [x] (and (map-entry? x) (= (key x) :k1))))
+                  (map
+                    (fn [x]
+                      (if (and (map-entry? x) (= (key x) :k11))
+                        (enc/map-entry :k0 99)
+                        x))))]
+               (nippy/fast-thaw raw-ba))]
+
+         (is (= thawed
+               (->
+                 (into {} entries)
+                 (dissoc :k1 :k11)
+                 (assoc :k0 99))))))]))
 
 (deftype ByteBufferUTFType [s])
 
@@ -309,7 +391,7 @@
 (defn gen-hashes [] (enc/map-vals (fn [v] (ba-hash (freeze v))) test-data))
 (defn cmp-hashes [new old] (vec (sort (reduce-kv (fn [s k v] (if (= (get old k) v) s (conj s k))) #{} new))))
 
-(def ref-hashes {:deftype (if (impl/target-release>= 370) -917125089 -671450876), :lazy-seq-empty -574080456, :true -1809580601, :long 598276629, :double -454270428, :lazy-seq -856460618, :short 1152993378, :meta -858252893, :str-long -1970041891, :instant -1401948864, :many-keywords 665654816, :bigint 2033662230, :sym-ns 769802402, :queue 447747779, :float 603100813, :sorted-set 2005004017, :many-strings 1738215727, :nested -1350538572, :queue-empty 1760934486, :duration -775528642, :false 1506926383, :vector 813550992, :util-date 1326218051, :kw 389651898, :sym -1742024487, :str-short -921330463,  :subvec 709331681,   :kw-long 852232872, :integer 624865727, :sym-long -1535730190, :list -1207486853, :ratio 1186850097, :byte -1041979678, :bigdec -1846988137, :nil 2005042235, :defrecord 842721251, :sorted-map -1160380145, :sql-date 80018667, :map-entry 1219306839,  :false-boxed 1506926383, :uri 870148616,   :period -2043530540, :many-longs -1109794519, :uuid -338331115, :set 1649942133,  :kw-ns 1050084331, :map 1989337680, :many-doubles -827569787, :char 858269588})
+(def ref-hashes {:deftype (if (impl/target-release>= 370) -917125089 -671450876), :lazy-seq-empty -574080456, :true -1809580601, :long 598276629, :double -454270428, :lazy-seq -856460618, :short 1152993378, :meta (if (impl/target-release>= 370) 1563383484 -858252893), :str-long -1970041891, :instant -1401948864, :many-keywords 665654816, :bigint 2033662230, :sym-ns 769802402, :queue 447747779, :float 603100813, :sorted-set 2005004017, :many-strings 1738215727, :nested (if (impl/target-release>= 370) -895094768 -1350538572), :queue-empty 1760934486, :duration -775528642, :false 1506926383, :vector 813550992, :util-date 1326218051, :kw 389651898, :sym -1742024487, :str-short -921330463,  :subvec 709331681,   :kw-long 852232872, :integer 624865727, :sym-long -1535730190, :list -1207486853, :ratio 1186850097, :byte -1041979678, :bigdec -1846988137, :nil 2005042235, :defrecord (if (impl/target-release>= 370) -81673393 842721251), :sorted-map -1160380145, :sql-date 80018667, :map-entry 1219306839,  :false-boxed 1506926383, :uri 870148616,   :period -2043530540, :many-longs -1109794519, :uuid -338331115, :set 1649942133,  :kw-ns 1050084331, :map (if (impl/target-release>= 370) 271058720 1989337680), :many-doubles -827569787, :char 858269588})
 
 (comment (cmp-hashes (gen-hashes) ref-hashes)) ; []
 

@@ -126,6 +126,7 @@
    23  [:set-lg    [[:elements {:read 4}]]]
 
    19  [:map-0     []]
+   123 [:pam-sm*   [[:elements {:read 1 :multiplier 2 :unsigned? true}]]] ; Added v3.7.0 (TBD)
    99  [:map-sm*   [[:elements {:read 1 :multiplier 2 :unsigned? true}]]]
    33  [:map-md    [[:elements {:read 2 :multiplier 2}]]]
    30  [:map-lg    [[:elements {:read 4 :multiplier 2}]]]
