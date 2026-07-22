@@ -245,19 +245,6 @@
           nil
           m)))))
 
-(defn write-pam [^ByteBuffer bb dout_ m]
-  (let [cnt (count m)]
-    (if (and (pos? cnt) (impl/sm-ucount? cnt))
-      (do
-        (write-id        bb sc/id-pam-sm*)
-        (write-sm-ucount bb cnt)
-        (enc/run-kv!
-          (fn [k v]
-            (write-typed+meta k bb dout_)
-            (write-typed+meta v bb dout_))
-          m))
-      (write-map bb dout_ m false))))
-
 (defn write-set
   "Micro-optimized `write-counted-coll` w/ id-set-0 id-set-sm id-set-md id-set-lg."
   [^ByteBuffer bb dout_ s]
@@ -458,8 +445,6 @@
 (writer clojure.lang.PersistentTreeMap  nil (write-kvs            bb dout_ sc/id-sorted-map-lg x))
 (writer clojure.lang.APersistentVector  nil (write-vec            bb dout_                     x))
 (writer clojure.lang.APersistentSet     nil (write-set            bb dout_                     x))
-(when (impl/target-release>= 370)
-  (writer clojure.lang.PersistentArrayMap nil (write-pam          bb dout_                     x)))
 (writer clojure.lang.APersistentMap     nil (write-map            bb dout_                     x false))
 (writer clojure.lang.PersistentList     nil (write-counted-coll   bb dout_  sc/id-list-0   sc/id-list-sm   sc/id-list-md sc/id-list-lg x))
 (writer clojure.lang.LazySeq            nil (write-uncounted-coll bb dout_ #_sc/id-seq-0  #_sc/id-seq-sm  #_sc/id-seq-md  sc/id-seq-lg x))
@@ -723,24 +708,6 @@
         (let [rf ((impl/xform* xf) rf1)] (rf (enc/reduce-n (fn [acc _] (rf acc (enc/map-entry (read-typed ibr) (read-typed ibr)))) init n)))
         (let [rf                   rf2 ] (rf (enc/reduce-n (fn [acc _] (rf acc                (read-typed ibr) (read-typed ibr)))  init n)))))))
 
-(def ^:private map-empty
-  ;; PAMs have their own id at target 370, so generic map ids must thaw as PHMs for stable refreezing.
-  (if (impl/target-release>= 370)
-    clojure.lang.PersistentHashMap/EMPTY
-    {}))
-
-(defn read-pam [^IByteReader ibr ^long n]
-  (if taoensso.nippy/*thaw-xform*
-    (read-kvs-into map-empty ibr n)
-    (let [kvs (object-array (* 2 n))]
-      (enc/reduce-n
-        (fn [_ idx]
-          (let [offset (* 2 idx)]
-            (aset kvs      offset  (read-typed ibr))
-            (aset kvs (inc offset) (read-typed ibr))))
-        nil n)
-      (clojure.lang.PersistentArrayMap/createAsIfByAssoc kvs))))
-
 (defn read-kvs-depr [to ^IByteReader ibr] (read-kvs-into to ibr (quot (.readInt ibr) 2)))
 
 (enc/declare-remote ^:dynamic taoensso.nippy/*custom-readers*)
@@ -982,11 +949,11 @@
         sc/id-set-lg      (read-into    #{} ibr (read-lg-count  ibr))
 
         sc/id-map-0       {}
-        sc/id-pam-sm*     (read-pam         ibr (read-sm-ucount ibr))
-        sc/id-map-sm*     (read-kvs-into map-empty ibr (read-sm-ucount ibr))
-        sc/id-map-sm_     (read-kvs-into map-empty ibr (read-sm-count  ibr))
-        sc/id-map-md      (read-kvs-into map-empty ibr (read-md-count  ibr))
-        sc/id-map-lg      (read-kvs-into map-empty ibr (read-lg-count  ibr))
+        sc/id-map-sm*     (read-kvs-into {} ibr (read-sm-ucount ibr))
+        sc/id-map-sm_     (read-kvs-into {} ibr (read-sm-count  ibr))
+        sc/id-map-md      (read-kvs-into {} ibr (read-md-count  ibr))
+        sc/id-map-lg      (read-kvs-into {} ibr (read-lg-count  ibr))
+        sc/id-pam-sm*_    (read-kvs-into {} ibr (read-sm-ucount ibr))
 
         sc/id-queue-lg      (read-into     clojure.lang.PersistentQueue/EMPTY ibr (read-lg-count ibr))
         sc/id-sorted-set-lg (read-into     (sorted-set)                       ibr (read-lg-count ibr))
