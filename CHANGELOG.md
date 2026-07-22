@@ -2,6 +2,41 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.7.0` (2026-07-22)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.7.0)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+This promotes [v3.7.0-RC3](../../releases/tag/v3.7.0-RC3) to final with no changes.
+
+Nippy v3.7 is a **major performance upgrade** that includes a significant refactor of Nippy's internals to switch to a more efficient ByteBuffer implementation that's >20% faster in Nippy's standard benchmarks. Huge thanks to @huahaiy for his excellent work on this release! 🎉
+
+As always, please **test carefully** before updating against production data, and **report any unexpected problems** - thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## 👉 Migration info
+
+When doing a **rolling update** (>1 coexisting version) from Nippy <v3.6, please **FIRST** update to v3.6 **THEN** to v3.7. This allows read support for new types to fully roll out BEFORE new types may be written.
+
+## 👉 Change in byte output
+
+v3.7 includes a change in Nippy's byte output for **uncounted collections** (mostly lazy seqs). Almost no one should care about this, but mentioning for the tiny minority of users that depend on Nippy's byte output remaining stable.
+
+## Since v3.6.2 (2026-04-09)
+
+- [fix] [#190] Read legacy unlength-prefixed Java Serializable data through ByteBuffer thaw paths \[7bd95ea]
+- [fix] [#190] Restore `extend-freeze` precedence over inherited native writers \[ad6e211]
+- [fix] Bound retained thread-local freeze buffers to 1 MiB \[ee0ea59]
+- [fix] [#191] Support Clojure v1.13.0-alpha4 map changes \[d5132bc, 8e705a6]
+- [fix] Restore native (non-Serializable) writing of primitive numeric arrays \[800f95b]
+- [new] Initial read support for field-counted deftype serialization, including private/mutable fields (writes gated by target release 370) \[b5d803f]
+- [new] Faster uncounted coll freezing (new binary output) \[940b40a]
+- [new] Initial (read) support for much faster primitive num arrays \[57616cb]
+- [new] [#140] [#190] NB Switch to ByteBuffer implementation, including new `freeze-to-bb!` and `thaw-from-bb!` APIs (@huahaiy) \[2c1a487]
+
+---
+
 # `v3.7.0-RC3` (2026-07-16)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.7.0-RC3)
