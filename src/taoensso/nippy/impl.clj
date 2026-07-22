@@ -50,7 +50,7 @@
   When relevant, we can then warn users in the CHANGELOG to not leapfrog
   (e.g. Nippy vX -> Nippy vX+2) when doing rolling updates."
 
-  (enc/get-env {:as :edn, :default 360} :taoensso.nippy.target-release))
+  (enc/get-env {:as :edn, :default 370} :taoensso.nippy.target-release))
 
 (let [target>=
       (fn [min-release]

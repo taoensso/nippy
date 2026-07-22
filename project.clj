@@ -1,4 +1,4 @@
-(defproject com.taoensso/nippy "3.7.0"
+(defproject com.taoensso/nippy "3.8.0-RC1"
   :author "Peter Taoussanis <https://www.taoensso.com>"
   :description "Fast serialization library for Clojure"
   :url "https://www.taoensso.com/nippy"
@@ -9,7 +9,7 @@
 
   :dependencies
   [[org.clojure/tools.reader "1.6.0"]
-   [com.taoensso/encore      "3.161.0"]
+   [com.taoensso/encore      "3.169.1"]
    [org.tukaani/xz           "1.12"]
    [io.airlift/aircompressor "2.0.3"]]
 
@@ -42,7 +42,7 @@
      "-Dtaoensso.nippy.thaw-serializable-allowlist-add=add.1 , add.2"
      #_"-Dtaoensso.nippy.pack-unsigned=true"
      ;; Target release is consumed at compile time; run `lein clean` after changing.
-     #_"-Dtaoensso.nippy.target-release=370"]
+     #_"-Dtaoensso.nippy.target-release=360"]
 
     :global-vars
     {*warn-on-reflection* true
