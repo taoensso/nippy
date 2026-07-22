@@ -708,6 +708,32 @@
         (let [rf ((impl/xform* xf) rf1)] (rf (enc/reduce-n (fn [acc _] (rf acc (enc/map-entry (read-typed ibr) (read-typed ibr)))) init n)))
         (let [rf                   rf2 ] (rf (enc/reduce-n (fn [acc _] (rf acc                (read-typed ibr) (read-typed ibr)))  init n)))))))
 
+(defn- read-kvs-via-rt-map [^IByteReader ibr ^long n]
+  (let [kvs (object-array (* 2 n))]
+    (enc/reduce-n
+      (fn [_ idx]
+        (let [offset (* 2 idx)]
+          (aset kvs      offset  (read-typed ibr))
+          (aset kvs (inc offset) (read-typed ibr))))
+      nil n)
+
+    (try
+      (clojure.lang.RT/map kvs)
+      (catch IllegalArgumentException _ ; Duplicate thawed keys: preserve assoc semantics
+        (persistent!
+          (enc/reduce-n
+            (fn [m idx]
+              (let [offset (* 2 idx)]
+                (assoc! m (aget kvs offset) (aget kvs (inc offset)))))
+            (transient {}) n))))))
+
+(defn read-map [^IByteReader ibr ^long n]
+  ;; Bound buffering to Clojure v1.13's maximum possible PAM size. The existing
+  ;; paths remain faster for tiny maps and avoid temporary arrays for large maps.
+  (if (or taoensso.nippy/*thaw-xform* (<= n 10) (> n 64))
+    (read-kvs-into {}    ibr n)
+    (read-kvs-via-rt-map ibr n)))
+
 (defn read-kvs-depr [to ^IByteReader ibr] (read-kvs-into to ibr (quot (.readInt ibr) 2)))
 
 (enc/declare-remote ^:dynamic taoensso.nippy/*custom-readers*)
@@ -949,11 +975,11 @@
         sc/id-set-lg      (read-into    #{} ibr (read-lg-count  ibr))
 
         sc/id-map-0       {}
-        sc/id-map-sm*     (read-kvs-into {} ibr (read-sm-ucount ibr))
-        sc/id-map-sm_     (read-kvs-into {} ibr (read-sm-count  ibr))
-        sc/id-map-md      (read-kvs-into {} ibr (read-md-count  ibr))
-        sc/id-map-lg      (read-kvs-into {} ibr (read-lg-count  ibr))
-        sc/id-pam-sm*_    (read-kvs-into {} ibr (read-sm-ucount ibr))
+        sc/id-map-sm*     (read-map ibr (read-sm-ucount ibr))
+        sc/id-map-sm_     (read-map ibr (read-sm-count  ibr))
+        sc/id-map-md      (read-map ibr (read-md-count  ibr))
+        sc/id-map-lg      (read-map ibr (read-lg-count  ibr))
+        sc/id-pam-sm*_    (read-map ibr (read-sm-ucount ibr)) ; Retired encoding, see schema
 
         sc/id-queue-lg      (read-into     clojure.lang.PersistentQueue/EMPTY ibr (read-lg-count ibr))
         sc/id-sorted-set-lg (read-into     (sorted-set)                       ibr (read-lg-count ibr))

@@ -92,6 +92,18 @@
 
 (comment (array= [1 2 3 ##NaN ##Inf] [1 2 3 ##NaN ##Inf])) ; true
 
+(defn freeze-raw-map [entries]
+  (io/with-bb 512
+    (fn [^java.nio.ByteBuffer bb dout_]
+      (io/write-id        bb sc/id-map-sm*)
+      (io/write-sm-ucount bb (count entries))
+      (run!
+        (fn [[k v]]
+          (io/write-typed+meta k bb dout_)
+          (io/write-typed+meta v bb dout_))
+        entries)
+      true)))
+
 ;;;; Core
 
 (deftest _core
@@ -169,6 +181,34 @@
          (get-in (nippy/stress-data {}) [:non-comparable :arrays]))))
 
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
+
+(deftest _generic-map-thaw
+  (let [kvs-n  (fn [n] (mapv (fn [idx] [(keyword (str "rt" idx)) idx]) (range n)))
+        thaw-n (fn [n] (nippy/fast-thaw (freeze-raw-map (kvs-n n))))
+        rt-map (fn [n] (clojure.lang.RT/map (object-array (mapcat identity (kvs-n n)))))]
+
+    [(testing "Medium maps use bounded RT/map construction"
+       (let [thawed (thaw-n 12), expected (rt-map 12)]
+         [(is (= expected thawed))
+          (is (= (class expected) (class thawed)))]))
+
+     (testing "Construction bounds"
+       [(is (= (class (rt-map 11)) (class (thaw-n 11))))
+        (is (= (class (rt-map 64)) (class (thaw-n 64))))
+        (is (= (into {} (kvs-n 64)) (thaw-n 64)))
+        (is (instance? clojure.lang.PersistentHashMap (thaw-n 65)))
+        (is (= (into {} (kvs-n 65)) (thaw-n 65)))])
+
+     (testing "Duplicate thawed keys fall back to assoc semantics"
+       (let [entries (conj (kvs-n 12) [:rt0 99])]
+         (is (= (assoc (into {} (kvs-n 12)) :rt0 99)
+               (nippy/fast-thaw (freeze-raw-map entries))))))
+
+     (testing "Thaw transforms use generic construction"
+       (is (=
+             (dissoc (into {} (kvs-n 12)) :rt1)
+             (binding [nippy/*thaw-xform* (remove (fn [x] (and (map-entry? x) (= (key x) :rt1))))]
+               (thaw-n 12)))))]))
 
 (deftype ByteBufferUTFType [s])
 
