@@ -159,6 +159,18 @@
          (do                   {:password [:salted "pwd"]})))
      "CBC auto-encryptor compatibility")
 
+   (testing "Encrypted auto-compression"
+     (let [x        (String. (char-array 9000 \u2603))
+           password [:salted "p"]
+           frozen   (freeze x {:compressor :auto
+                               :encryptor nippy/aes128-gcm-encryptor
+                               :password password})
+           [_ head-meta] (sc/try-parse-header frozen)]
+       [(is (= {:compressor-id :lz4
+                :encryptor-id  :aes128-gcm-sha512}
+               (select-keys head-meta [:compressor-id :encryptor-id])))
+        (is (= x (thaw frozen {:password password})))]))
+
    (testing "Unsigned long types"
      (let [range-ushort+ (+ (long impl/range-ushort) 128)
            range-uint+   (+ (long impl/range-uint)   128)]
@@ -286,6 +298,20 @@
          (is (= :a           (nippy/thaw-from-bb! bb)))
          (is (= {:b [1 2 3]} (nippy/thaw-from-bb! bb)))
          (is (= written (.position bb))))))
+
+   (testing "Sliced heap buffers"
+     (let [x      "Nippy-\u00e9-\u2603-\ud83d\ude80"
+           ba     (nippy/fast-freeze x)
+           prefix 7
+           bb     (doto (java.nio.ByteBuffer/allocate (+ prefix (alength ba)))
+                    (.position prefix)
+                    (.put ba)
+                    (.flip)
+                    (.position prefix))
+           slice  (.slice bb)]
+       [(is (pos? (.arrayOffset slice)))
+        (is (= x (nippy/thaw-from-bb! slice)))
+        (is (= (alength ba) (.position slice)))]))
 
    (testing "Type fidelity for date variants"
      (let [x  (java.sql.Date. 1700000000000)
