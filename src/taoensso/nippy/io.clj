@@ -1325,7 +1325,8 @@
 
 (let [^ThreadLocal tl:bb    (enc/threadlocal (java.nio.ByteBuffer/allocate 512))
       ^ThreadLocal tl:depth (enc/threadlocal 0)
-      copy-bb (fn [^ByteBuffer bb] (java.util.Arrays/copyOf (.array bb) (.position bb)))]
+      copy-bb              (fn [^ByteBuffer bb] (java.util.Arrays/copyOf (.array bb) (.position bb)))
+      grow-sentinel        (Object.)]
 
   ;; @LATER: Consider using a simple pool here, with auto GC
 
@@ -1375,21 +1376,22 @@
 
          (finally (.set tl:depth init-depth)))))
 
+    ([bb state mark f] (with-bb bb state mark f copy-bb))
     ([bb state mark f finalize]
      (loop [^ByteBuffer bb bb]
        (.clear bb)                                    ; Reset buffer before (re)use
        (when state (impl/cache-restore! state mark))  ; Reset cache  before (re)use
        (let [dout_  (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (bb->dout bb)))))
-             result
+             write-result
              (try
-               (if (f bb dout_) true false)
-               (catch java.nio.BufferOverflowException _ ::grow))]
+               (f bb dout_)
+               (catch java.nio.BufferOverflowException _ grow-sentinel))]
 
-         (if (identical? result ::grow)
+         (if (identical? write-result grow-sentinel)
            (recur (grown-bb bb))
            ;; NB `finalize` runs outside the retry loop: it may write `bb`'s
            ;; bytes onward, and must never run for a write we'll discard
-           (if result
+           (if write-result
              [(finalize bb) bb]
              (do
                ;; Written bytes are being discarded, restore cache to match
