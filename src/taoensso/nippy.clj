@@ -618,7 +618,11 @@
 
 (defn thaw-from-in!
   "Low-level util. Deserializes a frozen object from given `DataInput` to
-  its original Clojure data type. In most cases you want `thaw` instead."
+  its original Clojure data type. In most cases you want `thaw` instead.
+
+  Note that a `DataInput` has no known remaining length, so malformed input
+  may trigger large allocations before failing. Prefer the buffered utils
+  (`thaw`, `fast-thaw`) for input you don't control."
   [^DataInput din] (io/read-typed (DataInputReader. din)))
 
 (defn thaw-from-string

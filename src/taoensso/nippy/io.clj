@@ -627,6 +627,36 @@
 (defmacro read-md-count  [ibr]    `(int (.readShort ~ibr)))
 (defmacro read-lg-count  [ibr]         `(.readInt   ~ibr))
 
+(defn- ensure-readable-length!
+  "Returns given length `n`, or throws `EOFException` if `n` items obviously
+  cannot be read from `ibr`. Used to reject malformed length prefixes BEFORE
+  they're used to size an allocation.
+
+  `bytes-per-item` is a lower bound on each item's SERIALIZED size (1 for
+  type-prefixed items, which always cost >= their type prefix).
+
+  Note that only buffered input has a known remaining length. Stream input
+  can be checked only for negative lengths, so a forged positive length may
+  still trigger a large allocation there before the underlying stream is
+  found to be short.
+
+  Bounding stream input too was considered and intentionally rejected: it'd
+  cost extra copying on large reads, and wouldn't make thaw resource-safe
+  against hostile input anyway since decompression allocates upstream of
+  this check. See commit message for details."
+  [^IByteReader ibr ^long n ^long bytes-per-item]
+  (when (neg? n)
+    (throw (java.io.EOFException. (str "Negative length: " n "."))))
+  (when (instance? ByteBufferReader ibr)
+    (let [required (* n bytes-per-item)
+          remaining (.remaining ^ByteBuffer (.toByteBuffer ibr))]
+      (when (> required remaining)
+        (throw
+          (java.io.EOFException.
+            (str "ByteBuffer underflow: need at least " required
+              " bytes, have " remaining "."))))))
+  n)
+
 (declare read-bytes)
 (defn    read-bytes-sm* [^IByteReader ibr] (read-bytes ibr (read-sm-ucount ibr)))
 (defn    read-bytes-sm  [^IByteReader ibr] (read-bytes ibr (read-sm-count  ibr)))
@@ -634,7 +664,7 @@
 (defn    read-bytes-lg  [^IByteReader ibr] (read-bytes ibr (read-lg-count  ibr)))
 (defn    read-bytes
   ([^IByteReader ibr len]
-   (let [len (int         len)
+   (let [len (int (ensure-readable-length! ibr len 1))
          ba  (byte-array  len)]
      (.readFully ibr ba 0 len)
      ba))
@@ -680,6 +710,7 @@
   [ibr array-type array-fn as-buffer bytes read-el]
   (let [array-sym (with-meta 'array-sym {:tag array-type})]
     `(let [alen#      (read-lg-count ~ibr)
+           _#         (ensure-readable-length! ~ibr alen# ~bytes)
            ~array-sym (~array-fn alen#)]
        (if (instance? ByteBufferReader ~ibr) ; Fast bulk read
          (let [^ByteBuffer bb# (.toByteBuffer ~ibr)]
@@ -940,12 +971,12 @@
         sc/id-byte-array-md   (read-bytes ibr (read-md-count ibr))
         sc/id-byte-array-lg   (read-bytes ibr (read-lg-count ibr))
 
-        sc/id-string-array-lg  (read-dyn-array ibr String "[Ljava.lang.String;" (make-array String (read-lg-count ibr)))
-        sc/id-object-array-lg  (read-dyn-array ibr Object "[Ljava.lang.Object;" (object-array      (read-lg-count ibr)))
-        sc/id-int-array-lg_    (read-dyn-array ibr int    "[I"                  (int-array         (read-lg-count ibr)))
-        sc/id-long-array-lg_   (read-dyn-array ibr long   "[J"                  (long-array        (read-lg-count ibr)))
-        sc/id-float-array-lg_  (read-dyn-array ibr float  "[F"                  (float-array       (read-lg-count ibr)))
-        sc/id-double-array-lg_ (read-dyn-array ibr double "[D"                  (double-array      (read-lg-count ibr)))
+        sc/id-string-array-lg  (read-dyn-array ibr String "[Ljava.lang.String;" (make-array String (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+        sc/id-object-array-lg  (read-dyn-array ibr Object "[Ljava.lang.Object;" (object-array      (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+        sc/id-int-array-lg_    (read-dyn-array ibr int    "[I"                  (int-array         (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+        sc/id-long-array-lg_   (read-dyn-array ibr long   "[J"                  (long-array        (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+        sc/id-float-array-lg_  (read-dyn-array ibr float  "[F"                  (float-array       (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+        sc/id-double-array-lg_ (read-dyn-array ibr double "[D"                  (double-array      (ensure-readable-length! ibr (read-lg-count ibr) 1)))
 
         sc/id-int-array-lg     (read-prim-array ibr "[I" int-array    .asIntBuffer    Integer/BYTES .readInt)
         sc/id-long-array-lg    (read-prim-array ibr "[J" long-array   .asLongBuffer      Long/BYTES .readLong)
