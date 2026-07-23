@@ -437,7 +437,13 @@
          (fn [^java.nio.ByteBuffer bb _]
            (vreset! observed (.capacity bb))
            false))
-       (is (<= @observed max-capacity))))
+       [(is (<= @observed max-capacity))
+
+        (let [first-bb_  (volatile! nil)
+              second-bb_ (volatile! nil)]
+          (io/with-bb 8192 (fn [bb _] (vreset! first-bb_  bb) false))
+          (io/with-bb 8192 (fn [bb _] (vreset! second-bb_ bb) false))
+          (is (identical? @first-bb_ @second-bb_)))]))
 
    (testing "Streaming thaw"
      ;; We want to confirm that `thaw-from-in!` (which uses legacy `DataInput`)

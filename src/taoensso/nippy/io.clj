@@ -18,9 +18,14 @@
 
 ;;;;
 
+(def ^:private ^ThreadLocal tl:required-capacity (enc/threadlocal 0))
+
 (defn- bb-advance   [^ByteBuffer bb ^long n] (.position bb (+ (.position bb) n)) bb)
 (defn- bb-readable! [^ByteBuffer bb ^long n] (when (> n (.remaining bb)) (throw (java.io.EOFException. (str "ByteBuffer underflow: need " n " bytes, have " (.remaining bb) ".")))))
-(defn- bb-writable! [^ByteBuffer bb ^long n] (when (> n (.remaining bb)) (throw (BufferOverflowException.))))
+(defn- bb-writable! [^ByteBuffer bb ^long n]
+  (when (> n (.remaining bb))
+    (.set tl:required-capacity (+ (.position bb) n))
+    (throw (BufferOverflowException.))))
 (defn  bb-big-endian!
   ^ByteBuffer [^ByteBuffer bb]
   (when-not (= (.order bb) java.nio.ByteOrder/BIG_ENDIAN)
@@ -32,12 +37,20 @@
 ;;;; Writing
 
 (defprotocol IWriteTypedNoMeta    (write-typed      [_ ^ByteBuffer bb dout_] "Writes given object as type-prefixed bytes. Excludes IObj meta."))
-(defprotocol IWriteTypedWithMeta  (write-typed+meta [_ ^ByteBuffer bb dout_] "Writes given object as type-prefixed bytes. Includes IObj meta when present."))
+(defprotocol IWriteTypedWithMeta  (write-typed-meta [_ ^ByteBuffer bb dout_] "Writes given IObj as type-prefixed bytes. Includes metadata."))
 (defprotocol IWriteTypedNoMetaDin (write-typed-din  [_ ^DataOutput    dout ] "Writes given object as type-prefixed bytes. Excludes IObj meta. Takes legacy `DataInput`, used for custom extensions."))
 (defprotocol ^:private IStreamKind
   (stream-kind [_]
     "Returns this native writer's ?streaming strategy. Registered in parallel
     with `IWriteTypedNoMeta` so both use identical protocol dispatch."))
+
+(enc/declare-remote ^:dynamic taoensso.nippy/*incl-metadata?*)
+
+(defmacro write-typed+meta [x bb dout_]
+  `(let [x# ~x]
+     (if (and (instance? clojure.lang.IObj x#) taoensso.nippy/*incl-metadata?*)
+       (write-typed-meta x# ~bb ~dout_)
+       (write-typed      x# ~bb ~dout_))))
 
 (defmacro write-id        [bb id] `(.put      ~bb (unchecked-byte  ~id)))
 (defmacro write-sm-ucount [bb  n] `(.put      ~bb (unchecked-byte (+ ~n Byte/MIN_VALUE)))) ; Unsigned
@@ -45,19 +58,19 @@
 (defmacro write-md-count  [bb  n] `(.putShort ~bb (unchecked-short   ~n)))
 (defmacro write-lg-count  [bb  n] `(.putInt   ~bb (int               ~n)))
 
-(defn write-bytes-sm* [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-sm-ucount bb len) (.put bb ba 0 len))) ; Unsigned
-(defn write-bytes-sm  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-sm-count  bb len) (.put bb ba 0 len)))
-(defn write-bytes-md  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-md-count  bb len) (.put bb ba 0 len)))
-(defn write-bytes-lg  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (write-lg-count  bb len) (.put bb ba 0 len)))
+(defn write-bytes-sm* [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (bb-writable! bb (+ 1 len)) (write-sm-ucount bb len) (.put bb ba 0 len))) ; Unsigned
+(defn write-bytes-sm  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (bb-writable! bb (+ 1 len)) (write-sm-count  bb len) (.put bb ba 0 len)))
+(defn write-bytes-md  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (bb-writable! bb (+ 2 len)) (write-md-count  bb len) (.put bb ba 0 len)))
+(defn write-bytes-lg  [^ByteBuffer bb ^bytes ba] (let [len (alength ba)] (bb-writable! bb (+ 4 len)) (write-lg-count  bb len) (.put bb ba 0 len)))
 (defn write-bytes     [^ByteBuffer bb ^bytes ba]
   (let [len (alength ba)]
     (if (zero? len)
-      (write-id bb sc/id-byte-array-0)
+      (do (bb-writable! bb 1) (write-id bb sc/id-byte-array-0))
       (do
         (enc/cond
-          (impl/sm-count? len) (do (write-id bb sc/id-byte-array-sm) (write-sm-count bb len))
-          (impl/md-count? len) (do (write-id bb sc/id-byte-array-md) (write-md-count bb len))
-          :else                (do (write-id bb sc/id-byte-array-lg) (write-lg-count bb len)))
+          (impl/sm-count? len) (do (bb-writable! bb (+ 2 len)) (write-id bb sc/id-byte-array-sm) (write-sm-count bb len))
+          (impl/md-count? len) (do (bb-writable! bb (+ 3 len)) (write-id bb sc/id-byte-array-md) (write-md-count bb len))
+          :else                (do (bb-writable! bb (+ 5 len)) (write-id bb sc/id-byte-array-lg) (write-lg-count bb len)))
 
         (.put bb ba 0 len)))))
 
@@ -77,33 +90,33 @@
 (defn write-str-lg  [^ByteBuffer bb ^String s] (write-bytes-lg  bb (.getBytes s StandardCharsets/UTF_8)))
 (defn write-str     [^ByteBuffer bb ^String s]
   (if (identical? s "")
-    (write-id bb sc/id-str-0)
+    (do (bb-writable! bb 1) (write-id bb sc/id-str-0))
     (let [ba  (.getBytes s StandardCharsets/UTF_8)
           len (alength ba)]
       (enc/cond
-        (when     impl/pack-unsigned? (impl/sm-ucount? len)) (do (write-id bb sc/id-str-sm*) (write-sm-ucount bb len))
-        (when-not impl/pack-unsigned? (impl/sm-count?  len)) (do (write-id bb sc/id-str-sm_) (write-sm-count  bb len))
-                                      (impl/md-count?  len)  (do (write-id bb sc/id-str-md)  (write-md-count  bb len))
-        :else                                                (do (write-id bb sc/id-str-lg)  (write-lg-count  bb len)))
+        (when     impl/pack-unsigned? (impl/sm-ucount? len)) (do (bb-writable! bb (+ 2 len)) (write-id bb sc/id-str-sm*) (write-sm-ucount bb len))
+        (when-not impl/pack-unsigned? (impl/sm-count?  len)) (do (bb-writable! bb (+ 2 len)) (write-id bb sc/id-str-sm_) (write-sm-count  bb len))
+                                      (impl/md-count?  len)  (do (bb-writable! bb (+ 3 len)) (write-id bb sc/id-str-md)  (write-md-count  bb len))
+        :else                                                (do (bb-writable! bb (+ 5 len)) (write-id bb sc/id-str-lg)  (write-lg-count  bb len)))
       (.put bb ba 0 len))))
 
-(defn write-kw [^ByteBuffer bb kw]
-  (let [s   (if-let [ns (namespace kw)] (str ns "/" (name kw)) (name kw))
+(defn write-kw [^ByteBuffer bb ^clojure.lang.Keyword kw]
+  (let [s   (.toString kw)
         ba  (.getBytes s StandardCharsets/UTF_8)
-        len (alength ba)]
+        len (dec (alength ba))]
     (enc/cond
-      (impl/sm-count? len) (do (write-id bb sc/id-kw-sm) (write-sm-count bb len))
-      (impl/md-count? len) (do (write-id bb sc/id-kw-md) (write-md-count bb len))
+      (impl/sm-count? len) (do (bb-writable! bb (+ 2 len)) (write-id bb sc/id-kw-sm) (write-sm-count bb len))
+      (impl/md-count? len) (do (bb-writable! bb (+ 3 len)) (write-id bb sc/id-kw-md) (write-md-count bb len))
       :else                (truss/ex-info! "Keyword too long" {:name s}))
-    (.put bb ba 0 len)))
+    (.put bb ba 1 len)))
 
-(defn write-sym [^ByteBuffer bb s]
-  (let [s   (if-let [ns (namespace s)] (str ns "/" (name s)) (name s))
+(defn write-sym [^ByteBuffer bb ^clojure.lang.Symbol sym]
+  (let [s   (.toString sym)
         ba  (.getBytes s StandardCharsets/UTF_8)
         len (alength ba)]
     (enc/cond
-      (impl/sm-count? len) (do (write-id bb sc/id-sym-sm) (write-sm-count bb len))
-      (impl/md-count? len) (do (write-id bb sc/id-sym-md) (write-md-count bb len))
+      (impl/sm-count? len) (do (bb-writable! bb (+ 2 len)) (write-id bb sc/id-sym-sm) (write-sm-count bb len))
+      (impl/md-count? len) (do (bb-writable! bb (+ 3 len)) (write-id bb sc/id-sym-md) (write-md-count bb len))
       :else                (truss/ex-info! "Symbol too long" {:name s}))
     (.put bb ba 0 len)))
 
@@ -398,18 +411,13 @@
 
 ;;;;
 
-(enc/declare-remote ^:dynamic taoensso.nippy/*incl-metadata?*)
-
 (extend-protocol IWriteTypedWithMeta
   clojure.lang.IObj ; IMeta => `meta` will work, IObj => `with-meta` will work
-  (write-typed+meta [x ^ByteBuffer bb dout_]
-    (when-let [m (when taoensso.nippy/*incl-metadata?* (not-empty (meta x)))]
+  (write-typed-meta [x ^ByteBuffer bb dout_]
+    (when-let [m (not-empty (meta x))]
       (write-id  bb sc/id-meta)
       (write-map bb dout_ m :is-metadata))
-    (write-typed x bb dout_))
-
-  nil    (write-typed+meta [x bb dout_] (write-typed x bb dout_))
-  Object (write-typed+meta [x bb dout_] (write-typed x bb dout_)))
+    (write-typed x bb dout_)))
 
 (defmacro ^:private writer
   "Convenience util / short-hand."
@@ -486,10 +494,10 @@
 (cond ; Numeric arrays
   (impl/target-release>= 370)
   (do
-    (writer "[I"    sc/id-int-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asIntBuffer    bb) x) (bb-advance bb (* alen Integer/BYTES))))
-    (writer "[J"   sc/id-long-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asLongBuffer   bb) x) (bb-advance bb (* alen    Long/BYTES))))
-    (writer "[F"  sc/id-float-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asFloatBuffer  bb) x) (bb-advance bb (* alen   Float/BYTES))))
-    (writer "[D" sc/id-double-array-lg (let [alen (alength x)] (.putInt bb alen) (.put (.asDoubleBuffer bb) x) (bb-advance bb (* alen  Double/BYTES)))))
+    (writer "[I"    sc/id-int-array-lg (let [alen (alength x)] (bb-writable! bb (+ Integer/BYTES (* alen Integer/BYTES))) (.putInt bb alen) (.put (.asIntBuffer    bb) x) (bb-advance bb (* alen Integer/BYTES))))
+    (writer "[J"   sc/id-long-array-lg (let [alen (alength x)] (bb-writable! bb (+ Integer/BYTES (* alen    Long/BYTES))) (.putInt bb alen) (.put (.asLongBuffer   bb) x) (bb-advance bb (* alen    Long/BYTES))))
+    (writer "[F"  sc/id-float-array-lg (let [alen (alength x)] (bb-writable! bb (+ Integer/BYTES (* alen   Float/BYTES))) (.putInt bb alen) (.put (.asFloatBuffer  bb) x) (bb-advance bb (* alen   Float/BYTES))))
+    (writer "[D" sc/id-double-array-lg (let [alen (alength x)] (bb-writable! bb (+ Integer/BYTES (* alen  Double/BYTES))) (.putInt bb alen) (.put (.asDoubleBuffer bb) x) (bb-advance bb (* alen  Double/BYTES)))))
 
   (impl/target-release>= 350)
   (do
@@ -1454,16 +1462,19 @@
   (- Integer/MAX_VALUE 8))
 
 (defn- grown-bb
-  "Returns a new `ByteBuffer` with double the capacity of the given one,
-  capped at `max-bb-capacity`. Throws a clear error when already at cap."
-  ^ByteBuffer [^ByteBuffer bb]
-  (let [capacity (long (.capacity bb))]
-    (when (>= capacity (long max-bb-capacity))
-      (truss/ex-info! "Serialized value too large to freeze"
-        {:max-size max-bb-capacity}))
+  "Returns a new `ByteBuffer` with at least `min-capacity` and double the
+  capacity of the given one, capped at `max-bb-capacity`. Throws a clear
+  error when already at cap."
+  (^ByteBuffer [bb] (grown-bb bb 0))
+  (^ByteBuffer [^ByteBuffer bb ^long min-capacity]
+   (let [capacity (long (.capacity bb))]
+     (when (>= capacity (long max-bb-capacity))
+       (truss/ex-info! "Serialized value too large to freeze"
+         {:max-size max-bb-capacity}))
 
-    (ByteBuffer/allocate
-      (int (min (long max-bb-capacity) (* 2 capacity))))))
+     (ByteBuffer/allocate
+       (int (min (long max-bb-capacity)
+              (max min-capacity (* 2 capacity))))))))
 
 (let [^ThreadLocal tl:bb    (enc/threadlocal (java.nio.ByteBuffer/allocate 512))
       ^ThreadLocal tl:depth (enc/threadlocal 0)
@@ -1493,20 +1504,24 @@
        (try
          (enc/cond
            (zero? init-depth) ; Unnested call
-           (let [^ByteBuffer bb (.get tl:bb)]
+           (let [^ByteBuffer tl-bb (.get tl:bb)
+                 ^ByteBuffer bb
+                 (if (>= (.capacity tl-bb) init-size)
+                   tl-bb
+                   (ByteBuffer/allocate init-size))]
              (when-let [[ba final-bb] (with-bb bb state mark f finalize)]
-               (let [^ByteBuffer cached-bb
+               (let [^ByteBuffer to-cache
                      (cond
                        (<= (.capacity ^ByteBuffer final-bb) max-cached-bb-capacity) final-bb
                        (<= (.capacity                   bb) max-cached-bb-capacity)       bb
-                       :else (ByteBuffer/allocate 512))]
+                       :else tl-bb)]
 
-                 (when-not (identical? bb cached-bb)
-                   (.set tl:bb cached-bb)))
+                 (when-not (identical? tl-bb to-cache)
+                   (.set tl:bb to-cache)))
                ba))
 
            :else ; Nested call
-           (let [private-bb (ByteBuffer/allocate (.capacity ^ByteBuffer (.get tl:bb)))] ; Isolate from parent bb
+           (let [private-bb (ByteBuffer/allocate (max init-size (.capacity ^ByteBuffer (.get tl:bb))))] ; Isolate from parent bb
              (when-let [[ba _bb] (with-bb private-bb state mark f finalize)]
                ba)))
 
@@ -1522,6 +1537,7 @@
     ([bb state mark f finalize]
      (loop [^ByteBuffer bb bb]
        (.clear bb)                                    ; Reset buffer before (re)use
+       (.set tl:required-capacity 0)
        (when state (impl/cache-restore! state mark))  ; Reset cache  before (re)use
        (let [dout_  (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (bb->dout bb)))))
              write-result
@@ -1530,7 +1546,7 @@
                (catch java.nio.BufferOverflowException _ grow-sentinel))]
 
          (if (identical? write-result grow-sentinel)
-           (recur (grown-bb bb))
+           (recur (grown-bb bb (long (.get tl:required-capacity))))
            ;; NB `finalize` runs outside the retry loop: it may write `bb`'s
            ;; bytes onward, and must never run for a write we'll discard
            (if write-result
