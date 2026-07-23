@@ -394,6 +394,33 @@
               (doto    (java.nio.ByteBuffer/allocate 8)
                 (.order java.nio.ByteOrder/LITTLE_ENDIAN)))))])
 
+   (testing "Malformed length prefixes"
+     (let [malformed
+           (fn [type-id n]
+             (.array
+               (doto (java.nio.ByteBuffer/allocate 5)
+                 (.put    (unchecked-byte type-id))
+                 (.putInt (int n)))))
+
+           cases
+           {"byte array"      sc/id-byte-array-lg
+            "object array"    sc/id-object-array-lg
+            "primitive array" sc/id-int-array-lg
+            "string"          sc/id-str-lg}]
+
+       (doseq [n [1024 -7], [label type-id] cases]
+         (let [e (truss/throws :default (nippy/fast-thaw (malformed type-id n)))]
+           (is (instance? java.io.EOFException (ex-cause e)) (str label ", length " n))))
+
+       ;; Streams have no known remaining length, so only negative lengths
+       ;; can be rejected before allocation
+       (doseq [[label type-id] cases]
+         (is (throws? java.io.EOFException
+               (nippy/thaw-from-in!
+                 (java.io.DataInputStream.
+                   (java.io.ByteArrayInputStream. (malformed type-id -7)))))
+           (str label ", stream, negative length")))))
+
    (testing "Thread-local buffer retention"
      (let [max-capacity @(ns-resolve 'taoensso.nippy.io 'max-cached-bb-capacity)
            observed    (volatile! nil)]
