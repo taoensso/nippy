@@ -546,7 +546,7 @@
                   e)))
 
              thaw-data
-             (fn [data-ba compressor-id encryptor-id ex-fn]
+             (fn [^bytes data-ba data-offset compressor-id encryptor-id ex-fn]
                (let [compressor (if (identical? compressor :auto) (compression/get-auto-compressor compressor-id) compressor)
                      encryptor  (if (identical? encryptor  :auto) (encryption/get-auto-encryptor   encryptor-id)  encryptor)]
 
@@ -554,39 +554,47 @@
                    (ex "Password required for decryption."))
 
                  (try
-                   (let [ba data-ba
-                         ba (if encryptor  (decrypt    encryptor password ba) ba)
-                         ba (if compressor (decompress compressor         ba) ba)]
-                     (impl/with-cache (thaw-from-bb* (ByteBuffer/wrap ba))))
+                   (if (and (nil? compressor) (nil? encryptor))
+                     (impl/with-cache
+                       (thaw-from-bb*
+                         (ByteBuffer/wrap data-ba (int data-offset)
+                           (- (alength data-ba) (int data-offset)))))
+
+                     (let [ba (if (zero? data-offset)
+                                data-ba
+                                (java.util.Arrays/copyOfRange data-ba (int data-offset) (alength data-ba)))
+                           ba (if encryptor  (decrypt    encryptor password ba) ba)
+                           ba (if compressor (decompress compressor         ba) ba)]
+                       (impl/with-cache (thaw-from-bb* (ByteBuffer/wrap ba)))))
                    (catch Exception e (ex-fn e)))))
 
              ;; Hacky + can actually segfault JVM due to Snappy bug,
              ;; Ref. <http://goo.gl/mh7Rpy> - no better alternatives, unfortunately
              thaw-v1-data
              (fn [data-ba ex-fn]
-               (thaw-data data-ba :snappy nil
-                 (fn [_] (thaw-data data-ba nil nil (fn [_] (ex-fn nil))))))]
+               (thaw-data data-ba 0 :snappy nil
+                 (fn [_] (thaw-data data-ba 0 nil nil (fn [_] (ex-fn nil))))))]
 
          (if no-header?
            (if v2+?
-             (thaw-data ba :no-header :no-header (fn [e]                          (ex e err-msg-unknown-thaw-failure)))
-             (thaw-data ba :no-header :no-header (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure))))))
+             (thaw-data ba 0 :no-header :no-header (fn [e]                          (ex e err-msg-unknown-thaw-failure)))
+             (thaw-data ba 0 :no-header :no-header (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure))))))
 
            ;; At this point we assume that we have a header iff we have v2+ data
-           (if-let [[data-ba {:keys [compressor-id encryptor-id unrecognized-meta?]
-                              :as   head-meta}] (sc/try-parse-header ba)]
+           (if-let [{:keys [compressor-id encryptor-id unrecognized-meta?]
+                     :as   head-meta} (sc/try-parse-header-meta ba)]
 
              ;; A well-formed header _appears_ to be present (it's possible though
              ;; unlikely that this is a fluke and data is actually headerless):
              (if v2+?
                (if unrecognized-meta?
                  (ex err-msg-unrecognized-header)
-                 (thaw-data data-ba compressor-id encryptor-id
+                 (thaw-data ba 4 compressor-id encryptor-id
                    (fn [e] (ex e err-msg-unknown-thaw-failure))))
 
                (if unrecognized-meta?
                  (thaw-v1-data ba                              (fn [_]                          (ex   err-msg-unrecognized-header)))
-                 (thaw-data data-ba compressor-id encryptor-id (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure)))))))
+                 (thaw-data ba 4 compressor-id encryptor-id (fn [e] (thaw-v1-data ba (fn [_] (ex e err-msg-unknown-thaw-failure)))))))
 
              ;; Well-formed header definitely not present
              (if v2+?
