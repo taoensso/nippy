@@ -693,14 +693,25 @@
 (defn read-str-md  [^IByteReader ibr] (String. ^bytes (read-bytes ibr (read-md-count  ibr)) StandardCharsets/UTF_8))
 (defn read-str-lg  [^IByteReader ibr] (String. ^bytes (read-bytes ibr (read-lg-count  ibr)) StandardCharsets/UTF_8))
 (defn read-str
-  ([^IByteReader ibr len] (String. ^bytes (read-bytes ibr len) StandardCharsets/UTF_8))
+  ([^IByteReader ibr len]
+   (let [len (int len)]
+     (if (instance? ByteBufferReader ibr)
+       (let [^ByteBuffer bb (.toByteBuffer ibr)]
+         (if (and (.hasArray bb) (<= 0 len (.remaining bb)))
+           (let [pos (.position bb)
+                 s   (String. ^bytes (.array bb) (+ (.arrayOffset bb) pos) len StandardCharsets/UTF_8)]
+             (bb-advance bb len)
+             s)
+           (String. ^bytes (read-bytes ibr len) StandardCharsets/UTF_8)))
+       (String. ^bytes (read-bytes ibr len) StandardCharsets/UTF_8))))
+
   ([^IByteReader ibr]
    (enc/case-eval (int (.readByte ibr))
      sc/id-str-0   ""
-     sc/id-str-sm* (String. ^bytes (read-bytes ibr (read-sm-ucount ibr)) StandardCharsets/UTF_8)
-     sc/id-str-sm_ (String. ^bytes (read-bytes ibr (read-sm-count  ibr)) StandardCharsets/UTF_8)
-     sc/id-str-md  (String. ^bytes (read-bytes ibr (read-md-count  ibr)) StandardCharsets/UTF_8)
-     sc/id-str-lg  (String. ^bytes (read-bytes ibr (read-lg-count  ibr)) StandardCharsets/UTF_8))))
+     sc/id-str-sm* (read-str ibr (read-sm-ucount ibr))
+     sc/id-str-sm_ (read-str ibr (read-sm-count  ibr))
+     sc/id-str-md  (read-str ibr (read-md-count  ibr))
+     sc/id-str-lg  (read-str ibr (read-lg-count  ibr)))))
 
 (defn read-biginteger [^IByteReader ibr] (BigInteger. ^bytes (read-bytes ibr (.readInt ibr))))
 
