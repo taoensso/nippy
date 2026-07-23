@@ -802,6 +802,16 @@
           rf         (if-let [xf taoensso.nippy/*thaw-xform*] ((impl/xform* xf) rf) rf)]
       (rf (enc/reduce-n (fn [acc _] (rf acc (read-typed ibr))) init n)))))
 
+(defn read-vec [^IByteReader ibr ^long n]
+  (if (or taoensso.nippy/*thaw-xform* (> n 32))
+    (read-into [] ibr n) ; Checks count
+    (let [items (object-array (ensure-non-negative-count! n))]
+      (loop [idx 0]
+        (when (< idx n)
+          (aset items idx (read-typed ibr))
+          (recur (unchecked-inc-int idx))))
+      (clojure.lang.LazilyPersistentVector/createOwning items))))
+
 (let [rf1! (fn rf1! ([x] (persistent! x)) ([acc kv ] (assoc! acc (key kv) (val kv))))
       rf2! (fn rf2! ([x] (persistent! x)) ([acc k v] (assoc! acc      k         v)))
       rf1* (fn rf1* ([x]              x)  ([acc kv ] (assoc  acc (key kv) (val kv))))
@@ -1071,12 +1081,12 @@
         sc/id-regex       (re-pattern            (read-typed    ibr))
 
         sc/id-vec-0       []
-        sc/id-vec-2       (read-into [] ibr 2)
-        sc/id-vec-3       (read-into [] ibr 3)
-        sc/id-vec-sm*     (read-into [] ibr (read-sm-ucount ibr))
-        sc/id-vec-sm_     (read-into [] ibr (read-sm-count  ibr))
-        sc/id-vec-md      (read-into [] ibr (read-md-count  ibr))
-        sc/id-vec-lg      (read-into [] ibr (read-lg-count  ibr))
+        sc/id-vec-2       (read-vec ibr 2)
+        sc/id-vec-3       (read-vec ibr 3)
+        sc/id-vec-sm*     (read-vec ibr (read-sm-ucount ibr))
+        sc/id-vec-sm_     (read-vec ibr (read-sm-count  ibr))
+        sc/id-vec-md      (read-vec ibr (read-md-count  ibr))
+        sc/id-vec-lg      (read-vec ibr (read-lg-count  ibr))
 
         sc/id-set-0       #{}
         sc/id-set-sm*     (read-into    #{} ibr (read-sm-ucount ibr))
