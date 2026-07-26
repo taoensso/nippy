@@ -346,6 +346,37 @@
                    (java.io.ByteArrayInputStream. (malformed type-id -7)))))
            (str label ", stream, negative length")))))
 
+   (testing "Malformed collection counts"
+     ;; These build incrementally so there's no allocation to guard, but a
+     ;; negative count must still error rather than yield an empty coll
+     (let [malformed
+           (fn [type-id n]
+             (.array
+               (doto (java.nio.ByteBuffer/allocate 5)
+                 (.put    (unchecked-byte type-id))
+                 (.putInt (int n)))))
+
+           cases
+           {"vector"     sc/id-vec-lg
+            "set"        sc/id-set-lg
+            "map"        sc/id-map-lg
+            "list"       sc/id-list-lg
+            "seq"        sc/id-seq-lg
+            "queue"      sc/id-queue-lg
+            "sorted set" sc/id-sorted-set-lg
+            "sorted map" sc/id-sorted-map-lg}]
+
+       (doseq [n [-1 -7 Integer/MIN_VALUE], [label type-id] cases]
+         [(let [e (truss/throws :default (nippy/fast-thaw (malformed type-id n)))]
+            (is (instance? java.io.EOFException (ex-cause e))
+              (str label ", buffered, count " n)))
+
+          (is (throws? java.io.EOFException
+                (nippy/thaw-from-in!
+                  (java.io.DataInputStream.
+                    (java.io.ByteArrayInputStream. (malformed type-id n)))))
+            (str label ", stream, count " n))])))
+
    (testing "Thread-local buffer retention"
      (let [max-capacity @(ns-resolve 'taoensso.nippy.io 'max-cached-bb-capacity)
            observed    (volatile! nil)]
