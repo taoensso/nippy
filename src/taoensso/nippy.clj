@@ -21,7 +21,7 @@
     DataOutputStream DataInputStream
     ByteArrayOutputStream ByteArrayInputStream]))
 
-(enc/assert-min-encore-version [3 169 1])
+(enc/assert-min-encore-version [3 171 0])
 
 (comment
   (set! *warn-on-reflection* true)
