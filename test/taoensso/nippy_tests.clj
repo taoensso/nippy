@@ -82,7 +82,8 @@
          (tc/quick-check ~num-tests
            (tc-props/for-all [~data-sym tc-gen-recursive-any-equatable]
              ~@body))]
-     (true? (:pass? tc-result#))))
+     (or (true? (:pass? tc-result#))
+       (do (println "gen-test failure:" (pr-str tc-result#)) false))))
 
 (comment
   (tc-gens/sample tc-gen-recursive-any-equatable 10)
