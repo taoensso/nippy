@@ -801,4 +801,5 @@
 ;;;; Benchmarks
 
 (deftest _benchmarks
-  (is (benchmarks/bench-serialization {:all? true})))
+  ;; Smoke test against bitrot, see `nippy-benchmarks` ns for real runs
+  (is (benchmarks/bench-serialization {:all? true, :laps 1, :warmup 0})))
