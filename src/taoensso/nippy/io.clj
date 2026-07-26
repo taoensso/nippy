@@ -1041,6 +1041,22 @@
 
 (enc/declare-remote ^:dynamic taoensso.nippy/*incl-metadata?*)
 
+;; NB Watch these fns' sizes as type ids are added. HotSpot won't JIT any
+;; method over 8000 bytecodes (`DontCompileHugeMethods`, on by default), which
+;; would silently drop ALL thawing to the interpreter.
+;;
+;; `read-typed` was approaching that limit, so its rare/legacy arms live in
+;; `read-typed-cold`. Add new common types to `read-typed`, and rare ones
+;; (deprecated ids, `Serializable`, `java.time`, etc.) to `read-typed-cold`.
+;; Each `case` arm costs ~39 bytecodes.
+;;
+;; To measure: AOT compile this ns (in a SUBPROCESS - compiling in-process
+;; redefines our deftypes and breaks `instance?` against the loaded ones),
+;; then `javap -c` the `read_typed` class and read `invokeStatic`'s last
+;; bytecode offset.
+
+(declare ^:private read-typed-cold)
+
 (defn read-typed
   "Reads one object as type-prefixed bytes from given `IByteReader`."
   [^IByteReader  ibr]
@@ -1053,24 +1069,6 @@
         sc/id-true              true
         sc/id-false             false
         sc/id-meta-protocol-key impl/meta-protocol-key
-
-        sc/id-reader-sm  (impl/read-edn   (read-str ibr (read-sm-count ibr)))
-        sc/id-reader-md  (impl/read-edn   (read-str ibr (read-md-count ibr)))
-        sc/id-reader-lg  (impl/read-edn   (read-str ibr (read-lg-count ibr)))
-        sc/id-reader-lg_ (impl/read-edn   (read-str ibr (read-lg-count ibr)))
-        sc/id-record-sm  (read-record ibr (read-str ibr (read-sm-count ibr)))
-        sc/id-record-md  (read-record ibr (read-str ibr (read-md-count ibr)))
-        sc/id-record-lg_ (read-record ibr (read-str ibr (read-lg-count ibr)))
-
-        sc/id-sz-sm  (read-sz ibr (read-str ibr (read-sm-count ibr)) false)
-        sc/id-sz-md  (read-sz ibr (read-str ibr (read-md-count ibr)) false)
-        sc/id-sz-sm_ (read-sz ibr (read-str ibr (read-sm-count ibr)) :legacy)
-        sc/id-sz-md_ (read-sz ibr (read-str ibr (read-md-count ibr)) :legacy)
-        sc/id-sz-lg_ (read-sz ibr (read-str ibr (read-lg-count ibr)) :legacy)
-
-        sc/id-deftype  (read-deftype ibr (read-typed ibr) false)
-        sc/id-deftype_ (read-deftype ibr (read-typed ibr) :legacy)
-        sc/id-char     (.readChar    ibr)
 
         sc/id-meta
         (let [m (read-typed ibr) ; Always consume from stream
@@ -1095,12 +1093,7 @@
         sc/id-byte-array-md   (read-bytes ibr (read-md-count ibr))
         sc/id-byte-array-lg   (read-bytes ibr (read-lg-count ibr))
 
-        sc/id-string-array-lg  (read-dyn-array ibr String "[Ljava.lang.String;" (make-array String (ensure-readable-length! ibr (read-lg-count ibr) 1)))
         sc/id-object-array-lg  (read-dyn-array ibr Object "[Ljava.lang.Object;" (object-array      (ensure-readable-length! ibr (read-lg-count ibr) 1)))
-        sc/id-int-array-lg_    (read-dyn-array ibr int    "[I"                  (int-array         (ensure-readable-length! ibr (read-lg-count ibr) 1)))
-        sc/id-long-array-lg_   (read-dyn-array ibr long   "[J"                  (long-array        (ensure-readable-length! ibr (read-lg-count ibr) 1)))
-        sc/id-float-array-lg_  (read-dyn-array ibr float  "[F"                  (float-array       (ensure-readable-length! ibr (read-lg-count ibr) 1)))
-        sc/id-double-array-lg_ (read-dyn-array ibr double "[D"                  (double-array      (ensure-readable-length! ibr (read-lg-count ibr) 1)))
 
         sc/id-int-array-lg     (read-prim-array ibr "[I" int-array    .asIntBuffer    Integer/BYTES .readInt)
         sc/id-long-array-lg    (read-prim-array ibr "[J" long-array   .asLongBuffer      Long/BYTES .readLong)
@@ -1115,14 +1108,9 @@
 
         sc/id-kw-sm       (read-kw ibr (read-sm-count ibr))
         sc/id-kw-md       (read-kw ibr (read-md-count ibr))
-        sc/id-kw-md_      (read-kw ibr (read-lg-count ibr))
-        sc/id-kw-lg_      (read-kw ibr (read-lg-count ibr))
 
         sc/id-sym-sm      (symbol  (read-str ibr (read-sm-count ibr)))
         sc/id-sym-md      (symbol  (read-str ibr (read-md-count ibr)))
-        sc/id-sym-md_     (symbol  (read-str ibr (read-lg-count ibr)))
-        sc/id-sym-lg_     (symbol  (read-str ibr (read-lg-count ibr)))
-        sc/id-regex       (re-pattern            (read-typed    ibr))
 
         sc/id-vec-0       []
         sc/id-vec-2       (read-vec ibr 2)
@@ -1143,11 +1131,6 @@
         sc/id-map-sm_     (read-map ibr (read-sm-count  ibr))
         sc/id-map-md      (read-map ibr (read-md-count  ibr))
         sc/id-map-lg      (read-map ibr (read-lg-count  ibr))
-        sc/id-pam-sm*_    (read-map ibr (read-sm-ucount ibr)) ; Retired encoding, see schema
-
-        sc/id-queue-lg      (read-into     clojure.lang.PersistentQueue/EMPTY ibr (read-lg-count ibr))
-        sc/id-sorted-set-lg (read-into     (sorted-set)                       ibr (read-lg-count ibr))
-        sc/id-sorted-map-lg (read-kvs-into (sorted-map)                       ibr (read-lg-count ibr))
 
         sc/id-list-0            ()
         sc/id-list-sm     (read-list ibr (read-sm-count ibr) true)
@@ -1159,9 +1142,6 @@
         sc/id-seq-md      (or (seq (read-into [] ibr (read-md-count ibr))) (lazy-seq nil))
         sc/id-seq-lg      (or (seq (read-into [] ibr (read-lg-count ibr))) (lazy-seq nil))
 
-        sc/id-byte              (.readByte  ibr)
-        sc/id-short             (.readShort ibr)
-        sc/id-integer           (.readInt   ibr)
         sc/id-long-0      0
         sc/id-long-sm_    (long (.readByte  ibr))
         sc/id-long-md_    (long (.readShort ibr))
@@ -1176,85 +1156,137 @@
         sc/id-long-neg-md (- (- (long (.readShort ibr))   Short/MIN_VALUE))
         sc/id-long-neg-lg (- (- (long (.readInt   ibr)) Integer/MIN_VALUE))
 
-        sc/id-bigint      (bigint (read-biginteger ibr))
-        sc/id-biginteger          (read-biginteger ibr)
-
-        sc/id-float       (.readFloat  ibr)
         sc/id-double-0    0.0
         sc/id-double      (.readDouble ibr)
-
-        sc/id-bigdec      (BigDecimal. ^BigInteger (read-biginteger ibr) (.readInt        ibr))
-        sc/id-ratio       (clojure.lang.Ratio.     (read-biginteger ibr) (read-biginteger ibr))
 
         sc/id-map-entry   (enc/map-entry (read-typed ibr) (read-typed ibr))
 
         sc/id-util-date   (java.util.Date. (.readLong ibr))
-        sc/id-sql-date    (java.sql.Date.  (.readLong ibr))
         sc/id-uuid        (java.util.UUID. (.readLong ibr) (.readLong ibr))
-        sc/id-uri         (java.net.URI.   (read-typed ibr))
 
-        sc/id-prefixed-custom-md (read-custom ibr :prefixed (.readShort ibr))
-
-        sc/id-time-instant
-        (let [secs  (.readLong ibr)
-              nanos (.readInt  ibr)]
-
-          (enc/compile-if java.time.Instant
-            (java.time.Instant/ofEpochSecond secs nanos)
-            {:nippy/unthawable
-             {:type  :class
-              :cause :class-not-found
-              :class-name "java.time.Instant"
-              :content    {:epoch-second secs :nano nanos}}}))
-
-        sc/id-time-duration
-        (let [secs  (.readLong ibr)
-              nanos (.readInt  ibr)]
-
-          (enc/compile-if java.time.Duration
-            (java.time.Duration/ofSeconds secs nanos)
-            {:nippy/unthawable
-             {:type       :class
-              :cause      :class-not-found
-              :class-name "java.time.Duration"
-              :content    {:seconds secs :nanos nanos}}}))
-
-        sc/id-time-period
-        (let [years  (.readInt ibr)
-              months (.readInt ibr)
-              days   (.readInt ibr)]
-
-          (enc/compile-if java.time.Period
-            (java.time.Period/of years months days)
-            {:nippy/unthawable
-             {:type       :class
-              :cause      :class-not-found
-              :class-name "java.time.Period"
-              :content    {:years years :months months :days days}}}))
-
-        ;; Deprecated ------------------------------------------------------
-        sc/id-boolean_    (not (zero? (int (.readByte ibr))))
-        sc/id-sorted-map_ (read-kvs-depr (sorted-map) ibr)
-        sc/id-map__       (read-kvs-depr {} ibr)
-        sc/id-reader_     (impl/read-edn (.readUTF ^DataInput (.toDataInput ibr)))
-        sc/id-str_                       (.readUTF ^DataInput (.toDataInput ibr))
-        sc/id-kw_               (keyword (.readUTF ^DataInput (.toDataInput ibr)))
-        sc/id-map_
-        (apply hash-map
-          (enc/repeatedly-into [] (* 2 (.readInt ibr))
-            (fn [] (read-typed ibr))))
-        ;; -----------------------------------------------------------------
-
-        ;; else
-        (if (neg? type-id)
-          (read-custom ibr false type-id) ; Unprefixed custom type
-          (truss/ex-info!
-            (str "Unrecognized type id (" type-id "). Data frozen with newer Nippy version?")
-            {:type-id type-id})))
+        ;; else: rare + legacy types, and the -ive id custom-type case
+        (read-typed-cold ibr type-id))
 
       (catch Throwable t
         (truss/ex-info! (str "Thaw failed against type-id: " type-id)
           {:type-id type-id} t)))))
+
+(defn- read-typed-cold
+  "Cold half of `read-typed`: rare and legacy types, split out to keep
+  `read-typed` itself well under HotSpot's 8000-bytecode JIT limit.
+
+  Called only from `read-typed`, which supplies the already-read `type-id`
+  and provides the enclosing try/catch."
+  [^IByteReader ibr ^long type-id]
+  (enc/case-eval (int type-id)
+
+    sc/id-reader-sm  (impl/read-edn   (read-str ibr (read-sm-count ibr)))
+    sc/id-reader-md  (impl/read-edn   (read-str ibr (read-md-count ibr)))
+    sc/id-reader-lg  (impl/read-edn   (read-str ibr (read-lg-count ibr)))
+    sc/id-reader-lg_ (impl/read-edn   (read-str ibr (read-lg-count ibr)))
+    sc/id-record-sm  (read-record ibr (read-str ibr (read-sm-count ibr)))
+    sc/id-record-md  (read-record ibr (read-str ibr (read-md-count ibr)))
+    sc/id-record-lg_ (read-record ibr (read-str ibr (read-lg-count ibr)))
+
+    sc/id-sz-sm  (read-sz ibr (read-str ibr (read-sm-count ibr)) false)
+    sc/id-sz-md  (read-sz ibr (read-str ibr (read-md-count ibr)) false)
+    sc/id-sz-sm_ (read-sz ibr (read-str ibr (read-sm-count ibr)) :legacy)
+    sc/id-sz-md_ (read-sz ibr (read-str ibr (read-md-count ibr)) :legacy)
+    sc/id-sz-lg_ (read-sz ibr (read-str ibr (read-lg-count ibr)) :legacy)
+
+    sc/id-deftype  (read-deftype ibr (read-typed ibr) false)
+    sc/id-deftype_ (read-deftype ibr (read-typed ibr) :legacy)
+    sc/id-char     (.readChar    ibr)
+
+    sc/id-string-array-lg  (read-dyn-array ibr String "[Ljava.lang.String;" (make-array String (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+    sc/id-int-array-lg_    (read-dyn-array ibr int    "[I"                  (int-array         (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+    sc/id-long-array-lg_   (read-dyn-array ibr long   "[J"                  (long-array        (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+    sc/id-float-array-lg_  (read-dyn-array ibr float  "[F"                  (float-array       (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+    sc/id-double-array-lg_ (read-dyn-array ibr double "[D"                  (double-array      (ensure-readable-length! ibr (read-lg-count ibr) 1)))
+
+    sc/id-kw-md_      (read-kw ibr (read-lg-count ibr))
+    sc/id-kw-lg_      (read-kw ibr (read-lg-count ibr))
+    sc/id-sym-md_     (symbol  (read-str ibr (read-lg-count ibr)))
+    sc/id-sym-lg_     (symbol  (read-str ibr (read-lg-count ibr)))
+    sc/id-regex       (re-pattern            (read-typed    ibr))
+
+    sc/id-pam-sm*_    (read-map ibr (read-sm-ucount ibr)) ; Retired encoding, see schema
+
+    sc/id-queue-lg      (read-into     clojure.lang.PersistentQueue/EMPTY ibr (read-lg-count ibr))
+    sc/id-sorted-set-lg (read-into     (sorted-set)                       ibr (read-lg-count ibr))
+    sc/id-sorted-map-lg (read-kvs-into (sorted-map)                       ibr (read-lg-count ibr))
+
+    sc/id-byte              (.readByte  ibr)
+    sc/id-short             (.readShort ibr)
+    sc/id-integer           (.readInt   ibr)
+    sc/id-float             (.readFloat ibr)
+
+    sc/id-bigint      (bigint (read-biginteger ibr))
+    sc/id-biginteger          (read-biginteger ibr)
+    sc/id-bigdec      (BigDecimal. ^BigInteger (read-biginteger ibr) (.readInt        ibr))
+    sc/id-ratio       (clojure.lang.Ratio.     (read-biginteger ibr) (read-biginteger ibr))
+
+    sc/id-sql-date    (java.sql.Date.  (.readLong ibr))
+    sc/id-uri         (java.net.URI.   (read-typed ibr))
+
+    sc/id-prefixed-custom-md (read-custom ibr :prefixed (.readShort ibr))
+
+    sc/id-time-instant
+    (let [secs  (.readLong ibr)
+          nanos (.readInt  ibr)]
+
+      (enc/compile-if java.time.Instant
+        (java.time.Instant/ofEpochSecond secs nanos)
+        {:nippy/unthawable
+         {:type  :class
+          :cause :class-not-found
+          :class-name "java.time.Instant"
+          :content    {:epoch-second secs :nano nanos}}}))
+
+    sc/id-time-duration
+    (let [secs  (.readLong ibr)
+          nanos (.readInt  ibr)]
+
+      (enc/compile-if java.time.Duration
+        (java.time.Duration/ofSeconds secs nanos)
+        {:nippy/unthawable
+         {:type       :class
+          :cause      :class-not-found
+          :class-name "java.time.Duration"
+          :content    {:seconds secs :nanos nanos}}}))
+
+    sc/id-time-period
+    (let [years  (.readInt ibr)
+          months (.readInt ibr)
+          days   (.readInt ibr)]
+
+      (enc/compile-if java.time.Period
+        (java.time.Period/of years months days)
+        {:nippy/unthawable
+         {:type       :class
+          :cause      :class-not-found
+          :class-name "java.time.Period"
+          :content    {:years years :months months :days days}}}))
+
+    ;; Deprecated ------------------------------------------------------
+    sc/id-boolean_    (not (zero? (int (.readByte ibr))))
+    sc/id-sorted-map_ (read-kvs-depr (sorted-map) ibr)
+    sc/id-map__       (read-kvs-depr {} ibr)
+    sc/id-reader_     (impl/read-edn (.readUTF ^DataInput (.toDataInput ibr)))
+    sc/id-str_                       (.readUTF ^DataInput (.toDataInput ibr))
+    sc/id-kw_               (keyword (.readUTF ^DataInput (.toDataInput ibr)))
+    sc/id-map_
+    (apply hash-map
+      (enc/repeatedly-into [] (* 2 (.readInt ibr))
+        (fn [] (read-typed ibr))))
+    ;; -----------------------------------------------------------------
+
+    ;; else
+    (if (neg? type-id)
+      (read-custom ibr false type-id) ; Unprefixed custom type
+      (truss/ex-info!
+        (str "Unrecognized type id (" type-id "). Data frozen with newer Nippy version?")
+        {:type-id type-id}))))
 
 ;;;; ByteBuffer -> DataOutput/Input adapters
 
