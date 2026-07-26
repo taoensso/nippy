@@ -319,15 +319,25 @@
   metadata will be efficiently encoded as references to this one.
 
   (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
-    will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
+    will incl. a single \"foo\", plus 2x single-byte references to \"foo\".
+
+  Note that keywords are automatically cached this way by default,
+  no wrapping needed. See `*auto-cache-keywords?*`."
   [x] (if (instance? Cached x) x (Cached. x)))
 
+(enc/declare-remote ^:dynamic taoensso.nippy/*auto-cache-keywords?*)
+
 (deftype CacheState
-  [^java.util.HashMap freeze-idxs ; {<k> <idx>} for freezing, k = [<val> <meta>]
-   ^java.util.HashMap thaw-vals]) ; {<idx> <val>} for thawing
+  [^java.util.HashMap   freeze-idxs ; {<k> <idx>} for freezing, k = <kw> | [<val> <meta>]
+   ^java.util.HashMap   thaw-vals   ; {<idx> <val>} for thawing
+   ^java.util.HashSet   seen-kws    ; #{<kw>} seen this session, Ref. `write-auto-cached-kw`
+   ^java.util.ArrayList seen-log    ; `seen-kws` in insertion order, for `cache-restore!`
+   auto-kws?]) ; Flag captured at session start for cheap hot-path access
 
 (defn new-cache-state ^CacheState []
-  (CacheState. (java.util.HashMap.) (java.util.HashMap.)))
+  (CacheState. (java.util.HashMap.) (java.util.HashMap.)
+    (java.util.HashSet.) (java.util.ArrayList.)
+    (if taoensso.nippy/*auto-cache-keywords?* true false)))
 
 (def ^ThreadLocal tl:cache
   "?CacheState for current freeze/thaw session."
@@ -344,9 +354,21 @@
   (`extend-thaw`) or freeze fallback calls back into `thaw`/`freeze`.
 
   NB a session's output forms a UNIT: later writes in a session may
-  contain cache references to earlier writes. So always use one session
-  per output sink, and have the reading side mirror the writing side's
-  session boundaries.
+  contain cache references to earlier writes (esp. with automatic keyword
+  caching, see `*auto-cache-keywords?*`). So always use one session per
+  output sink, and have the reading side EXACTLY mirror the writing side's
+  session boundaries: objects written in a shared session must be read in
+  a shared session, and objects written outside a shared session must NOT
+  be read inside one (the wire format cannot detect this case).
+
+  So to write and read n objects over one sink, wrap the WHOLE sequence
+  on BOTH sides:
+
+    (with-cache (run! (fn [x] (freeze-to-out! dout x)) xs))           ; Write
+    (with-cache (into [] (repeatedly n (fn [] (thaw-from-in! din))))) ; Read
+
+  Wrapping only one side, or one object per session on either side,
+  may throw or silently mis-thaw.
 
   Applies only to the low-level `freeze-to-out!`/`freeze-to-bb!` and
   `thaw-from-in!`/`thaw-from-bb!` utils: `freeze`, `thaw`, etc. always
@@ -368,24 +390,62 @@
            (.set    tl:cache prev#))))))
 
 (defn cache-mark
-  "Returns a checkpoint of given `CacheState`'s `freeze-idxs`,
-  for `cache-restore!`. O(1): exploits the invariant that entries are only
-  ever added, with idx = current size."
-  ^long [^CacheState state] (.size ^java.util.HashMap (.-freeze-idxs state)))
+  "Returns a checkpoint of given `CacheState`'s write state (`freeze-idxs`
+  + `seen-kws`), for `cache-restore!`. O(1): exploits the invariant that
+  entries are only ever added (with idx = current size), packing the two
+  sizes into a single long."
+  ^long [^CacheState state]
+  (bit-or
+    (bit-shift-left (long (.size ^java.util.HashMap   (.-freeze-idxs state))) 32)
+    (do             (long (.size ^java.util.ArrayList (.-seen-log    state))))))
 
 (defn cache-restore!
-  "Restores given `CacheState`'s `freeze-idxs` to given `cache-mark`
+  "Restores given `CacheState`'s write state to given `cache-mark`
   checkpoint, returns nil. Necessary before reattempting or abandoning a
-  write: entries added during a failed/aborted attempt would otherwise later
-  yield cache refs to values whose bytes were never retained."
+  write: `freeze-idxs` entries added during a failed/aborted attempt would
+  otherwise later yield cache refs to values whose bytes were never
+  retained, and stale `seen-kws` entries would make byte output of retried
+  writes differ from non-retried writes of equal data."
   [^CacheState state ^long mark]
-  (let [^java.util.HashMap m (.-freeze-idxs state)]
-    (when (> (.size m) mark)
-      (if (zero? mark)
+  (let [idx-mark (bit-shift-right mark 32)
+        log-mark (bit-and         mark 0xFFFFFFFF)
+        ^java.util.HashMap m (.-freeze-idxs state)]
+
+    (when (> (.size m) idx-mark)
+      (if (zero? idx-mark)
         (.clear m)
         (.removeIf (.values m)
           (reify java.util.function.Predicate
-            (test [_ idx] (>= (long idx) mark))))))
+            (test [_ idx] (>= (long idx) idx-mark))))))
+
+    (let [^java.util.ArrayList log (.-seen-log state)]
+      (when (> (.size log) log-mark)
+        (let [^java.util.HashSet seen (.-seen-kws state)
+              tail (.subList log (int log-mark) (.size log))]
+          (doseq [kw tail] (.remove seen kw))
+          (.clear tail)))) ; Truncates backing list
+    nil))
+
+;;
+
+(defn thaw-mark
+  "Returns a checkpoint of given `CacheState`'s `thaw-vals`,
+  for `thaw-restore!`. O(1)."
+  ^long [^CacheState state] (.size ^java.util.HashMap (.-thaw-vals state)))
+
+(defn thaw-restore!
+  "Restores given `CacheState`'s `thaw-vals` to given `thaw-mark`
+  checkpoint, returns nil. Necessary when abandoning a failed read in a
+  shared session: entries (incl. reserved pending slots) from the failed
+  read would otherwise silently corrupt or loudly poison later reads in
+  the same session."
+  [^CacheState state ^long mark]
+  (let [^java.util.HashMap m (.-thaw-vals state)]
+    ;; Keys are always the contiguous Longs [0, size)
+    (loop [i (dec (.size m))]
+      (when (>= i mark)
+        (.remove m i)
+        (recur (dec i))))
     nil))
 
 ;;;;

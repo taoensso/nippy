@@ -803,8 +803,9 @@
   ;; Cache lookups use Java `.equals` semantics which (unlike Clojure `=`)
   ;; distinguish top-level numeric types. (Cross-type values that hash and
   ;; compare equal in Java may still conflate, as before.)
-  (is (= [java.lang.Long clojure.lang.BigInt]
-        (mapv type (thaw (freeze [(nippy/cache 1) (nippy/cache 1N)]))))))
+  [(is (= [java.lang.Long clojure.lang.BigInt]
+         (mapv type (thaw (freeze [(nippy/cache 1) (nippy/cache 1N)])))))
+   (is (ba= (freeze (nippy/cache nil)) (freeze nil)) "`(cache nil)` freezes as plain nil")])
 
 (deftest _caching-session-bb-failure
   ;; `freeze-to-bb!` failure must restore both buffer position and cache
@@ -816,24 +817,53 @@
        (is (do (nippy/freeze-to-bb! bb :kw1) true) "Session still usable")
        (is (= :kw1 (nippy/thaw-from-bb! (.flip bb))))])))
 
-(deftest _caching-session-buffer-regrow
-  ;; Mid-session buffer regrowth (with-bb retry) must restore cache to
-  ;; session (not empty) state. Fresh thread => fresh (512 byte) buffer.
-  (let [msg1 [(nippy/cache "m1-shared") :other]
-        msg2 (into [(nippy/cache "m1-shared")] (range 2000))
-        baos (java.io.ByteArrayOutputStream.)
+(deftest _caching-session-mismatch
+  ;; Reading a shared session's later output without its earlier output
+  ;; should fail LOUDLY (cache refs can't resolve), not corrupt silently
+  (let [baos (java.io.ByteArrayOutputStream.)
         dout (java.io.DataOutputStream. baos)]
 
-    @(future
-       (nippy/with-cache
-         (nippy/freeze-to-out! dout msg1)
-         (nippy/freeze-to-out! dout msg2)))
+    (nippy/with-cache
+      (nippy/freeze-to-out! dout [:kw1 :kw1 :kw2 :kw2]) ; Repeats => cached
+      (.reset baos) ; Drop msg1 => msg2's refs can't resolve
+      (nippy/freeze-to-out! dout [:kw2 :kw1 :kw1]))
 
     (let [din (java.io.DataInputStream.
                 (java.io.ByteArrayInputStream. (.toByteArray baos)))]
-      (nippy/with-cache
-        [(is (= ["m1-shared" :other]           (nippy/thaw-from-in! din)))
-         (is (= (into ["m1-shared"] (range 2000)) (nippy/thaw-from-in! din)))]))))
+      (is (throws? :ex-info "Bad cache ref" (nippy/thaw-from-in! din))))))
+
+(deftest _caching-kw-coalescing
+  ;; `(cache <kw>)` and bare kws share cache entries (when auto-caching on)
+  (let [data [(nippy/cache :foo) :foo (nippy/cache :foo) :bar]]
+    [(is (= [:foo :foo :foo :bar] (thaw (freeze data))))
+     (is (= [:foo :foo :foo :bar]
+           (thaw (freeze data {:auto-cache-keywords? false})))
+       "Manual `(cache <kw>)` also works with auto-caching disabled")]))
+
+(deftest _caching-session-buffer-regrow
+  ;; Mid-session buffer regrowth (with-bb retry) must restore cache to
+  ;; session (not empty) state. Fresh thread => fresh (512 byte) buffer.
+  (let [msg1 [(nippy/cache "m1-shared") :kw-a :kw-a]
+        msg2 (into [(nippy/cache "m1-shared") :kw-a :kw-b :kw-b] (range 2000))
+        freeze-msgs
+        (fn []
+          (let [baos (java.io.ByteArrayOutputStream.)
+                dout (java.io.DataOutputStream. baos)]
+            (nippy/with-cache
+              (nippy/freeze-to-out! dout msg1)
+              (nippy/freeze-to-out! dout msg2))
+            (.toByteArray baos)))
+
+        ba-cold @(future (freeze-msgs)) ; Fresh thread => regrow retries
+        ba-warm         (freeze-msgs)]  ; Warm buffer  => no retries
+
+    [(is (ba= ba-cold ba-warm) "Buffer regrowth doesn't affect byte output")
+     (let [din (java.io.DataInputStream.
+                 (java.io.ByteArrayInputStream. ba-cold))]
+       (nippy/with-cache
+         [(is (= ["m1-shared" :kw-a :kw-a] (nippy/thaw-from-in! din)))
+          (is (= (into ["m1-shared" :kw-a :kw-b :kw-b] (range 2000))
+                (nippy/thaw-from-in! din)))]))]))
 
 (deftest _caching-metadata
   (let [v1 (with-meta [] {:id :v1})
@@ -855,6 +885,94 @@
      (is (= (mapv meta (thaw frozen-with-caching))
             [{:id :v1} {:id :v2} {:id :v1} {:id :v2}]))]))
 
+(deftest _caching-auto-kws
+  (let [row  {:user-id 0, :user-name "n", :account-type :premium}
+        data (vec (for [i (range 100)] (assoc row :user-id i)))
+        f-on   (freeze data {:compressor nil})
+        f-off  (freeze data {:compressor nil, :auto-cache-keywords? false})
+        f-off* (binding [nippy/*auto-cache-keywords?* false]
+                 (freeze data {:compressor nil}))]
+
+    [(is (= data (thaw f-on)))
+     (is (= data (thaw f-off)))
+     (is (= data (thaw (freeze data))) "Default (compressing) path")
+     (is (ba= f-off f-off*) "Freeze opt == dynamic binding")
+     (is (< (count f-on) (* 0.5 (count f-off)))
+       "Auto-cached kws significantly smaller for dup-heavy data")
+
+     (is (ba= (freeze [:a :b {:c "d"}])
+              (freeze [:a :b {:c "d"}] {:auto-cache-keywords? false}))
+       "Kws that don't repeat freeze byte-identically to uncached")]))
+
+(deftest _caching-auto-kws-full
+  ;; Crosses the cached-sm/md idx boundaries and the 32767 cache-full limit
+  (let [kws  (mapv #(keyword (str "kw" %)) (range 33000))
+        data (into kws kws)]
+    (is (= data (thaw (freeze data {:compressor nil}))))))
+
+(deftest _caching-auto-kws-policy
+  ;; Lock the cache-from-2nd-occurrence policy at the byte level
+  (let [sz (fn [x] (count (freeze x {:compressor nil})))
+        s1 (sz [:aa]), s2 (sz [:aa :aa]), s3 (sz [:aa :aa :aa]), s4 (sz [:aa :aa :aa :aa])]
+    [(is (= (- s2 s1) 5) "2nd occurrence: cache prefix (1) + full kw (4)")
+     (is (= (- s3 s2) 1) "3rd occurrence: 1-byte cache ref")
+     (is (= (- s4 s3) 1) "4th occurrence: 1-byte cache ref")]))
+
+(deftest _caching-auto-kws-sessions
+  (let [msgs->ba
+        (fn [msgs]
+          (let [baos (java.io.ByteArrayOutputStream.)
+                dout (java.io.DataOutputStream. baos)]
+            (nippy/with-cache
+              (doseq [m msgs]
+                (try (nippy/freeze-to-out! dout m) (catch Throwable _))))
+            (.toByteArray baos)))
+
+        ba->msgs
+        (fn [^bytes ba n]
+          (let [din (java.io.DataInputStream. (java.io.ByteArrayInputStream. ba))]
+            (nippy/with-cache (vec (repeatedly n #(nippy/thaw-from-in! din))))))]
+
+    [(is (= [[:aa :aa] [:aa]]   (ba->msgs (msgs->ba [[:aa :aa] [:aa]])   2))
+       "Promoted kws stay cached across a session's messages")
+
+     (is (= [[:bb] [:bb] [:bb]] (ba->msgs (msgs->ba [[:bb] [:bb] [:bb]]) 3))
+       "Once-per-message kws promote across a session's messages")
+
+     (is (ba= (msgs->ba [[:cc]]) (msgs->ba [[:cc (Object.)] [:cc]]))
+       "Failed writes roll back seen kws: byte output unaffected by failure history")]))
+
+(defrecord NestedFreezeWrapper [x])
+(nippy/extend-freeze NestedFreezeWrapper :test/nested-freeze-wrapper [w dout] (nippy/freeze-to-out! dout (:x w)))
+(nippy/extend-thaw :test/nested-freeze-wrapper [din] (->NestedFreezeWrapper (nippy/thaw-from-in! din)))
+
+(deftest _caching-auto-kws-nested
+  ;; Kws repeated across a nested (`freeze-to-out!`-based custom writer)
+  ;; boundary still promote
+  (let [data [:shared-kw (->NestedFreezeWrapper :inner) :shared-kw :shared-kw]]
+    [(is (= data (thaw (freeze data))))
+     (is (< (count (freeze data))
+            (count (freeze data {:auto-cache-keywords? false}))))]))
+
+(deftest _caching-session-thaw-failure
+  ;; A failed read mustn't corrupt/poison later reads in a shared session
+  (let [good (nippy/fast-freeze [:aa :aa])
+        bad  (java.util.Arrays/copyOfRange ^bytes good 0 (- (alength ^bytes good) 2))]
+    (nippy/with-cache
+      [(is (throws? (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap bad))))
+       (is (= [:aa :aa] (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap good)))
+         "Session still clean after failed read")])))
+
+(deftest _thaw-low-level-pairing
+  ;; `thaw-from-bb!`/`thaw-from-in!` must handle the cache refs present
+  ;; in standard frozen output, even without a user `with-cache`
+  (let [data {:a 1, :b {:a :dup}}
+        ba   (nippy/fast-freeze data)]
+    [(is (= data (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap ba))))
+     (is (= data (nippy/thaw-from-in!
+                   (java.io.DataInputStream.
+                     (java.io.ByteArrayInputStream. ba)))))]))
+
 ;;;; Serialized output
 
 (defn ba-hash [^bytes ba] (hash (seq ba)))
@@ -862,7 +980,7 @@
 (defn gen-hashes [] (enc/map-vals (fn [v] (ba-hash (freeze v))) test-data))
 (defn cmp-hashes [new old] (vec (sort (reduce-kv (fn [s k v] (if (= (get old k) v) s (conj s k))) #{} new))))
 
-(def ref-hashes {:deftype (if (impl/target-release>= 370) -917125089 -671450876), :lazy-seq-empty -574080456, :true -1809580601, :long 598276629, :double -454270428, :lazy-seq -856460618, :short 1152993378, :meta -858252893, :str-long -1970041891, :instant -1401948864, :many-keywords 665654816, :bigint 2033662230, :sym-ns 769802402, :queue 447747779, :float 603100813, :sorted-set 2005004017, :many-strings 1738215727, :nested -1350538572, :queue-empty 1760934486, :duration -775528642, :false 1506926383, :vector 813550992, :util-date 1326218051, :kw 389651898, :sym -1742024487, :str-short -921330463,  :subvec 709331681,   :kw-long 852232872, :integer 624865727, :sym-long -1535730190, :list -1207486853, :ratio 1186850097, :byte -1041979678, :bigdec -1846988137, :nil 2005042235, :defrecord 842721251, :sorted-map -1160380145, :sql-date 80018667, :map-entry 1219306839,  :false-boxed 1506926383, :uri 870148616,   :period -2043530540, :many-longs -1109794519, :uuid -338331115, :set 1649942133,  :kw-ns 1050084331, :map 1989337680, :many-doubles -827569787, :char 858269588})
+(def ref-hashes {:deftype (if (impl/target-release>= 370) -917125089 -671450876), :lazy-seq-empty -574080456, :true -1809580601, :long 598276629, :double -454270428, :lazy-seq -856460618, :short 1152993378, :meta -858252893, :str-long -1970041891, :instant -1401948864, :many-keywords 165443084, :bigint 2033662230, :sym-ns 769802402, :queue 447747779, :float 603100813, :sorted-set 2005004017, :many-strings 1738215727, :nested -50526117, :queue-empty 1760934486, :duration -775528642, :false 1506926383, :vector 813550992, :util-date 1326218051, :kw 389651898, :sym -1742024487, :str-short -921330463,  :subvec 709331681,   :kw-long 852232872, :integer 624865727, :sym-long -1535730190, :list -1207486853, :ratio 1186850097, :byte -1041979678, :bigdec -1846988137, :nil 2005042235, :defrecord 842721251, :sorted-map -1160380145, :sql-date 80018667, :map-entry 1219306839,  :false-boxed 1506926383, :uri 870148616,   :period -2043530540, :many-longs -1109794519, :uuid -338331115, :set 1649942133,  :kw-ns 1050084331, :map 1989337680, :many-doubles -827569787, :char 858269588})
 
 (comment (cmp-hashes (gen-hashes) ref-hashes)) ; []
 

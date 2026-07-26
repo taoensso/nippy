@@ -141,6 +141,33 @@
 
 (enc/defonce ^:dynamic *incl-metadata?* "Include metadata when freezing/thawing?" true)
 
+(enc/defonce ^:dynamic *auto-cache-keywords?*
+  "Should keywords be automatically cached when freezing? (Default: true.)
+
+  When enabled, keywords that REPEAT within a freeze are cached: a repeated
+  keyword is written in full (with a 1-3 byte cache prefix) on its second
+  occurrence, then as compact 1-3 byte cache references thereafter. Keywords
+  that don't repeat are written exactly as without caching. This can
+  significantly reduce output size and improve round-trip speed for typical
+  payloads (e.g. collections of maps sharing the same keys).
+
+  Tradeoff: freezing pays a small per-keyword cost (~tens of nanoseconds,
+  plus bounded repeat-tracking memory), wasted for payloads whose keywords
+  never repeat.
+
+  Uses the same wire format as the manual `cache` util (readable by all
+  Nippy versions >= v2.13, 2017). Applies to `freeze` and `fast-freeze`;
+  for the low-level `freeze-to-out!`/`freeze-to-bb!` utils, caching is
+  active only within a `with-cache` session. NB read once per cache
+  session, at session start.
+
+  Disable if you depend on Nippy's exact earlier byte output for keywords:
+    - Via this var (e.g. `binding` or `alter-var-root`),
+    - Via the `:auto-cache-keywords?` freeze opt,
+    - Via the `taoensso.nippy.auto-cache-keywords` JVM property or
+      `TAOENSSO_NIPPY_AUTO_CACHE_KEYWORDS` env var."
+  (enc/get-env {:as :bool, :default true} :taoensso.nippy.auto-cache-keywords))
+
 (enc/defonce ^:dynamic *thaw-xform*
   "Experimental, subject to change. Feedback welcome!
 
@@ -341,6 +368,7 @@
             (opt->bindings :auto-freeze-compressor #'*auto-freeze-compressor*)
             (opt->bindings :custom-readers         #'*custom-readers*)
             (opt->bindings :incl-metadata?         #'*incl-metadata?*)
+            (opt->bindings :auto-cache-keywords?   #'*auto-cache-keywords?*)
             (opt->bindings :thaw-xform             #'*thaw-xform*)
             (opt->bindings :serializable-allowlist
               (case action
@@ -489,14 +517,23 @@
   ~2 GiB: strings, byte arrays, uncounted (lazy) seqs, records, deftypes,
   custom (`extend-freeze`) types, and metadata maps.
 
-  NB writes are NOT atomic: on error `dout` may have received partial bytes.
-  A shared `with-cache` session's cache IS restored though, so a failed write
-  that emitted nothing leaves the session fully intact."
+  NB when using a shared `with-cache` session:
+    - Output may contain cache references to objects written earlier in the
+      session, so the reading side MUST mirror this side's session
+      boundaries. See `with-cache` for the session rules and an example.
+    - Writes are NOT atomic: on error `dout` may have received partial bytes.
+      The session's cache IS restored though, so a failed write that emitted
+      nothing leaves the session fully intact."
   [^DataOutput dout x] (io/write-typed+meta-to-out! dout x))
 
 (defn freeze-to-bb!
   "Low-level util. Serializes given arg (any Clojure data type) to given `ByteBuffer`.
   In most cases you want `freeze` instead.
+
+  NB when using a shared `with-cache` session, output may contain cache
+  references to objects written earlier in the session, so the reading side
+  MUST mirror this side's session boundaries. See `with-cache` for the
+  session rules and an example.
 
   On error, restores the buffer's position and (when using a shared
   `with-cache` session) the session's cache, so both are safe to reuse."
@@ -665,19 +702,52 @@
 (defn- thaw-from-bb* [^ByteBuffer bb] (io/read-typed (ByteBufferReader. bb)))
 (defn  thaw-from-bb!
   "Low-level util. Deserializes a frozen object from given `ByteBuffer` to
-  its original Clojure data type. In most cases you want `thaw` instead."
+  its original Clojure data type. In most cases you want `thaw` instead.
+
+  Uses the active `with-cache` session when present, otherwise establishes
+  its own (needed to read the cache refs present in most frozen output).
+  NB the reading side MUST mirror the writing side's session boundaries:
+  objects written in a shared `with-cache` session must be read in a shared
+  session, and objects written OUTSIDE a shared session must NOT be read
+  inside one (the wire format cannot detect this case)."
   [^ByteBuffer bb]
   (io/bb-big-endian! bb)
-  (thaw-from-bb*     bb))
+  (if-let [state (.get impl/tl:cache)]
+    (let [mark (impl/thaw-mark state)]
+      (try
+        (thaw-from-bb* bb)
+        (catch Throwable t
+          ;; Cache entries from the failed read would corrupt/poison
+          ;; later reads in this shared session
+          (impl/thaw-restore! state mark)
+          (throw t))))
+    (impl/with-cache (thaw-from-bb* bb))))
 
 (defn thaw-from-in!
   "Low-level util. Deserializes a frozen object from given `DataInput` to
   its original Clojure data type. In most cases you want `thaw` instead.
 
+  Uses the active `with-cache` session when present, otherwise establishes
+  its own (needed to read the cache refs present in most frozen output).
+  NB the reading side MUST mirror the writing side's session boundaries:
+  objects written in a shared `with-cache` session must be read in a shared
+  session, and objects written OUTSIDE a shared session must NOT be read
+  inside one (the wire format cannot detect this case).
+
   Note that a `DataInput` has no known remaining length, so malformed input
   may trigger large allocations before failing. Prefer the buffered utils
   (`thaw`, `fast-thaw`) for input you don't control."
-  [^DataInput din] (io/read-typed (DataInputReader. din)))
+  [^DataInput din]
+  (if-let [state (.get impl/tl:cache)]
+    (let [mark (impl/thaw-mark state)]
+      (try
+        (io/read-typed (DataInputReader. din))
+        (catch Throwable t
+          ;; Cache entries from the failed read would corrupt/poison
+          ;; later reads in this shared session
+          (impl/thaw-restore! state mark)
+          (throw t))))
+    (impl/with-cache (io/read-typed (DataInputReader. din)))))
 
 (defn thaw-from-string
   "Like `thaw`, but takes a Base64-encoded string.
