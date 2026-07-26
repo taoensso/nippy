@@ -1129,6 +1129,35 @@
           "Decompression never crashes JVM, even against invalid data")))
     (println)))
 
+;;;; Fuzzing
+
+(deftest _thaw-corrupted
+  ;; Thawing corrupted input must always return a value or throw a regular
+  ;; (catchable) Exception - never crash the JVM or throw an Error (e.g.
+  ;; OOM via hostile allocation lengths)
+  (println "\nTesting thaw of corrupted data...")
+  (let [ba  (nippy/fast-freeze test-data)
+        len (alength ba)
+        rng (java.util.Random. 123456) ; Seeded for determinism
+        thaw-error ; nil, or a Throwable that ISN'T a regular Exception
+        (fn [^bytes ba]
+          (try (nippy/fast-thaw ba) nil
+            (catch Exception _ nil)
+            (catch Throwable t t)))]
+
+    [(testing "Random bytes"
+       (dotimes [_ 1000]
+         (let [ba' (byte-array 1024)]
+           (.nextBytes rng ba')
+           (is (nil? (thaw-error ba'))))))
+
+     (testing "Truncated + corrupted stress data"
+       (dotimes [_ 5000]
+         (let [^bytes ba' (java.util.Arrays/copyOfRange ba 0 (inc (.nextInt rng len)))]
+           (dotimes [_ (inc (.nextInt rng 4))]
+             (aset ba' (.nextInt rng (alength ba')) (byte (- (.nextInt rng 256) 128))))
+           (is (nil? (thaw-error ba'))))))]))
+
 ;;;; Benchmarks
 
 (deftest _benchmarks
