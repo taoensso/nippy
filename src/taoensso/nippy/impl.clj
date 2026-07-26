@@ -332,12 +332,23 @@
   This is a low-level util: you won't need to use this yourself unless
   you're using `freeze-to-out!` or `thaw-from-in!` (also low-level utils).
 
+  Nestable: an inner call gets its own isolated cache, and RESTORES the
+  outer cache on exit. Nesting occurs in practice when a custom reader
+  (`extend-thaw`) or freeze fallback calls back into `thaw`/`freeze`.
+
   See also `cache`."
   [& body]
-  `(try
-     (.set tl:cache (volatile! nil))
-     (do ~@body)
-     (finally (.remove tl:cache))))
+  `(let [prev# (.get tl:cache)] ; ?volatile of enclosing `with-cache`
+     (try
+       (.set tl:cache (volatile! nil))
+       (do ~@body)
+       (finally
+         ;; Restore (NOT just remove) so that an enclosing `with-cache`
+         ;; retains its cache. Removing here would cause the OUTER thaw to
+         ;; throw "Can't thaw without cache available" on its next cached ref.
+         (if (nil? prev#)
+           (.remove tl:cache)
+           (.set    tl:cache prev#))))))
 
 ;;;;
 
