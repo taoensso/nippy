@@ -723,6 +723,46 @@
 
 (defn read-biginteger [^IByteReader ibr] (BigInteger. ^bytes (read-bytes ibr (.readInt ibr))))
 
+;;;; Keyword reading
+
+(def ^:private ^:const kw-slash (int \/)) ; 0x2F
+
+(defn- kw-from-bytes
+  "Returns `Keyword` decoded from `len` UTF-8 bytes at `off`.
+
+  Splits ns/name on the raw bytes so that only the 2 final strings are
+  allocated, vs 3 when going via `(keyword <whole-string>)` (which has
+  `Symbol/intern` re-split an already-materialized string).
+
+  Scanning raw bytes for \"/\" is safe: 0x2F cannot occur as a UTF-8
+  continuation byte (those are always 0x80-0xBF)."
+  ^clojure.lang.Keyword [^bytes arr ^long off ^long len]
+  (let [end   (+ off len)
+        slash (loop [idx off]
+                (enc/cond
+                  (>= idx end)                       -1
+                  (== (int (aget arr idx)) kw-slash) idx
+                  :else (recur (unchecked-inc idx))))]
+
+    (if (or (== slash -1) (== len 1)) ; len 1 => the `:/` keyword
+      (clojure.lang.Keyword/intern (String. arr (int off) (int len) StandardCharsets/UTF_8))
+      (clojure.lang.Keyword/intern
+        (String. arr (int  off)               (int (- slash off))         StandardCharsets/UTF_8)
+        (String. arr (int (unchecked-inc slash)) (int (- end slash 1)) StandardCharsets/UTF_8)))))
+
+(defn read-kw
+  "Reads a keyword of `len` UTF-8 bytes."
+  [^IByteReader ibr ^long len]
+  (if-not (instance? ByteBufferReader ibr)
+    (keyword (read-str ibr len)) ; Stream input
+    (let [^ByteBuffer bb (.toByteBuffer ibr)]
+      (if-not (and (.hasArray bb) (<= 0 len (.remaining bb)))
+        (keyword (read-str ibr len))
+        (let [^bytes arr (.array bb)
+              off (+ (.arrayOffset bb) (.position bb))]
+          (bb-advance    bb len)
+          (kw-from-bytes arr off len))))))
+
 (defmacro ^:private read-dyn-array
   "Reads an array of individually type-prefixed elements."
   [ibr thaw-type array-type array]
@@ -1073,10 +1113,10 @@
         sc/id-str-md               (read-str ibr (read-md-count  ibr))
         sc/id-str-lg               (read-str ibr (read-lg-count  ibr))
 
-        sc/id-kw-sm       (keyword (read-str ibr (read-sm-count ibr)))
-        sc/id-kw-md       (keyword (read-str ibr (read-md-count ibr)))
-        sc/id-kw-md_      (keyword (read-str ibr (read-lg-count ibr)))
-        sc/id-kw-lg_      (keyword (read-str ibr (read-lg-count ibr)))
+        sc/id-kw-sm       (read-kw ibr (read-sm-count ibr))
+        sc/id-kw-md       (read-kw ibr (read-md-count ibr))
+        sc/id-kw-md_      (read-kw ibr (read-lg-count ibr))
+        sc/id-kw-lg_      (read-kw ibr (read-lg-count ibr))
 
         sc/id-sym-sm      (symbol  (read-str ibr (read-sm-count ibr)))
         sc/id-sym-md      (symbol  (read-str ibr (read-md-count ibr)))
