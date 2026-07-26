@@ -364,7 +364,9 @@
      [(is
         (throws? Exception ; No thaw extension yet
           (do
-            (alter-var-root #'nippy/*custom-readers* (constantly {}))
+            ;; NB dissoc only the id under test, other tests rely on
+            ;; readers registered at ns load
+            (alter-var-root #'nippy/*custom-readers* (fn [m] (dissoc m (impl/coerce-custom-type-id 1))))
             (nippy/extend-freeze MyType 1 [x s]
               (.writeUTF s (.basic_field  x))
               (.writeUTF s (.fancy-field! x)))
