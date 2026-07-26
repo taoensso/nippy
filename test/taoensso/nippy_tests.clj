@@ -197,10 +197,10 @@
      (let [range-ushort+ (+ (long impl/range-ushort) 128)
            range-uint+   (+ (long impl/range-uint)   128)]
 
-       [(let [r (range (long -2.5e6) (long 2.5e6))]      (= (thaw (freeze r)) r))
-        (let [r (range (- range-ushort+) range-ushort+)] (= (thaw (freeze r)) r))
-        (let [n    range-uint+]                          (= (thaw (freeze n)) n))
-        (let [n (- range-uint+)]                         (= (thaw (freeze n)) n))]))
+       [(let [r (range (long -2.5e6) (long 2.5e6))]      (is (= (thaw (freeze r)) r)))
+        (let [r (range (- range-ushort+) range-ushort+)] (is (= (thaw (freeze r)) r)))
+        (let [n    range-uint+]                          (is (= (thaw (freeze n)) n)))
+        (let [n (- range-uint+)]                         (is (= (thaw (freeze n)) n)))]))
 
    (is (throws? :ex-info "Failed to freeze type" (nippy/freeze (fn []))))
 
@@ -882,11 +882,12 @@
 
     (testing "f(x)=f(y) => x=y"
       (let [vals_ (atom {})]
-        (gen-test 400 [gen-data]
-          (let [out (freeze     gen-data)
-                ref (get @vals_ gen-data ::nx)]
-            (swap! vals_ assoc out gen-data)
-            (or (= ref ::nx) (= ref out))))))))
+        (is (gen-test 400 [gen-data]
+              (let [out (vec (freeze gen-data)) ; `vec` for by-value lookup
+                    ref (get @vals_ out ::nx)]
+                (swap! vals_ assoc out gen-data)
+                (or (= ref ::nx) (= ref gen-data))))
+          "Generative")))))
 
 ;;;; Thread safety
 
