@@ -676,6 +676,34 @@
                 (java.io.ByteArrayInputStream. (.toByteArray baos)))]
       (is (= [:kw1 "v"] (nippy/with-cache (nippy/thaw-from-in! din)))))))
 
+(defrecord NestedThawWrapper [payload-ba])
+
+(nippy/extend-freeze NestedThawWrapper :test/nested-thaw-wrapper [x dout]
+  (let [^bytes ba (:payload-ba x)]
+    (.writeInt dout (alength ba))
+    (.write    dout ba 0 (alength ba))))
+
+(nippy/extend-thaw :test/nested-thaw-wrapper [din]
+  (let [len (.readInt din)
+        ba  (byte-array len)]
+    (.readFully din ba 0 len)
+    (thaw ba))) ; Nested `thaw` => nested `with-cache`
+
+(deftest _caching-nested
+  ;; An inner `with-cache` must RESTORE (not remove) the outer cache, else the
+  ;; outer thaw throws "Can't thaw without cache available" on its next ref
+  (let [frozen
+        (freeze
+          [(nippy/cache "shared")
+           (NestedThawWrapper. (freeze {:inner "payload"}))
+           (nippy/cache "shared")])
+
+        thawed (thaw frozen)]
+
+    [(is (= (nth thawed 0) "shared"))
+     (is (= (nth thawed 2) "shared")     "Outer cache survives a nested thaw")
+     (is (= (nth thawed 1) {:inner "payload"}) "Nested thaw returns its own data")]))
+
 (deftest _caching-metadata
   (let [v1 (with-meta [] {:id :v1})
         v2 (with-meta [] {:id :v2})
