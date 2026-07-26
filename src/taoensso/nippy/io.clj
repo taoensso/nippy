@@ -672,6 +672,18 @@
               " bytes, have " remaining "."))))))
   n)
 
+(defn- ensure-non-negative-count!
+  "Returns given count `n`, or throws `EOFException` if `n` is negative.
+
+  Used on paths that build their result incrementally, so unlike
+  `ensure-readable-length!` there's no allocation to guard here. The risk is
+  instead that `enc/reduce-n` treats a negative count as zero, so a damaged
+  count prefix would otherwise quietly yield an EMPTY coll rather than an error."
+  ^long [^long n]
+  (if (neg? n)
+    (throw (java.io.EOFException. (str "Negative count: " n ".")))
+    n))
+
 (declare read-bytes)
 (defn    read-bytes-sm* [^IByteReader ibr] (read-bytes ibr (read-sm-ucount ibr)))
 (defn    read-bytes-sm  [^IByteReader ibr] (read-bytes ibr (read-sm-count  ibr)))
@@ -742,7 +754,8 @@
       rf* (fn rf* ([x]              x)  ([acc x] (conj  acc x)))]
 
   (defn read-into [to ^IByteReader ibr ^long n]
-    (let [transient? (when (impl/editable? to) (> n 10))
+    (let [n          (ensure-non-negative-count! n)
+          transient? (when (impl/editable? to) (> n 10))
           init       (if transient? (transient to) to)
           rf         (if transient? rf! rf*)
           rf         (if-let [xf taoensso.nippy/*thaw-xform*] ((impl/xform* xf) rf) rf)]
@@ -754,7 +767,8 @@
       rf2* (fn rf2* ([x]              x)  ([acc k v] (assoc  acc      k         v)))]
 
   (defn read-kvs-into [to ^IByteReader ibr ^long n]
-    (let [transient? (when (impl/editable? to) (> n 10))
+    (let [n          (ensure-non-negative-count! n)
+          transient? (when (impl/editable? to) (> n 10))
           init       (if transient? (transient to) to)
           rf1        (if transient? rf1! rf1*)
           rf2        (if transient? rf2! rf2*)]
