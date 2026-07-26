@@ -198,7 +198,7 @@
    ;;; DEPRECATED (only support thawing)
    ;; Desc-sorted by deprecation date
 
-   123 [:pam-sm*_ [[:elements {:read 1 :multiplier 2 :unsigned? true}]]] ; [2026-07-22 v3.8.0] Retired experimental PersistentArrayMap encoding, was opt-in (never written by default)
+   123 [:pam-sm*_ [[:elements {:read 1 :multiplier 2 :unsigned? true}]]] ; [2026-07-26 v3.8.0] Retired experimental PersistentArrayMap encoding, was opt-in (never written by default)
 
    81  [:deftype_         nil]                     ; [2026-06-02 v3.7.0] Added field count prefix
    109 [:int-array-lg_    [[:elements {:read 4}]]] ; [2026-04-16 v3.7.0-alpha2] Switched to xBuffer impln

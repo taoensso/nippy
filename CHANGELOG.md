@@ -2,6 +2,38 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.8.0` (2026-07-26)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.8.0)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+This promotes [v3.8.0-RC1](../../releases/tag/v3.8.0-RC1) to final with no changes.
+
+Nippy v3.8 enables writing of the faster primitive numeric array and field-counted `deftype` encodings introduced with read support in v3.7.
+
+It should be a safe update for users already on v3.7. As always, please **test carefully** before updating against production data, and **report any unexpected problems** - thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## 👉 Migration info
+
+When doing a **rolling update** (>1 coexisting version) from Nippy <v3.7, please **FIRST** update to v3.7 **THEN** to v3.8. This allows read support for the new types and encodings to fully roll out BEFORE v3.8 may write them.
+
+v3.7's experimental dedicated `PersistentArrayMap` encoding has been **permanently retired**: v3.8+ will always write maps through the standard map encoding. The retired encoding was never written by default (writing it required explicitly setting a non-default target release on v3.7), and any such data remains readable forever - maps now simply thaw to the reading runtime's natural map representation.
+
+## 👉 Change in byte output
+
+v3.8 changes Nippy's default byte output for primitive numeric arrays and `deftype` values. Almost no one should care about this, but mentioning for the tiny minority of users that depend on Nippy's byte output remaining stable.
+
+## Since v3.7.0 (2026-07-22)
+
+- [mod] Permanently retire experimental dedicated `PersistentArrayMap` encoding (remains readable) \[9d8580a]
+- [mod] Bump default target release from 360 to 370, enabling writes for faster primitive numeric arrays and field-counted `deftype` serialization
+- [prf] Bulk-thaw medium generic maps using Clojure's `RT/map` \[f3e8633]
+- [dep] Update Encore from v3.161.0 to v3.169.1
+
+---
+
 # `v3.8.0-RC1` (2026-07-22)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.8.0-RC1)
