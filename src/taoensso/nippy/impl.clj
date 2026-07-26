@@ -322,8 +322,15 @@
     will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
   [x] (if (instance? Cached x) x (Cached. x)))
 
+(deftype CacheState
+  [^java.util.HashMap freeze-idxs ; {<k> <idx>} for freezing, k = [<val> <meta>]
+   ^java.util.HashMap thaw-vals]) ; {<idx> <val>} for thawing
+
+(defn new-cache-state ^CacheState []
+  (CacheState. (java.util.HashMap.) (java.util.HashMap.)))
+
 (def ^ThreadLocal tl:cache
-  "{[<x> <meta>] <idx>} for freezing, {<idx> <x-with-meta>} for thawing."
+  "?CacheState for current freeze/thaw session."
   (enc/threadlocal))
 
 (defmacro ^:public with-cache
@@ -336,11 +343,21 @@
   outer cache on exit. Nesting occurs in practice when a custom reader
   (`extend-thaw`) or freeze fallback calls back into `thaw`/`freeze`.
 
+  NB a session's output forms a UNIT: later writes in a session may
+  contain cache references to earlier writes. So always use one session
+  per output sink, and have the reading side mirror the writing side's
+  session boundaries.
+
+  Applies only to the low-level `freeze-to-out!`/`freeze-to-bb!` and
+  `thaw-from-in!`/`thaw-from-bb!` utils: `freeze`, `thaw`, etc. always
+  establish their own isolated (per-call) sessions. Sessions are
+  thread-local, so a session's work must all occur on a single thread.
+
   See also `cache`."
   [& body]
-  `(let [prev# (.get tl:cache)] ; ?volatile of enclosing `with-cache`
+  `(let [prev# (.get tl:cache)] ; ?CacheState of enclosing `with-cache`
      (try
-       (.set tl:cache (volatile! nil))
+       (.set tl:cache (new-cache-state))
        (do ~@body)
        (finally
          ;; Restore (NOT just remove) so that an enclosing `with-cache`
@@ -349,6 +366,27 @@
          (if (nil? prev#)
            (.remove tl:cache)
            (.set    tl:cache prev#))))))
+
+(defn cache-mark
+  "Returns a checkpoint of given `CacheState`'s `freeze-idxs`,
+  for `cache-restore!`. O(1): exploits the invariant that entries are only
+  ever added, with idx = current size."
+  ^long [^CacheState state] (.size ^java.util.HashMap (.-freeze-idxs state)))
+
+(defn cache-restore!
+  "Restores given `CacheState`'s `freeze-idxs` to given `cache-mark`
+  checkpoint, returns nil. Necessary before reattempting or abandoning a
+  write: entries added during a failed/aborted attempt would otherwise later
+  yield cache refs to values whose bytes were never retained."
+  [^CacheState state ^long mark]
+  (let [^java.util.HashMap m (.-freeze-idxs state)]
+    (when (> (.size m) mark)
+      (if (zero? mark)
+        (.clear m)
+        (.removeIf (.values m)
+          (reify java.util.function.Predicate
+            (test [_ idx] (>= (long idx) mark))))))
+    nil))
 
 ;;;;
 
@@ -438,13 +476,35 @@
         :content   edn
         :exception e}})))
 
-(let [not-found (Object.)]
+(let [not-found (Object.)
+      pending   (Object.)]
+
   (defn read-cached [read-typed idx input-arg]
-    (if-let [cache_ (.get tl:cache)]
-      (let [v (get @cache_ idx not-found)]
-        (if (identical? v not-found)
-          (let [x (read-typed input-arg)]
-            (vswap! cache_ assoc idx x)
-            x)
-          v))
+    (if-let [^CacheState state (.get tl:cache)]
+      (let [^java.util.HashMap m (.-thaw-vals state)
+            idx (long idx) ; Normalize key type (callers give Long | Integer)
+            v   (.getOrDefault m idx not-found)]
+
+        (enc/cond
+          (identical? v not-found)
+          (if (== idx (.size m))
+            ;; Reserve idx BEFORE reading: value may itself contain nested
+            ;; first occurrences (which the writer idxs AFTER this one)
+            (do
+              (.put m idx pending)
+              (let [x (read-typed input-arg)]
+                (.put m idx x)
+                x))
+
+            ;; Legit first occurrences always arrive in idx order, so this
+            ;; is corrupt data or (most likely) a cache ref to an earlier
+            ;; write outside the current `with-cache` session
+            (truss/ex-info! "Bad cache ref: earlier `with-cache` session or corrupt data?"
+              {:idx idx, :cached-count (.size m)}))
+
+          (identical? v pending)
+          (truss/ex-info! "Bad cache ref: cyclic or corrupt data?" {:idx idx})
+
+          :else v))
+
       (truss/ex-info! "Can't thaw without cache available. See `with-cache`." {}))))

@@ -787,6 +787,48 @@
      (is (= (nth thawed 2) "shared")     "Outer cache survives a nested thaw")
      (is (= (nth thawed 1) {:inner "payload"}) "Nested thaw returns its own data")]))
 
+(deftest _caching-nested-vals
+  (is (= [["inner"] "inner"]
+        (thaw (freeze [(nippy/cache [(nippy/cache "inner")])
+                       (nippy/cache "inner")])))
+    "Nested cached values allocate idxs out of stream order"))
+
+(deftest _caching-equality
+  ;; Cache lookups use Java `.equals` semantics which (unlike Clojure `=`)
+  ;; distinguish top-level numeric types. (Cross-type values that hash and
+  ;; compare equal in Java may still conflate, as before.)
+  (is (= [java.lang.Long clojure.lang.BigInt]
+        (mapv type (thaw (freeze [(nippy/cache 1) (nippy/cache 1N)]))))))
+
+(deftest _caching-session-bb-failure
+  ;; `freeze-to-bb!` failure must restore both buffer position and cache
+  (let [bb (java.nio.ByteBuffer/allocate 8)]
+    (nippy/with-cache
+      (is (throws? java.io.EOFException
+            (nippy/freeze-to-bb! bb [:kw1 :kw1 "too big to fit in 8 bytes"])))
+      [(is (zero? (.position bb)) "Buffer position restored")
+       (is (do (nippy/freeze-to-bb! bb :kw1) true) "Session still usable")
+       (is (= :kw1 (nippy/thaw-from-bb! (.flip bb))))])))
+
+(deftest _caching-session-buffer-regrow
+  ;; Mid-session buffer regrowth (with-bb retry) must restore cache to
+  ;; session (not empty) state. Fresh thread => fresh (512 byte) buffer.
+  (let [msg1 [(nippy/cache "m1-shared") :other]
+        msg2 (into [(nippy/cache "m1-shared")] (range 2000))
+        baos (java.io.ByteArrayOutputStream.)
+        dout (java.io.DataOutputStream. baos)]
+
+    @(future
+       (nippy/with-cache
+         (nippy/freeze-to-out! dout msg1)
+         (nippy/freeze-to-out! dout msg2)))
+
+    (let [din (java.io.DataInputStream.
+                (java.io.ByteArrayInputStream. (.toByteArray baos)))]
+      (nippy/with-cache
+        [(is (= ["m1-shared" :other]           (nippy/thaw-from-in! din)))
+         (is (= (into ["m1-shared"] (range 2000)) (nippy/thaw-from-in! din)))]))))
+
 (deftest _caching-metadata
   (let [v1 (with-meta [] {:id :v1})
         v2 (with-meta [] {:id :v2})
