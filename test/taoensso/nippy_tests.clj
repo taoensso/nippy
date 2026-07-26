@@ -719,6 +719,31 @@
              (= {:wrapped x} (thaw (freeze {:wrapped x})))
              (= x            (nippy/thaw-from-bb! bb)))))))])
 
+(deftest _types-fast-path
+  ;; `io/write-el` has an `instanceof` fast path for some common types, which
+  ;; must never take precedence over a user's `extend-freeze` for those types
+  (let [protos  [#'io/IWriteTypedNoMeta #'io/IWriteTypedNoMetaDin
+                 #'impl/INativeFreezable #'impl/ICustomFreezable]
+        saved   (mapv deref protos)
+        restore (fn []
+                  (doseq [[v p] (map vector protos saved)]
+                    (alter-var-root v (constantly p))
+                    (#'clojure.core/-reset-methods p))
+                  (alter-var-root #'nippy/*custom-readers*
+                    (fn [m] (dissoc m (impl/coerce-custom-type-id :nippy-tests/upper-str)))))]
+    (try
+      [(is (io/fast-writers?) "Fast path enabled by default")
+
+       (do
+         (nippy/extend-freeze String :nippy-tests/upper-str [x out] (.writeUTF out (.toUpperCase ^String x)))
+         (nippy/extend-thaw          :nippy-tests/upper-str [in]    (.readUTF in))
+         [(is (not (io/fast-writers?)) "Fast path disabled by `extend-freeze`")
+          (is (= "A"        (thaw (freeze  "a"))))
+          (is (= ["A" :b 1] (thaw (freeze ["a" :b 1]))))
+          (is (= {"A" "B"}  (thaw (freeze {"a" "b"}))))])]
+
+      (finally (restore)))))
+
 ;;;; Caching
 
 (deftest _caching
