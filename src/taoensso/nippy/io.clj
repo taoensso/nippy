@@ -823,6 +823,47 @@
           (recur (unchecked-inc-int idx))))
       (clojure.lang.LazilyPersistentVector/createOwning items))))
 
+(defn- read-list-via-array
+  "Reads `n` type-prefixed elements into a `PersistentList` via a temporary
+  array, avoiding the intermediate vector needed by `read-into`."
+  [^IByteReader ibr ^long n]
+  (let [items (object-array n)]
+    (loop [idx 0]
+      (when (< idx n)
+        (aset items idx (read-typed ibr))
+        (recur (unchecked-inc idx))))
+
+    ;; Cons backwards so that element order matches the stream, and so that
+    ;; the result is a `PersistentList` exactly as `(into () ...)` would give
+    (loop [idx (unchecked-dec n), acc clojure.lang.PersistentList/EMPTY]
+      (if (neg? idx)
+        acc
+        (recur (unchecked-dec idx)
+          (.cons ^clojure.lang.IPersistentCollection acc (aget items idx)))))))
+
+(defn read-list
+  "Reads `n` type-prefixed elements as a `PersistentList`.
+
+  `bounded-count?` should be true iff `n` came from a sm/md (byte/short)
+  prefix, so is inherently too small to enable an allocation attack. Only
+  then may we pre-size an array without first checking readable length."
+  [^IByteReader ibr ^long n bounded-count?]
+  (enc/cond
+    ;; A transducer may filter, expand, carry state, and do completion work,
+    ;; so the general (incremental) path is needed to apply it correctly
+    taoensso.nippy/*thaw-xform*
+    (into () (rseq (read-into [] ibr n)))
+
+    bounded-count?
+    (read-list-via-array ibr (ensure-non-negative-count! n))
+
+    (instance? ByteBufferReader ibr)
+    (read-list-via-array ibr (long (ensure-readable-length! ibr n 1)))
+
+    ;; Stream input has no known remaining length, so build incrementally
+    ;; rather than pre-sizing an array from an unverifiable count
+    :else (into () (rseq (read-into [] ibr n)))))
+
 (let [rf1! (fn rf1! ([x] (persistent! x)) ([acc kv ] (assoc! acc (key kv) (val kv))))
       rf2! (fn rf2! ([x] (persistent! x)) ([acc k v] (assoc! acc      k         v)))
       rf1* (fn rf1* ([x]              x)  ([acc kv ] (assoc  acc (key kv) (val kv))))
@@ -1117,9 +1158,9 @@
         sc/id-sorted-map-lg (read-kvs-into (sorted-map)                       ibr (read-lg-count ibr))
 
         sc/id-list-0            ()
-        sc/id-list-sm     (into () (rseq (read-into [] ibr (read-sm-count ibr))))
-        sc/id-list-md     (into () (rseq (read-into [] ibr (read-md-count ibr))))
-        sc/id-list-lg     (into () (rseq (read-into [] ibr (read-lg-count ibr))))
+        sc/id-list-sm     (read-list ibr (read-sm-count ibr) true)
+        sc/id-list-md     (read-list ibr (read-md-count ibr) true)
+        sc/id-list-lg     (read-list ibr (read-lg-count ibr) false)
 
         sc/id-seq-0       (lazy-seq nil)
         sc/id-seq-sm      (or (seq (read-into [] ibr (read-sm-count ibr))) (lazy-seq nil))
