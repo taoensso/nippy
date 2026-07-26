@@ -931,11 +931,20 @@
 
   (defn read-into [to ^IByteReader ibr ^long n]
     (let [n          (ensure-non-negative-count! n)
-          transient? (when (impl/editable? to) (> n 10))
-          init       (if transient? (transient to) to)
-          rf         (if transient? rf! rf*)
-          rf         (if-let [xf taoensso.nippy/*thaw-xform*] ((impl/xform* xf) rf) rf)]
-      (rf (enc/reduce-n (fn [acc _] (rf acc (read-typed ibr))) init n)))))
+          transient? (when (impl/editable? to) (> n 10))]
+
+      (if (and transient? (not taoensso.nippy/*thaw-xform*))
+        ;; Common case: loop directly to skip an `rf` + `conj!` call per element
+        (loop [idx 0, acc (transient to)]
+          (if (< idx n)
+            (recur (unchecked-inc idx)
+              (.conj ^clojure.lang.ITransientCollection acc (read-typed ibr)))
+            (persistent! acc)))
+
+        (let [init (if transient? (transient to) to)
+              rf   (if transient? rf! rf*)
+              rf   (if-let [xf taoensso.nippy/*thaw-xform*] ((impl/xform* xf) rf) rf)]
+          (rf (enc/reduce-n (fn [acc _] (rf acc (read-typed ibr))) init n)))))))
 
 (defn read-vec [^IByteReader ibr ^long n]
   (if (or taoensso.nippy/*thaw-xform* (> n 32))
