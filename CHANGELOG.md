@@ -2,6 +2,86 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.9.0` (pending)
+
+- **Dependency**: TODO LATER
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+A performance, feature, and hardening release. Headline feature: **automatic
+keyword caching** (on by default), which can significantly shrink output and
+speed up round-trips for typical payloads. See below for the associated
+change in byte output.
+
+Benchmarked against v3.8.0 on the standard benchmark data: freeze ~35% faster
+(~45% for `fast-freeze`), thaw ~15% faster. Gains are smaller for payloads dominated
+by a heavy compressor (e.g. LZMA2), which Nippy's own cost no longer meaningfully
+contributes to.
+
+TODO LATER: confirm the above on a quiet machine before cutting the release
+(current numbers predate keyword auto-caching).
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## 👉 Change in default byte output
+
+Nippy now automatically caches keywords that REPEAT within a freeze: a repeated
+keyword is written in full only once more (on its second occurrence), then as
+compact (1-3 byte) cache references thereafter - using the same wire format as
+the manual
+[`cache`](https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy#cache)
+util. Keywords that don't repeat freeze byte-identically to before.
+
+**Byte output therefore changes for payloads with repeating keywords**, though
+output remains readable by all Nippy versions >= v2.13 (2017). If you depend on
+Nippy's exact earlier byte output (e.g. you hash or dedupe frozen bytes), you
+can restore it by disabling the feature - see
+[`*auto-cache-keywords?*`](https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy#*auto-cache-keywords?*).
+
+Note also that output from the low-level `freeze-to-out!`/`freeze-to-bb!` utils may
+now contain cache references even if you never used `cache`, so a shared
+[`with-cache`](https://cljdoc.org/d/com.taoensso/nippy/CURRENT/api/taoensso.nippy#with-cache)
+session on the writing side now needs a matching one on the reading side. See the
+linked commit for details.
+
+## 👉 Change in behavior for malformed input
+
+Nippy now **rejects** some malformed/corrupt input that it previously accepted or
+failed on obscurely. Valid data is unaffected, and no wire format has changed - but
+mentioning since the change is observable:
+
+- A negative collection count previously yielded a silently EMPTY collection, and now throws.
+- A truncated encrypted payload previously failed obscurely (and only after a needless key derivation), and now throws an `EOFException`.
+- An implausible length prefix in buffered input is now rejected BEFORE it's used to size an allocation.
+- An invalid cache reference (corrupt data, or data read outside its original `with-cache` session) now throws where detectable, instead of silently mis-thawing.
+
+Code that catches a specific exception type from `thaw` or `crypto/decrypt` on corrupt
+input may therefore see a different type than before.
+
+## Since v3.8.0 (2026-07-26)
+
+- [mod] Freeze: auto-cache keywords (on by default, changes byte output) \[TODO LATER]
+- [sec] Thaw: validate buffered allocation lengths \[TODO LATER]
+- [fix] Thaw: reject negative collection counts \[TODO LATER]
+- [fix] `freeze-to-out!`: restore size-unlimited streaming \[TODO LATER]
+- [fix] `freeze-to-bb!`: restore state on failure \[TODO LATER]
+- [fix] `freeze-to-out!`: restore cache on failure \[TODO LATER]
+- [fix] `with-bb`: cap buffer growth at max array size \[TODO LATER]
+- [fix] write-sz: serialize before writing header \[TODO LATER]
+- [fix] with-cache: restore outer cache \[TODO LATER]
+- [fix] Crypto: reject truncated encrypted payloads \[TODO LATER]
+- [fix] Cache: use mutable Java collections for state \[TODO LATER]
+- [prf] Crypto: reduce buffer copies \[TODO LATER]
+- [prf] Freeze: optimize default header copy \[TODO LATER]
+- [prf] Freeze: streamline common paths \[TODO LATER]
+- [prf] Thaw: decode keywords from bytes \[TODO LATER]
+- [prf] Thaw: decode strings in place \[TODO LATER]
+- [prf] Thaw: bulk-build short vectors \[TODO LATER]
+- [prf] Thaw: build lists directly \[TODO LATER]
+- [prf] Thaw: avoid header copies \[TODO LATER]
+- [dep] Update Encore from v3.169.1 to v3.171.0
+
+---
+
 # `v3.8.1` (pending)
 
 - **Dependency**: TODO LATER
