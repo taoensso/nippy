@@ -57,8 +57,8 @@
      bench-data default-bench-data}}]
 
   (let [data-frozen                                       (freezer bench-data)
-        time-freeze (enc/bench laps {:warmup-laps warmup} (freezer bench-data))
-        time-thaw   (enc/bench laps {:warmup-laps warmup} (thawer  data-frozen))
+        time-freeze (enc/bench laps {:nlaps-warmup warmup} (freezer bench-data))
+        time-thaw   (enc/bench laps {:nlaps-warmup warmup} (thawer  data-frozen))
         data-size   (sizer data-frozen)]
 
     {:round (+ time-freeze time-thaw)
@@ -138,8 +138,8 @@
 
   (let [data-frozen     (nippy/freeze bench-data {:compressor nil})
         data-compressed                                       (compr/compress   compressor data-frozen)
-        time-compress   (enc/bench laps {:warmup-laps warmup} (compr/compress   compressor data-frozen))
-        time-decompress (enc/bench laps {:warmup-laps warmup} (compr/decompress compressor data-compressed))]
+        time-compress   (enc/bench laps {:nlaps-warmup warmup} (compr/compress   compressor data-frozen))
+        time-decompress (enc/bench laps {:nlaps-warmup warmup} (compr/decompress compressor data-compressed))]
 
     {:round   (+ time-compress time-decompress)
      :compress   time-compress
