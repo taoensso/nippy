@@ -390,12 +390,12 @@
   `[<val> <meta>]` keys used for manually cached vals), and writes kws
   directly (avoiding re-dispatch through the `Keyword` writer)."
   [^ByteBuffer bb ^clojure.lang.Keyword kw ^CacheState state]
-  (let [^java.util.HashMap m (.-freeze-idxs state)
+  (let [^java.util.IdentityHashMap m (.-kw-idxs state)
         ?idx (.get m kw)]
 
     (if-let [idx ?idx]
       (write-cached-ref bb idx) ; Ref to previously written kw
-      (let [idx (.size m)]
+      (let [idx (impl/cache-idx-count state)]
         (if (impl/md-count? idx)
           (do
             (.put m kw idx)
@@ -426,7 +426,7 @@
 
       (if-let [idx ?idx]
         (do (write-cached-ref bb idx) false) ; Ref to previously written value
-        (let [idx (.size m)]
+        (let [idx (impl/cache-idx-count state)]
           (when (impl/md-count? idx) ; Else cache full: no id, just freeze uncached
             (.put m k idx)
             (write-cached-ref bb idx))
@@ -443,14 +443,14 @@
   occurrence per session (1st occurrence written plain), so that kws
   that never repeat don't pay any caching cost in the output."
   [^ByteBuffer bb ^clojure.lang.Keyword kw ^CacheState state]
-  (if-let [idx (.get ^java.util.HashMap (.-freeze-idxs state) kw)]
+  (if-let [idx (.get ^java.util.IdentityHashMap (.-kw-idxs state) kw)]
     (write-cached-ref bb idx) ; Ref to previously written kw
-    (let [^java.util.HashSet seen (.-seen-kws state)]
+    (let [^java.util.IdentityHashMap seen (.-seen-kws state)]
       (enc/cond
-        (.contains seen kw) (write-cached-kw bb kw state) ; 2nd+ occurrence, start caching
+        (.containsKey seen kw) (write-cached-kw bb kw state) ; 2nd+ occurrence, start caching
         (< (.size seen) max-seen-kws)
         (do ; 1st occurrence
-          (.add seen kw)
+          (.put seen kw kw)
           (.add ^java.util.ArrayList (.-seen-log state) kw) ; For `cache-restore!`
           (write-kw bb kw))
 

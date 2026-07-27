@@ -328,16 +328,30 @@
 (enc/declare-remote ^:dynamic taoensso.nippy/*auto-cache-keywords?*)
 
 (deftype CacheState
-  [^java.util.HashMap   freeze-idxs ; {<k> <idx>} for freezing, k = <kw> | [<val> <meta>]
-   ^java.util.HashMap   thaw-vals   ; {<idx> <val>} for thawing
-   ^java.util.HashSet   seen-kws    ; #{<kw>} seen this session, Ref. `write-auto-cached-kw`
-   ^java.util.ArrayList seen-log    ; `seen-kws` in insertion order, for `cache-restore!`
+  ;; Keywords use `IdentityHashMap`s: keywords are interned and don't override
+  ;; `equals`, so identity IS equality for them - and a flat open-addressed
+  ;; table is much faster than `HashMap`'s scattered per-entry `Node`s.
+  ;; NB unsafe for the arbitrary user values held by `freeze-idxs`.
+  [^java.util.HashMap         freeze-idxs ; {[<val> <meta>] <idx>} for freezing `cache`d vals
+   ^java.util.IdentityHashMap kw-idxs     ; {<kw> <idx>} for freezing cached kws
+   ^java.util.HashMap         thaw-vals   ; {<idx> <val>} for thawing
+   ^java.util.IdentityHashMap seen-kws    ; #{<kw>} seen this session, Ref. `write-auto-cached-kw`
+   ^java.util.ArrayList       seen-log    ; `seen-kws` in insertion order, for `cache-restore!`
    auto-kws?]) ; Flag captured at session start for cheap hot-path access
 
 (defn new-cache-state ^CacheState []
-  (CacheState. (java.util.HashMap.) (java.util.HashMap.)
-    (java.util.HashSet.) (java.util.ArrayList.)
+  (CacheState. (java.util.HashMap.) (java.util.IdentityHashMap.) (java.util.HashMap.)
+    (java.util.IdentityHashMap.) (java.util.ArrayList.)
     (if taoensso.nippy/*auto-cache-keywords?* true false)))
+
+(defn cache-idx-count
+  "Returns the number of cache idxs allocated so far by given `CacheState`.
+
+  Idxs come from a SINGLE monotonic sequence shared by both freeze maps,
+  since the thaw side assigns them by arrival order."
+  ^long [^CacheState state]
+  (+ (.size ^java.util.HashMap         (.-freeze-idxs state))
+     (.size ^java.util.IdentityHashMap (.-kw-idxs     state))))
 
 (def ^ThreadLocal tl:cache
   "?CacheState for current freeze/thaw session."
@@ -396,8 +410,8 @@
   sizes into a single long."
   ^long [^CacheState state]
   (bit-or
-    (bit-shift-left (long (.size ^java.util.HashMap   (.-freeze-idxs state))) 32)
-    (do             (long (.size ^java.util.ArrayList (.-seen-log    state))))))
+    (bit-shift-left (cache-idx-count state) 32)
+    (do (long (.size ^java.util.ArrayList (.-seen-log state))))))
 
 (defn cache-restore!
   "Restores given `CacheState`'s write state to given `cache-mark`
@@ -409,18 +423,20 @@
   [^CacheState state ^long mark]
   (let [idx-mark (bit-shift-right mark 32)
         log-mark (bit-and         mark 0xFFFFFFFF)
-        ^java.util.HashMap m (.-freeze-idxs state)]
+        ^java.util.HashMap         fm (.-freeze-idxs state)
+        ^java.util.IdentityHashMap km (.-kw-idxs     state)]
 
-    (when (> (.size m) idx-mark)
+    (when (> (cache-idx-count state) idx-mark)
       (if (zero? idx-mark)
-        (.clear m)
-        (.removeIf (.values m)
-          (reify java.util.function.Predicate
-            (test [_ idx] (>= (long idx) idx-mark))))))
+        (do (.clear fm) (.clear km))
+        (let [pred (reify java.util.function.Predicate
+                     (test [_ idx] (>= (long idx) idx-mark)))]
+          (.removeIf (.values fm) pred)
+          (.removeIf (.values km) pred))))
 
     (let [^java.util.ArrayList log (.-seen-log state)]
       (when (> (.size log) log-mark)
-        (let [^java.util.HashSet seen (.-seen-kws state)
+        (let [^java.util.IdentityHashMap seen (.-seen-kws state)
               tail (.subList log (int log-mark) (.size log))]
           (doseq [kw tail] (.remove seen kw))
           (.clear tail)))) ; Truncates backing list
