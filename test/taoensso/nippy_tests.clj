@@ -367,6 +367,199 @@
              (nippy/freeze (nippy/thaw-from-in! (java.io.DataInputStream. (java.io.ByteArrayInputStream. ba)))))
          "`DataInput` reader agrees with `ByteBuffer` reader on all stress data")))])
 
+(defn- freeze-to-ba
+  "Streams x via `freeze-to-out!`, returns the bytes written."
+  ^bytes [x]
+  (let [baos (java.io.ByteArrayOutputStream.)]
+    (nippy/with-cache (nippy/freeze-to-out! (java.io.DataOutputStream. baos) x))
+    (.toByteArray baos)))
+
+(defn- stream-write-count
+  "Streams x via `freeze-to-out!`, returns the number of writes reaching the
+  sink. >1 => x was written incrementally rather than buffered in full.
+
+  NB runs on a FRESH thread: the streaming chunk is retained per thread and
+  may have been grown by an earlier write, which would otherwise let a
+  buffered value fit in one chunk and mask the very thing we're checking."
+  ^long [x]
+  (let [n  (java.util.concurrent.atomic.AtomicLong.)
+        os (proxy [java.io.OutputStream] []
+             (write
+               ([_]     (.incrementAndGet n) nil)
+               ([_ _ _] (.incrementAndGet n) nil)))
+        t  (Thread.
+             (fn [] (nippy/with-cache
+                      (nippy/freeze-to-out! (java.io.DataOutputStream. os) x))))]
+    (.start t)
+    (.join  t)
+    (.get   n)))
+
+;; Implements `ISeq` but, being a deftype, natively dispatches to the `IType`
+;; writer: Clojure protocols prefer class impls over interface impls. Guards
+;; against the streaming writer hand-mirroring dispatch and diverging.
+(defrecord StreamRec [a b])
+
+(deftype SeqishType [xs]
+  clojure.lang.Counted
+  clojure.lang.ISeq
+  (seq   [_  ] (seq    xs))
+  (first [_  ] (first  xs))
+  (next  [_  ] (next   xs))
+  (more  [_  ] (rest   xs))
+  (cons  [_ o] (cons o xs))
+  (count [_  ] (count  xs))
+  (empty [_  ] nil)
+  (equiv [_ _] false))
+
+;; The wiki documents calling `freeze-to-out!` from inside an `extend-freeze`
+;; body, so the streaming writer MUST tolerate re-entry on the same thread.
+;; It reuses one chunk per thread, so a nested call taking that same chunk
+;; would silently clear it out from under the write in progress.
+(defrecord NestedFreezeRec [data])
+(nippy/extend-freeze NestedFreezeRec :nippy-tests/nested-freeze [x out]
+  (nippy/freeze-to-out! out (:data x)))
+(nippy/extend-thaw :nippy-tests/nested-freeze [in]
+  (->NestedFreezeRec (nippy/thaw-from-in! in)))
+
+(deftest _freeze-to-out-streaming
+  ;; `freeze-to-out!` streams counted colls through a small chunk rather than
+  ;; buffering the whole value. Its dispatch mirrors the buffered writer's, so
+  ;; the two MUST agree byte-for-byte - that's what makes the mirroring safe.
+  [(testing "Streamed output is byte-identical to buffered output"
+     [(is (ba= (freeze-to-ba test-data) (nippy/fast-freeze test-data)) "Comparable stress data")
+      (let [d (nippy/stress-data {})] (is (ba= (freeze-to-ba d)        (nippy/fast-freeze d)) "Full stress data"))
+      (is (gen-test 40 [gen-data]         (ba= (freeze-to-ba gen-data) (nippy/fast-freeze gen-data))) "Generated data")])
+
+   (testing "Values spanning many chunks"
+     (let [x (vec (range 200000))] ; Serialized size >> chunk size
+       [(is (ba= (freeze-to-ba x) (nippy/fast-freeze x)))
+        (is (= x (nippy/thaw-from-in!
+                   (java.io.DataInputStream.
+                     (java.io.ByteArrayInputStream. (freeze-to-ba x))))))]))
+
+   (testing "Types whose dispatch differs from their interfaces"
+     ;; `MapEntry` extends `APersistentVector`; `()` is an `EmptyList` that
+     ;; does NOT extend `PersistentList`; `SeqishType` is an `ISeq` that
+     ;; dispatches to the `IType` writer
+     (doseq [[nm x]
+             {"MapEntry"   (first {:a 1})
+              "empty list" ()
+              "list"       '(1 2 3)
+              "queue"      (into clojure.lang.PersistentQueue/EMPTY [1 2 3])
+              "sorted-map" (sorted-map :a 1 :b 2)
+              "sorted-set" (sorted-set 3 1 2)
+              "lazy-seq"   (map inc (range 100))
+              "range"      (range 100)
+              "cons"       (cons 1 (map inc (range 10)))
+              "ISeq type"  (->SeqishType [1 2 3])
+              "record"     (->StreamRec 1 [2 3])
+              "sql-time"   (java.sql.Time. 1700000000123) ; `extend-freeze`d above
+              "nested"     {:q (into clojure.lang.PersistentQueue/EMPTY [(first {:a 1}) ()])}}]
+
+       (is (ba= (freeze-to-ba x) (nippy/fast-freeze x)) nm)))
+
+   (testing "Cache refs stay consistent across chunk flushes"
+     ;; Cache idxs are assigned as bytes are emitted, so a flush between
+     ;; cached values must not disturb them
+     (let [x [(nippy/cache "abc") (vec (range 50000)) (nippy/cache "abc") (nippy/cache "abc")]]
+       (is (ba= (freeze-to-ba x) (nippy/fast-freeze x))))
+
+     ;; `write-cached` registers its cache idx BEFORE writing the value, so a
+     ;; buffered leaf that registers cache idxs and THEN overflows must roll
+     ;; them back. Without that, the retry sees the idxs already present and
+     ;; emits bare cache REFs, having never written the values at all.
+     ;;
+     ;; A lazy seq is uncounted, so it's written as one buffered leaf - and the
+     ;; filler is essential, leaving too little chunk space for that leaf, which
+     ;; is what forces the overflow.
+     (let [big    (apply str (repeat 40000 "x"))
+           filler (apply str (repeat 50000 "y"))
+           x      [filler (map identity [(nippy/cache big) (nippy/cache big)])]
+           ba     (freeze-to-ba x)] ; NB freeze outside the thaw's cache session
+
+       [(is (ba= ba (nippy/fast-freeze x)) "Cache rollback on overflow")
+        ;; NB reading cache refs needs a `with-cache` session, mirroring the
+        ;; write side. Thaw yields the cached values themselves.
+        (is (= [filler [big big]]
+              (nippy/with-cache
+                (nippy/thaw-from-in!
+                  (java.io.DataInputStream.
+                    (java.io.ByteArrayInputStream. ba))))))]))
+
+   (testing "Cache id encoding boundaries"
+     ;; `write-cached-header!` switches encoding at these idxs:
+     ;; 0-7 (dedicated ids) | 8-127 (sm) | 128-32767 (md) | >32767 (uncached)
+     [(doseq [n [8 9 128 129 32768 32769]]
+        (let [x (mapv #(nippy/cache %) (range n))]
+          (is (ba= (freeze-to-ba x) (nippy/fast-freeze x)) (str "n=" n))))
+
+      (let [x (nippy/cache [(nippy/cache "a") (nippy/cache "b") (nippy/cache [1 2 3])])
+            y [x x]]
+        (is (ba= (freeze-to-ba y) (nippy/fast-freeze y)) "Nested cached values"))])
+
+   (testing "Streamable values stream rather than buffer"
+     ;; A value spanning many chunks must be written incrementally, not
+     ;; accumulated into one buffer. NB this is what makes their total size
+     ;; unbounded, so a type that silently stops streaming (e.g. a writer
+     ;; registered below `stream-kinds`) quietly restores the ~2 GiB limit.
+     (let [n 50000]
+       (doseq [[nm x]
+               {"vector"     (vec (range n))
+                "set"        (into #{} (range n))
+                "map"        (into {} (map (fn [i] [i i])) (range n))
+                "list"       (apply list (range n))
+                "seq"        (seq (vec (range n)))
+                "sorted-map" (into (sorted-map) (map (fn [i] [i i])) (range n))
+                "sorted-set" (into (sorted-set) (range n))
+                "queue"      (into clojure.lang.PersistentQueue/EMPTY (range n))
+                "map-entry"  (clojure.lang.MapEntry/create :k (vec (range n)))
+                "cached"     (let [c (nippy/cache (vec (range n)))] [c c])}]
+
+         (is (> (stream-write-count x) 1) (str nm " written across multiple chunks")))))
+
+   (testing "Buffered fallback paths"
+     [(let [x [(java.util.ArrayList. [1 2 3]) (java.util.ArrayList. (range 100000))]]
+        (is (ba= (freeze-to-ba x) (nippy/fast-freeze x)) "Java Serializable"))
+      (binding [nippy/*freeze-fallback* :write-unfreezable]
+        (let [x [1 (fn []) {:k (fn [])}]]
+          (is (ba= (freeze-to-ba x) (nippy/fast-freeze x)) "*freeze-fallback*")))])
+
+   (testing "Metadata"
+     (let [x (with-meta [(with-meta {:a 1} {:inner true}) 2]
+               {:outer true, :nested (with-meta #{1} {:deep true})})]
+       [(is (ba= (freeze-to-ba x) (nippy/fast-freeze x)) "Nested metadata")
+        (binding [nippy/*incl-metadata?* false]
+          (is (ba= (freeze-to-ba x) (nippy/fast-freeze x)) "Metadata disabled"))]))
+
+   (testing "Single values larger than a whole chunk"
+     ;; Exercises the grow path: one leaf that can't fit even an empty chunk
+     (let [big (apply str (repeat 200000 "x"))
+           x   [1 big {:k big} (byte-array 150000) (repeat 3 big)]]
+       (is (ba= (freeze-to-ba x) (nippy/fast-freeze x)))))
+
+   (testing "Re-entrant `freeze-to-out!`"
+     ;; The chunk is reused per thread, so a nested call must take its own.
+     ;; The inner value spans many chunks, forcing flushes at both depths.
+     (let [x [:head
+              (->NestedFreezeRec {:rows (vec (range 50000))})
+              (->NestedFreezeRec (->NestedFreezeRec [1 2 3]))
+              :tail]]
+       [(is (ba= (freeze-to-ba x) (nippy/fast-freeze x)) "Streamed == buffered")
+        (is (= x (nippy/thaw-from-in!
+                   (java.io.DataInputStream.
+                     (java.io.ByteArrayInputStream. (freeze-to-ba x)))))
+          "Round-trips")]))
+
+   (testing "Concurrent `freeze-to-out!`"
+     ;; Guards the per-thread chunk against cross-thread sharing
+     (let [x   (vec (range 20000))
+           ref (nippy/fast-freeze x)]
+       (is (every? true?
+             (mapv deref
+               (mapv (fn [_] (future (every? true? (repeatedly 50 #(ba= (freeze-to-ba x) ref)))))
+                 (range 8))))
+         "Each thread gets its own chunk")))])
+
 ;;;; Custom types & records
 
 (deftype   MyType [basic_field fancy-field!]) ; Note `fancy-field!` field name will be munged
