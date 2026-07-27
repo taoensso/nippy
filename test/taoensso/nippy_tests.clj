@@ -298,6 +298,30 @@
        (let [^ByteBufferUTFType y (nippy/thaw-from-bb! bb)]
          (is (= (.s x) (.s y))))))
 
+   (testing "`freeze-to-bb!` leaves nothing behind on failure"
+     [(let [bb (java.nio.ByteBuffer/allocate 64)]
+        (nippy/freeze-to-bb! bb :ok)
+        (let [pos (.position bb)]
+          (is (throws? java.io.EOFException
+                (nippy/freeze-to-bb! bb (apply str (repeat 1000 "x")))))
+          (is (= pos (.position bb)) "Buffer position restored")
+          ;; So the buffer is still safe to keep writing to
+          (nippy/freeze-to-bb! bb :also-ok)
+          (.flip bb)
+          (is (= [:ok :also-ok] [(nippy/thaw-from-bb! bb) (nippy/thaw-from-bb! bb)])
+            "Buffer still usable")))
+
+      ;; An abandoned write must not register cache idxs, else the NEXT write
+      ;; emits a bare ref for a value that was never written
+      (nippy/with-cache
+        (let [big (apply str (repeat 500 "y"))
+              bb  (java.nio.ByteBuffer/allocate 4096)]
+          (is (throws? java.io.EOFException
+                (nippy/freeze-to-bb! (java.nio.ByteBuffer/allocate 8) (nippy/cache big))))
+          (nippy/freeze-to-bb! bb [(nippy/cache big) (nippy/cache big)])
+          (.flip bb)
+          (is (= [big big] (nippy/thaw-from-bb! bb)) "Session cache not poisoned")))])
+
    (testing "Bounds and byte-order checks"
      [(is (throws? java.io.EOFException (nippy/freeze-to-bb! (java.nio.ByteBuffer/allocate 1) "too large"))        "BB overflow")
       (is (throws? java.io.EOFException (nippy/freeze-to-bb! (java.nio.ByteBuffer/allocate 1) (object-array 128))) "BB overflow via `write-sz`")

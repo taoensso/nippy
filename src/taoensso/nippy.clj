@@ -437,16 +437,28 @@
 
 (defn freeze-to-bb!
   "Low-level util. Serializes given arg (any Clojure data type) to given `ByteBuffer`.
-  In most cases you want `freeze` instead."
+  In most cases you want `freeze` instead.
+
+  On error, restores the buffer's position and (when using a shared
+  `with-cache` session) the session's cache, so both are safe to reuse."
   [^ByteBuffer bb x]
-  (let [bb    (io/bb-big-endian! bb)
-        dout_ (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (io/bb->dout bb)))))]
+  (let [bb     (io/bb-big-endian! bb)
+        pos    (.position bb)
+        dout_  (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (io/bb->dout bb)))))
+        cache_ (.get impl/tl:cache)
+        cache  (when cache_ @cache_)]
     (try
       (io/write-typed+meta x bb dout_)
-      (catch java.nio.BufferOverflowException _
-        (throw
-          (java.io.EOFException.
-            (str "ByteBuffer overflow while freezing: remaining " (.remaining bb) " bytes.")))))))
+      (catch Throwable t
+        ;; Bytes and cache entries from the abandoned write would poison
+        ;; later writes (esp. in a shared `with-cache` session)
+        (.position bb pos)
+        (when cache_ (vreset! cache_ cache))
+        (if (instance? java.nio.BufferOverflowException t)
+          (throw
+            (java.io.EOFException.
+              (str "ByteBuffer overflow while freezing: remaining " (.remaining bb) " bytes.")))
+          (throw t))))))
 
 (defn freeze-to-string
   "Like `freeze`, but returns a Base64-encoded string.
