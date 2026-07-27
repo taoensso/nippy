@@ -289,6 +289,17 @@
          (is (= x (nippy/thaw-from-in! (io/bb->din bb))))
          (is (= written (.position bb))))))
 
+   (testing "`freeze-to-out!` writes exactly once when its buffer must grow"
+     (let [x    (vec (range 50000)) ; Big enough to force several buffer grows
+           baos (java.io.ByteArrayOutputStream.)]
+       (nippy/freeze-to-out! (java.io.DataOutputStream. baos) x)
+       (let [ba (.toByteArray baos)]
+         (is (= (alength ba) (alength (nippy/fast-freeze x)))
+           "Discarded writes from grown buffers aren't re-emitted")
+         (is (= x (nippy/thaw-from-in!
+                    (java.io.DataInputStream.
+                      (java.io.ByteArrayInputStream. ba))))))))
+
    (testing "ByteBuffer entry points"
      (let [bb (java.nio.ByteBuffer/allocate 2048)]
        (nippy/freeze-to-bb! bb :a)

@@ -362,7 +362,10 @@
 
 ;;;; Freeze API
 
-(defn- freeze-raw ^bytes [x] (io/with-bb 512 (fn [bb dout_] (io/write-typed+meta x bb dout_) true)))
+(defn- freeze-raw
+  (^bytes [x]   (io/with-bb 512 (fn [bb dout_] (io/write-typed+meta x bb dout_) true)))
+  ;; NB no ^bytes hint: returns whatever `finalize` returns
+  ([x finalize] (io/with-bb 512 (fn [bb dout_] (io/write-typed+meta x bb dout_) true) finalize)))
 (defn  freeze
   "Main freezing util.
 
@@ -432,8 +435,16 @@
 
 (defn freeze-to-out!
   "Low-level util. Serializes given arg (any Clojure data type) to given `DataOutput`.
-  In most cases you want `freeze` instead."
-  [^DataOutput dout x] (let [ba (freeze-raw x)] (.write dout ba 0 (alength ba))))
+  In most cases you want `freeze` instead.
+
+  NB each call buffers the WHOLE serialized value in memory before writing,
+  so a single value's serialized form must fit within a JVM byte array
+  (~2 GiB). Writing many values to the same `DataOutput` is unaffected."
+  [^DataOutput dout x]
+  (freeze-raw x
+    ;; Write straight out of `bb`'s backing array, no intermediate copy
+    (fn [^ByteBuffer bb] (.write dout (.array bb) (.arrayOffset bb) (.position bb)) true))
+  nil)
 
 (defn freeze-to-bb!
   "Low-level util. Serializes given arg (any Clojure data type) to given `ByteBuffer`.
