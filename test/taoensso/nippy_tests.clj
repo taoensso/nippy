@@ -626,7 +626,16 @@
                (doto (java.nio.ByteBuffer/allocateDirect (alength ba))
                  (.put ba)
                  (.flip))]
-           (check-bb bb)))))])
+           (check-bb bb)))))
+
+   (testing "Serialization that fails part-way"
+     ;; `writeObject` throws only once it reaches the (non-Serializable) referent,
+     ;; i.e. after any class name header would already have been written
+     (let [x (java.util.concurrent.atomic.AtomicReference. (Object.))]
+       (binding [nippy/*freeze-fallback* :write-unfreezable]
+         (let [[unfreezable tail] (nippy/fast-thaw (nippy/fast-freeze [x :tail]))]
+           [(is (contains? unfreezable :nippy/unfreezable) "Falls through to next fallback")
+            (is (= :tail tail)                             "No orphan header bytes left behind")]))))])
 
 ;;;; Metadata
 
