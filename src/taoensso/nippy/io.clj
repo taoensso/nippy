@@ -281,22 +281,29 @@
     (let [class-name (.getName (class x))] ; Reflect
       (when (impl/freeze-serializable-allowed? class-name)
         (let [class-name-ba (.getBytes class-name StandardCharsets/UTF_8)
-              len           (alength   class-name-ba)]
+              len           (alength   class-name-ba)
 
-          (enc/cond
-            (impl/sm-count? len) (do (write-id bb sc/id-sz-sm) (write-bytes-sm bb class-name-ba))
-            (impl/md-count? len) (do (write-id bb sc/id-sz-md) (write-bytes-md bb class-name-ba))
-            ;; :else             (do (write-id bb sc/id-sz-lg) (write-bytes-md bb class-name-ba)) ; Unrealistic
-            :else                (truss/ex-info! "Serializable class name too long" {:name class-name}))
+              ;; Unrealistic, there's no `id-sz-lg`:
+              _ (when-not (impl/md-count? len)
+                  (truss/ex-info! "Serializable class name too long" {:name class-name}))
 
-          ;; Serialize object to isolated ba, then write the length-prefixed ba to stream.
-          ;; Can therefore later choose to skip OR deserialize with `readObject`.
-          (let [baos  (ByteArrayOutputStream.)
-                dos   (DataOutputStream. baos)
-                _     (.writeObject (java.io.ObjectOutputStream. dos) x)
-                sz-ba (.toByteArray baos)]
-            (write-bytes bb sz-ba))
+              ;; Serialize object to isolated ba, then write the length-prefixed ba to stream.
+              ;; Can therefore later choose to skip OR deserialize with `readObject`.
+              ;;
+              ;; Note that we serialize BEFORE touching `bb`: `writeObject` often throws
+              ;; (e.g. `NotSerializableException` on a nested field), and callers may then
+              ;; try another writer - so we mustn't leave orphan header bytes behind.
+              sz-ba
+              (let [baos (ByteArrayOutputStream.)
+                    dos  (DataOutputStream. baos)]
+                (.writeObject (java.io.ObjectOutputStream. dos) x)
+                (.toByteArray baos))]
 
+          (if (impl/sm-count? len)
+            (do (write-id bb sc/id-sz-sm) (write-bytes-sm bb class-name-ba))
+            (do (write-id bb sc/id-sz-md) (write-bytes-md bb class-name-ba)))
+
+          (write-bytes bb sz-ba)
           true)))))
 
 (defn write-readable [^ByteBuffer bb x]
