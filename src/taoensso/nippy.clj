@@ -437,14 +437,14 @@
   "Low-level util. Serializes given arg (any Clojure data type) to given `DataOutput`.
   In most cases you want `freeze` instead.
 
-  NB each call buffers the WHOLE serialized value in memory before writing,
-  so a single value's serialized form must fit within a JVM byte array
-  (~2 GiB). Writing many values to the same `DataOutput` is unaffected."
-  [^DataOutput dout x]
-  (freeze-raw x
-    ;; Write straight out of `bb`'s backing array, no intermediate copy
-    (fn [^ByteBuffer bb] (.write dout (.array bb) (.arrayOffset bb) (.position bb)) true))
-  nil)
+  Writes incrementally, holding only a small chunk in memory at a time, so
+  counted colls (vectors, maps, sets, etc.) and `cache`d values have no total
+  size limit. Values that must be buffered to serialize are each capped at
+  ~2 GiB: strings, byte arrays, uncounted (lazy) seqs, records, deftypes,
+  custom (`extend-freeze`) types, and metadata maps.
+
+  NB writes are NOT atomic: on error `dout` may have received partial bytes."
+  [^DataOutput dout x] (io/write-typed+meta-to-out! dout x))
 
 (defn freeze-to-bb!
   "Low-level util. Serializes given arg (any Clojure data type) to given `ByteBuffer`.
@@ -672,8 +672,8 @@
 
   NB: be careful about extending to interfaces, Ref. <http://goo.gl/6gGRlU>.
 
-  The body may be replayed from the beginning when Nippy grows its internal
-  buffer. Custom writers must therefore be deterministic and replayable: avoid
+  The body may be replayed from the beginning when Nippy's internal buffer
+  fills. Custom writers must therefore be deterministic and replayable: avoid
   consuming one-shot mutable state or relying on exactly-once side effects.
 
   (defrecord MyRec [data])

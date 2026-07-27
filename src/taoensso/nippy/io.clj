@@ -139,18 +139,37 @@
         (<= y impl/range-uint)   (do (write-id bb sc/id-long-neg-lg) (.putInt   bb (int             (+ y Integer/MIN_VALUE))))
         :else                    (do (write-id bb sc/id-long-xl)     (.putLong  bb                     n))))))
 
+;; Coll headers (id + count) are written by BOTH the buffered writers below and
+;; the streaming writer (see `write-typed+meta-to-out!`). They're macros so that
+;; there's a single source of truth while the buffered writers keep emitting
+;; the header logic inline, i.e. without adding a call on the hot path.
+
+(defmacro write-coll-header*
+  "Writes coll id + count, packing sm counts as unsigned when enabled."
+  [bb id-0 id-sm* id-sm_ id-md id-lg cnt]
+  `(let [cnt# ~cnt]
+     (enc/cond
+       (do                           (zero?           cnt#)) (do (write-id ~bb ~id-0))
+       (when     impl/pack-unsigned? (impl/sm-ucount? cnt#)) (do (write-id ~bb ~id-sm*) (write-sm-ucount ~bb cnt#))
+       (when-not impl/pack-unsigned? (impl/sm-count?  cnt#)) (do (write-id ~bb ~id-sm_) (write-sm-count  ~bb cnt#))
+                                     (impl/md-count?  cnt#)  (do (write-id ~bb ~id-md)  (write-md-count  ~bb cnt#))
+       :else                                                 (do (write-id ~bb ~id-lg)  (write-lg-count  ~bb cnt#)))))
+
+(defmacro write-coll-header
+  "Writes coll id + count."
+  [bb id-0 id-sm id-md id-lg cnt]
+  `(let [cnt# ~cnt]
+     (enc/cond
+       (zero?          cnt#) (do (write-id ~bb ~id-0))
+       (impl/sm-count? cnt#) (do (write-id ~bb ~id-sm) (write-sm-count ~bb cnt#))
+       (impl/md-count? cnt#) (do (write-id ~bb ~id-md) (write-md-count ~bb cnt#))
+       :else                 (do (write-id ~bb ~id-lg) (write-lg-count ~bb cnt#)))))
+
 (defn write-vec [^ByteBuffer bb dout_ v]
   (let [cnt (count v)]
-    (if (zero? cnt)
-      (write-id bb sc/id-vec-0)
-      (do
-        (enc/cond
-          (when     impl/pack-unsigned? (impl/sm-ucount? cnt)) (do (write-id bb sc/id-vec-sm*) (write-sm-ucount bb cnt))
-          (when-not impl/pack-unsigned? (impl/sm-count?  cnt)) (do (write-id bb sc/id-vec-sm_) (write-sm-count  bb cnt))
-                                        (impl/md-count?  cnt)  (do (write-id bb sc/id-vec-md)  (write-md-count  bb cnt))
-          :else                                                (do (write-id bb sc/id-vec-lg)  (write-lg-count  bb cnt)))
-
-        (run! (fn [el] (write-typed+meta el bb dout_)) v)))))
+    (write-coll-header* bb sc/id-vec-0 sc/id-vec-sm* sc/id-vec-sm_ sc/id-vec-md sc/id-vec-lg cnt)
+    (when-not (zero? cnt)
+      (run! (fn [el] (write-typed+meta el bb dout_)) v))))
 
 (defn write-kvs
   ([^ByteBuffer bb dout_ id-lg coll]
@@ -165,19 +184,13 @@
 
   ([^ByteBuffer bb dout_ id-empty id-sm id-md id-lg coll]
    (let [cnt (count coll)]
-     (if (zero? cnt)
-       (write-id bb id-empty)
-       (do
-         (enc/cond
-           (impl/sm-count? cnt) (do (write-id bb id-sm) (write-sm-count bb cnt))
-           (impl/md-count? cnt) (do (write-id bb id-md) (write-md-count bb cnt))
-           :else                (do (write-id bb id-lg) (write-lg-count bb cnt)))
-
-         (enc/run-kv!
-           (fn [k v]
-             (write-typed+meta k bb dout_)
-             (write-typed+meta v bb dout_))
-           coll))))))
+     (write-coll-header bb id-empty id-sm id-md id-lg cnt)
+     (when-not (zero? cnt)
+       (enc/run-kv!
+         (fn [k v]
+           (write-typed+meta k bb dout_)
+           (write-typed+meta v bb dout_))
+         coll)))))
 
 (defn write-counted-coll
   ([^ByteBuffer bb dout_ id-lg coll]
@@ -188,14 +201,9 @@
 
   ([^ByteBuffer bb dout_ id-empty id-sm id-md id-lg coll]
    (let [cnt (count coll)]
-     (if (zero? cnt)
-       (write-id bb id-empty)
-       (do
-         (enc/cond
-           (impl/sm-count? cnt) (do (write-id bb id-sm) (write-sm-count bb cnt))
-           (impl/md-count? cnt) (do (write-id bb id-md) (write-md-count bb cnt))
-           :else                (do (write-id bb id-lg) (write-lg-count bb cnt)))
-         (reduce (fn [_ in] (write-typed+meta in bb dout_)) nil coll))))))
+     (write-coll-header bb id-empty id-sm id-md id-lg cnt)
+     (when-not (zero? cnt)
+       (reduce (fn [_ in] (write-typed+meta in bb dout_)) nil coll)))))
 
 (defn write-uncounted-coll
   ([^ByteBuffer bb dout_ id-empty id-sm id-md id-lg coll] (write-counted-coll bb dout_ id-empty id-sm id-md id-lg coll)) ; Extra O(n) count
@@ -222,16 +230,9 @@
   "Micro-optimized `write-kvs` w/ id-map-0 id-map-sm id-map-md id-map-lg."
   [^ByteBuffer bb dout_ m is-metadata?]
   (let [cnt (count m)]
-    (if (zero? cnt)
-      (write-id bb sc/id-map-0)
-      (do
-        (enc/cond
-          (when     impl/pack-unsigned? (impl/sm-ucount? cnt)) (do (write-id bb sc/id-map-sm*) (write-sm-ucount bb cnt))
-          (when-not impl/pack-unsigned? (impl/sm-count?  cnt)) (do (write-id bb sc/id-map-sm_) (write-sm-count  bb cnt))
-                                        (impl/md-count?  cnt)  (do (write-id bb sc/id-map-md)  (write-md-count  bb cnt))
-          :else                                                (do (write-id bb sc/id-map-lg)  (write-lg-count  bb cnt)))
-
-        (reduce-kv
+    (write-coll-header* bb sc/id-map-0 sc/id-map-sm* sc/id-map-sm_ sc/id-map-md sc/id-map-lg cnt)
+    (when-not (zero? cnt)
+      (reduce-kv
           (fn [_ k v]
             (if (enc/and? is-metadata? (fn? v) (qualified-symbol? k))
               (do
@@ -242,22 +243,16 @@
               (do
                 (write-typed+meta k bb dout_)
                 (write-typed+meta v bb dout_))))
-          nil
-          m)))))
+        nil
+        m))))
 
 (defn write-set
   "Micro-optimized `write-counted-coll` w/ id-set-0 id-set-sm id-set-md id-set-lg."
   [^ByteBuffer bb dout_ s]
   (let [cnt (count s)]
-    (if (zero? cnt)
-      (write-id bb sc/id-set-0)
-      (do
-        (enc/cond
-          (when     impl/pack-unsigned? (impl/sm-ucount? cnt)) (do (write-id bb sc/id-set-sm*) (write-sm-ucount bb cnt))
-          (when-not impl/pack-unsigned? (impl/sm-count?  cnt)) (do (write-id bb sc/id-set-sm_) (write-sm-count  bb cnt))
-                                        (impl/md-count?  cnt)  (do (write-id bb sc/id-set-md)  (write-md-count  bb cnt))
-          :else                                                (do (write-id bb sc/id-set-lg)  (write-lg-count  bb cnt)))
-        (reduce (fn [_ in] (write-typed+meta in bb dout_)) nil s)))))
+    (write-coll-header* bb sc/id-set-0 sc/id-set-sm* sc/id-set-sm_ sc/id-set-md sc/id-set-lg cnt)
+    (when-not (zero? cnt)
+      (reduce (fn [_ in] (write-typed+meta in bb dout_)) nil s))))
 
 (defn write-sz
   "Writes given arg using Java `Serializable`.
@@ -305,7 +300,15 @@
         :else                (do (write-id bb sc/id-reader-lg) (write-bytes-lg bb edn-ba)))
       true)))
 
-(defn write-cached [^ByteBuffer bb dout_ x-val cache_]
+(defn write-cached-header!
+  "Registers `x-val` in the cache and writes its cache ref id.
+  Returns true iff `x-val` itself must still be written after the id.
+
+  Shared by the buffered and streaming writers, so both agree on both the
+  emitted bytes and the cache idxs they imply. NB the cache mutation happens
+  here, alongside the id write, so a caller that discards the written bytes
+  (see `stream-leaf!`) can undo both together."
+  [^ByteBuffer bb x-val cache_]
   (let [cache @cache_
         k     #_x-val [x-val (meta x-val)] ; Also check meta for equality
         ?idx  (get cache k)
@@ -319,31 +322,30 @@
 
     (enc/cond
       (impl/sm-count? idx)
-      (case      (int idx)
-        0 (do (write-id bb sc/id-cached-0) (when first-occurance? (write-typed+meta x-val bb dout_)))
-        1 (do (write-id bb sc/id-cached-1) (when first-occurance? (write-typed+meta x-val bb dout_)))
-        2 (do (write-id bb sc/id-cached-2) (when first-occurance? (write-typed+meta x-val bb dout_)))
-        3 (do (write-id bb sc/id-cached-3) (when first-occurance? (write-typed+meta x-val bb dout_)))
-        4 (do (write-id bb sc/id-cached-4) (when first-occurance? (write-typed+meta x-val bb dout_)))
-        5 (do (write-id bb sc/id-cached-5) (when first-occurance? (write-typed+meta x-val bb dout_)))
-        6 (do (write-id bb sc/id-cached-6) (when first-occurance? (write-typed+meta x-val bb dout_)))
-        7 (do (write-id bb sc/id-cached-7) (when first-occurance? (write-typed+meta x-val bb dout_)))
-
-        (do
-          (write-id       bb sc/id-cached-sm)
-          (write-sm-count bb idx)
-          (when first-occurance? (write-typed+meta x-val bb dout_))))
+      (do
+        (case (int idx)
+          0 (write-id bb sc/id-cached-0)
+          1 (write-id bb sc/id-cached-1)
+          2 (write-id bb sc/id-cached-2)
+          3 (write-id bb sc/id-cached-3)
+          4 (write-id bb sc/id-cached-4)
+          5 (write-id bb sc/id-cached-5)
+          6 (write-id bb sc/id-cached-6)
+          7 (write-id bb sc/id-cached-7)
+          (do (write-id bb sc/id-cached-sm) (write-sm-count bb idx)))
+        first-occurance?)
 
       (impl/md-count? idx)
-      (do
-        (write-id       bb sc/id-cached-md)
-        (write-md-count bb idx)
-        (when first-occurance? (write-typed+meta x-val bb dout_)))
+      (do (write-id bb sc/id-cached-md) (write-md-count bb idx)
+          first-occurance?)
 
-      :else
       ;; (truss/ex-info! "Max cache size exceeded" {:idx idx})
-      (write-typed+meta x-val bb dout_) ; Just freeze uncached
+      :else true ; Cache full: no id, just freeze uncached
       )))
+
+(defn write-cached [^ByteBuffer bb dout_ x-val cache_]
+  (when (write-cached-header! bb x-val cache_)
+    (write-typed+meta x-val bb dout_)))
 
 ;;;;
 
@@ -1316,6 +1318,242 @@
            ;; NB `finalize` runs outside the retry loop: it may write `bb`'s
            ;; bytes onward, and must never run for a write we'll discard
            [(when result (finalize bb)) bb]))))))
+
+;;;; Streaming writes
+
+;; `with-bb` buffers a WHOLE value before writing it, so each value is capped
+;; at ~2 GiB and costs heap proportional to its size. That's fine for `freeze`
+;; (which needs the full ba anyway), but not `freeze-to-out!`.
+;;
+;; The writer below restores incremental writing. It streams counted colls
+;; element-wise through a small fixed chunk, reusing the SAME leaf writers
+;; `freeze` uses, so the two always emit identical bytes. Uncounted colls need
+;; their count up-front, so they stay buffered.
+
+(def ^:private ^:const stream-chunk-size (* 64 1024))
+
+(def ^:private stream-kinds
+  "Maps a native `IWriteTypedNoMeta` impl -> streaming strategy.
+
+  NB keyed on the impl that Clojure's protocol dispatch actually resolves to,
+  NOT on `instance?` checks. Dispatch prefers superclasses over interfaces, so
+  hand-mirroring it silently corrupts output for types like:
+    - `MapEntry`, which extends `APersistentVector`
+    - `()`, an `EmptyList` that does NOT extend `PersistentList`
+    - a `deftype` implementing `ISeq`, which resolves to the `IType` writer
+
+  Anything not found here is written as a leaf, which is always correct.
+
+  NB built eagerly, at load time: every native writer above is already
+  registered, so this snapshot can only ever hold NATIVE impls. A lookup hit
+  therefore proves dispatch resolved to a writer we emulate byte-for-byte,
+  even if `extend-freeze` later replaces one of these classes' writers."
+  (let [impls (:impls IWriteTypedNoMeta)]
+    (reduce-kv
+      (fn [m c kind] (if-let [i (get impls c)] (assoc m i kind) m))
+      {}
+      {clojure.lang.MapEntry          :map-entry
+       clojure.lang.PersistentQueue   :queue
+       clojure.lang.PersistentTreeSet :sorted-set
+       clojure.lang.PersistentTreeMap :sorted-map
+       clojure.lang.APersistentVector :vec
+       clojure.lang.APersistentSet    :set
+       clojure.lang.APersistentMap    :map
+       clojure.lang.PersistentList    :list
+       clojure.lang.ISeq              :seq
+       Cached                         :cached})))
+
+(def ^:private ^java.util.concurrent.ConcurrentHashMap stream-kinds-cache
+  "(class -> ?kind) memoization of the `stream-kinds` lookup, which is on the
+  hot path (once per value) and otherwise walks the class hierarchy each time.
+
+  Sound because dispatch is a pure fn of `(class x)`, and because
+  `stream-kinds` holds only native impls (see there), so a cached kind can
+  never be a disguised `extend-freeze` writer."
+  (java.util.concurrent.ConcurrentHashMap.))
+
+(defn- stream-kind
+  "Returns the streaming strategy for `x`, or nil to write it as a leaf."
+  [x]
+  (let [c (class x)
+        v (.get stream-kinds-cache c)]
+    (enc/cond
+      (nil? v)
+      (let [kind (get stream-kinds (find-protocol-impl IWriteTypedNoMeta x))]
+        (.put stream-kinds-cache c (or kind ::nil))
+        kind)
+
+      (identical? v ::nil) nil
+      :else v)))
+
+(defn- stream-flush!
+  "Writes `bb`'s pending bytes onward to `dout`, then clears `bb`."
+  [^DataOutput dout ^ByteBuffer bb]
+  (let [n (.position bb)]
+    (when (pos? n) (.write dout (.array bb) (.arrayOffset bb) n))
+    (.clear bb)))
+
+(defn- stream-leaf!
+  "Calls `(f x bb dout_)` to write a single value into the current chunk.
+
+  On overflow: discards the value's partial bytes, makes room, and retries.
+  Retrying is safe because (a) leaf writers mutate only `bb`'s position and
+  contents plus the cache volatile, both of which we restore, and (b) no
+  flush ever happens partway through a leaf, so its bytes are always still
+  in the chunk and above `pos`.
+
+  NB `f` takes `x` rather than closing over it, so callers can pass a constant
+  fn instead of allocating a closure per value written."
+  [^DataOutput dout bb_ dout_ cache_ f x]
+  (let [cache (when cache_ @cache_)]
+    (loop [retried? false]
+      (let [^ByteBuffer bb @bb_
+            pos  (.position bb)
+            overflowed?
+            (try (f x bb dout_) false
+              (catch BufferOverflowException _ true))]
+
+        (when overflowed?
+          (.position bb pos)                   ; Discard the value's partial bytes
+          (when cache_ (vreset! cache_ cache)) ; And any cache entries it made
+          (if (or retried? (zero? pos))
+            (vreset! bb_ (grown-bb bb)) ; Value alone exceeds chunk, need a bigger one
+            (stream-flush! dout bb))    ; Chunk had prior bytes, flushing may suffice
+          (recur true))))))
+
+;; Constant leaf writers, to avoid allocating a closure per value written
+(def ^:private leaf-typed       (fn [x   ^ByteBuffer bb dout_] (write-typed x      bb dout_)))
+(def ^:private leaf-map-entry   (fn [_   ^ByteBuffer bb _]     (write-id           bb sc/id-map-entry)))
+(def ^:private leaf-queue       (fn [cnt ^ByteBuffer bb _]     (write-id           bb sc/id-queue-lg)      (write-lg-count bb cnt)))
+(def ^:private leaf-sorted-set  (fn [cnt ^ByteBuffer bb _]     (write-id           bb sc/id-sorted-set-lg) (write-lg-count bb cnt)))
+(def ^:private leaf-sorted-map  (fn [cnt ^ByteBuffer bb _]     (write-id           bb sc/id-sorted-map-lg) (write-lg-count bb cnt)))
+(def ^:private leaf-vec-header  (fn [cnt ^ByteBuffer bb _]     (write-coll-header* bb sc/id-vec-0  sc/id-vec-sm*  sc/id-vec-sm_  sc/id-vec-md  sc/id-vec-lg  cnt)))
+(def ^:private leaf-set-header  (fn [cnt ^ByteBuffer bb _]     (write-coll-header* bb sc/id-set-0  sc/id-set-sm*  sc/id-set-sm_  sc/id-set-md  sc/id-set-lg  cnt)))
+(def ^:private leaf-map-header  (fn [cnt ^ByteBuffer bb _]     (write-coll-header* bb sc/id-map-0  sc/id-map-sm*  sc/id-map-sm_  sc/id-map-md  sc/id-map-lg  cnt)))
+(def ^:private leaf-list-header (fn [cnt ^ByteBuffer bb _]     (write-coll-header  bb sc/id-list-0 sc/id-list-sm                 sc/id-list-md sc/id-list-lg cnt)))
+(def ^:private leaf-seq-header  (fn [cnt ^ByteBuffer bb _]     (write-coll-header  bb sc/id-seq-0  sc/id-seq-sm                  sc/id-seq-md  sc/id-seq-lg  cnt)))
+(def ^:private leaf-meta        (fn [m   ^ByteBuffer bb dout_] (write-id           bb sc/id-meta) (write-map bb dout_ m :is-metadata)))
+
+(declare stream-write+meta!)
+
+(defn- stream-write-typed!
+  "Streaming counterpart to `write-typed`."
+  [^DataOutput dout bb_ dout_ cache_ x]
+  ;; Cheap pre-filter (only colls and `Cached` are ever streamed), then ask
+  ;; Clojure which impl it would actually dispatch to. `custom-freezable?`
+  ;; types are excluded since `extend-freeze` takes precedence.
+  (let [kind
+        (when (and
+                (or
+                  (instance? clojure.lang.IPersistentCollection x)
+                  (instance? Cached x))
+                (not (impl/custom-freezable? x)))
+          (stream-kind x))]
+
+    (if (nil? kind)
+      (stream-leaf! dout bb_ dout_ cache_ leaf-typed x)
+
+      (let [el! (fn [el]  (stream-write+meta! dout bb_ dout_ cache_ el))
+            hd! (fn [f v] (stream-leaf!       dout bb_ dout_ cache_ f v))
+            kv! (fn [k v] (el! k) (el! v))]
+
+        (case kind
+          :map-entry (let [^clojure.lang.MapEntry me x]
+                       (hd! leaf-map-entry nil) (el! (key me)) (el! (val me)))
+
+          :queue      (do (hd! leaf-queue       (count x)) (run! el! x))
+          :sorted-set (do (hd! leaf-sorted-set  (count x)) (run! el! x))
+          :sorted-map (do (hd! leaf-sorted-map  (count x)) (enc/run-kv! kv! x))
+          :vec        (do (hd! leaf-vec-header  (count x)) (run! el! x))
+          :set        (do (hd! leaf-set-header  (count x)) (run! el! x))
+          :map        (do (hd! leaf-map-header  (count x)) (enc/run-kv! kv! x))
+          :list       (do (hd! leaf-list-header (count x)) (run! el! x))
+
+          ;; Uncounted seqs need their count written up-front, so must be
+          ;; buffered in full - exactly as in Nippy <v3.7
+          :seq
+          (if (counted? x)
+            (do (hd! leaf-seq-header (count x)) (run! el! x))
+            (stream-leaf! dout bb_ dout_ cache_ leaf-typed x))
+
+          :cached
+          (let [x-val (.-val ^Cached x)]
+            (if (nil? cache_)
+              (el! x-val) ; No `with-cache` session, so nothing to cache against
+              ;; NB the cache id write and its cache mutation happen together
+              ;; inside the leaf, so an overflow rolls back both. On retry the
+              ;; idx is recomputed identically, so the flag we read here is
+              ;; always the successful attempt's.
+              (let [write-val?_ (volatile! false)]
+                (stream-leaf! dout bb_ dout_ cache_
+                  (fn [_ ^ByteBuffer bb _]
+                    (vreset! write-val?_ (write-cached-header! bb x-val cache_)))
+                  nil)
+                (when @write-val?_ (el! x-val))))))))))
+
+(defn- stream-write+meta!
+  "Streaming counterpart to `write-typed+meta`."
+  [^DataOutput dout bb_ dout_ cache_ x]
+  (when (instance? clojure.lang.IObj x)
+    (when-let [m (when taoensso.nippy/*incl-metadata?* (not-empty (meta x)))]
+      (stream-leaf!    dout bb_ dout_ cache_ leaf-meta m)))
+  (stream-write-typed! dout bb_ dout_ cache_ x))
+
+;; Chunk is reused between (unnested) calls: `freeze-to-out!` is often called
+;; in a tight loop, and a fresh 64 KiB alloc per call dominates its cost for
+;; small values. Nested calls take a private chunk, since `extend-freeze` impls
+;; may themselves call `freeze-to-out!` (see wiki), which would otherwise clear
+;; the chunk out from under the write in progress.
+(def ^:private ^ThreadLocal tl:stream-bb    (enc/threadlocal (ByteBuffer/allocate stream-chunk-size)))
+(def ^:private ^ThreadLocal tl:stream-depth (enc/threadlocal 0))
+
+(defn write-typed+meta-to-out!
+  "Streams given object to given `DataOutput`, holding only a small chunk of
+  its serialized bytes in memory at a time.
+
+  Counted colls and `cache`d values stream at every nesting depth, so their
+  total serialized size is unbounded. Individual values are still buffered in
+  full, so each is capped at ~2 GiB: strings, byte arrays, uncounted/lazy
+  seqs, records, deftypes, custom (`extend-freeze`) types, and metadata maps.
+
+  NB writes are NOT atomic: on error `dout` may have received partial bytes."
+  [^DataOutput dout x]
+  (let [init-depth (long (.get tl:stream-depth))]
+    (.set tl:stream-depth (inc init-depth)) ; NB nothing between this and `try`
+    (try
+      (let [bb_
+            (volatile!
+              (if (zero? init-depth)
+                (doto ^ByteBuffer (.get tl:stream-bb) (.clear))
+                (ByteBuffer/allocate stream-chunk-size)))
+
+            cache_ (.get impl/tl:cache)
+
+            ;; `DataOutput` view on the CURRENT chunk, for the rare writers
+            ;; that need one. Allocated once per stream, and re-derived if
+            ;; the chunk is replaced by a grow.
+            v_ (volatile! nil)
+            dout_
+            (fn []
+              (let [bb @bb_, cached @v_]
+                (if (and cached (identical? (nth cached 0) bb))
+                  (nth cached 1)
+                  (let [d (bb->dout bb)] (vreset! v_ [bb d]) d))))]
+
+        (stream-write+meta! dout bb_ dout_ cache_ x)
+        (stream-flush! dout ^ByteBuffer @bb_)
+
+        ;; NB only on success: on failure the thread-local still holds a valid
+        ;; (bounded) chunk, and the next call will clear it before reuse
+        (when (zero? init-depth)
+          (let [^ByteBuffer bb @bb_] ; A big leaf may have grown it, don't retain if huge
+            (.set tl:stream-bb
+              (if (<= (.capacity bb) max-cached-bb-capacity)
+                bb
+                (ByteBuffer/allocate stream-chunk-size))))))
+
+      (finally (.set tl:stream-depth init-depth))))
+  nil)
 
 (comment
   (enc/qb 1e6 ; [115.8 125.5]
