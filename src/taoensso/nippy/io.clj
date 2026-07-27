@@ -1239,9 +1239,25 @@
                    (do (.append sb (char b)) (recur))))))))))))
 
 (def ^:private ^:const max-cached-bb-capacity (* 1024 1024))
+(def ^:private ^:const max-bb-capacity
+  "Max safe JVM array size, so max serialized size of a single frozen value."
+  (- Integer/MAX_VALUE 8))
+
+(defn- grown-bb
+  "Returns a new `ByteBuffer` with double the capacity of the given one,
+  capped at `max-bb-capacity`. Throws a clear error when already at cap."
+  ^ByteBuffer [^ByteBuffer bb]
+  (let [capacity (long (.capacity bb))]
+    (when (>= capacity (long max-bb-capacity))
+      (truss/ex-info! "Serialized value too large to freeze"
+        {:max-size max-bb-capacity}))
+
+    (ByteBuffer/allocate
+      (int (min (long max-bb-capacity) (* 2 capacity))))))
 
 (let [^ThreadLocal tl:bb    (enc/threadlocal (java.nio.ByteBuffer/allocate 512))
-      ^ThreadLocal tl:depth (enc/threadlocal 0)]
+      ^ThreadLocal tl:depth (enc/threadlocal 0)
+      copy-bb (fn [^ByteBuffer bb] (java.util.Arrays/copyOf (.array bb) (.position bb)))]
 
   ;; @LATER: Consider using a simple pool here, with auto GC
 
@@ -1249,9 +1265,15 @@
     "Executes `(f bb dout_)` and returns ?ba of bb when `f` returns truthy.
       `bb` ---- Auto-expanding `ByteBuffer`. Will reuse ThreadLocal when possible,
                 retaining up to 1 MiB per thread for reuse.
-      `dout_` - Call (dout_) to get a `DataOutput` view on `bb`."
+      `dout_` - Call (dout_) to get a `DataOutput` view on `bb`.
+
+    `finalize` is called on the final (settled) `bb` to produce the return
+    value, and defaults to copying `bb`'s written bytes to a new ba. Callers
+    that only need to consume the bytes (e.g. write them to a `DataOutput`)
+    can pass a custom `finalize` to avoid that copy."
     ([          f] (with-bb 512 f))
-    ([init-size f]
+    ([init-size f] (with-bb init-size f copy-bb))
+    ([init-size f finalize]
      (let [init-depth (long (.get      tl:depth))
            cache_           (.get impl/tl:cache)
            init-cache (when cache_ @cache_)]
@@ -1261,7 +1283,7 @@
          (enc/cond
            (zero? init-depth) ; Unnested call
            (let [^ByteBuffer bb (.get tl:bb)]
-             (when-let [[ba final-bb] (with-bb bb cache_ init-cache f)]
+             (when-let [[ba final-bb] (with-bb bb cache_ init-cache f finalize)]
                (let [^ByteBuffer cached-bb
                      (cond
                        (<= (.capacity ^ByteBuffer final-bb) max-cached-bb-capacity) final-bb
@@ -1274,25 +1296,26 @@
 
            :else ; Nested call
            (let [private-bb (ByteBuffer/allocate (.capacity ^ByteBuffer (.get tl:bb)))] ; Isolate from parent bb
-             (when-let [[ba _bb] (with-bb private-bb cache_ init-cache f)]
+             (when-let [[ba _bb] (with-bb private-bb cache_ init-cache f finalize)]
                ba)))
 
          (finally (.set tl:depth init-depth)))))
 
-    ([bb cache_ cache f]
+    ([bb cache_ cache f finalize]
      (loop [^ByteBuffer bb bb]
        (.clear bb)                          ; Reset buffer before (re)use
        (when cache_ (vreset! cache_ cache)) ; Reset cache  before (re)use
        (let [dout_  (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (bb->dout bb)))))
              result
              (try
-               (when (f bb dout_)
-                 (java.util.Arrays/copyOf (.array bb) (.position bb)))
+               (if (f bb dout_) true false)
                (catch java.nio.BufferOverflowException _ ::grow))]
 
          (if (identical? result ::grow)
-           (recur (ByteBuffer/allocate (* 2 (.capacity bb))))
-           [result bb]))))))
+           (recur (grown-bb bb))
+           ;; NB `finalize` runs outside the retry loop: it may write `bb`'s
+           ;; bytes onward, and must never run for a write we'll discard
+           [(when result (finalize bb)) bb]))))))
 
 (comment
   (enc/qb 1e6 ; [115.8 125.5]
