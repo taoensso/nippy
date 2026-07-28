@@ -616,6 +616,37 @@
        (is (>= size-stress (* 3 size-cached)))
        (is (<  size-stress (* 4 size-cached))))]))
 
+(deftest _caching-session-recovery
+  ;; Cache entries from a failed write mustn't poison later writes in a
+  ;; shared `with-cache` session
+  (let [baos (java.io.ByteArrayOutputStream.)
+        dout (java.io.DataOutputStream. baos)]
+
+    (nippy/with-cache
+      ;; `(Object.)` is reliably unfreezable (not Serializable or readable)
+      (is (throws? (nippy/freeze-to-out! dout [(nippy/cache "shared") (Object.)])))
+      (nippy/freeze-to-out! dout [(nippy/cache "shared")]))
+
+    (let [din (java.io.DataInputStream.
+                (java.io.ByteArrayInputStream. (.toByteArray baos)))]
+      (is (= ["shared"] (nippy/with-cache (nippy/thaw-from-in! din)))))))
+
+(deftest _caching-session-sink-failure
+  ;; Cache must also be restored when the SINK (vs serialization) fails
+  (let [baos (java.io.ByteArrayOutputStream.)
+        dout (java.io.DataOutputStream. baos)
+        bad-dout ; Throws before accepting any bytes
+        (proxy [java.io.DataOutputStream] [baos]
+          (write [_ba _off _len] (throw (java.io.IOException. "sink failed"))))]
+
+    (nippy/with-cache
+      (is (throws? (nippy/freeze-to-out! bad-dout [:kw1 (nippy/cache "v")])))
+      (nippy/freeze-to-out! dout [:kw1 (nippy/cache "v")]))
+
+    (let [din (java.io.DataInputStream.
+                (java.io.ByteArrayInputStream. (.toByteArray baos)))]
+      (is (= [:kw1 "v"] (nippy/with-cache (nippy/thaw-from-in! din)))))))
+
 (deftest _caching-metadata
   (let [v1 (with-meta [] {:id :v1})
         v2 (with-meta [] {:id :v2})
