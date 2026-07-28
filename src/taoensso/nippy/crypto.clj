@@ -102,46 +102,55 @@
     :or   {cipher-kit    cipher-kit-aes-gcm
            rand-bytes-fn rand-bytes}}]
 
-  (let [iv-size     (long (get-iv-size cipher-kit))
-        iv-ba       (rand-bytes-fn iv-size)
-        prefix-ba   (if ?salt-ba (enc/ba-concat iv-ba ?salt-ba) iv-ba)
+  (let [iv-size     (int (get-iv-size cipher-kit))
+        ^bytes iv-ba (rand-bytes-fn iv-size)
+        salt-size   (if ?salt-ba (alength ^bytes ?salt-ba) 0)
+        prefix-size (+ iv-size salt-size)
         key-spec    (get-key-spec   cipher-kit key-ba)
         param-spec  (get-param-spec cipher-kit iv-ba)
-        cipher      (get-cipher     cipher-kit)]
+        ^javax.crypto.Cipher cipher (get-cipher cipher-kit)]
 
     (.init cipher javax.crypto.Cipher/ENCRYPT_MODE key-spec param-spec)
-    (enc/ba-concat prefix-ba (.doFinal cipher plain-ba))))
+    (let [plain-len (alength ^bytes plain-ba)
+          out-ba    (byte-array (+ prefix-size (.getOutputSize cipher plain-len)))
+          _         (System/arraycopy iv-ba 0 out-ba 0 iv-size)
+          _         (when ?salt-ba (System/arraycopy ?salt-ba 0 out-ba iv-size salt-size))
+          enc-len   (.doFinal cipher ^bytes plain-ba 0 plain-len out-ba prefix-size)
+          out-len   (+ prefix-size enc-len)]
+
+      (if (== out-len (alength out-ba))
+        out-ba
+        (java.util.Arrays/copyOf out-ba (int out-len))))))
 
 (comment (encrypt {:?salt-ba nil :key-ba (take-ba 16 (sha512-key-ba nil "pwd")) :plain-ba (utf8->ba "data")}))
 
 (defn decrypt
   [{:keys [cipher-kit salt-size salt->key-fn enc-ba]
     :or   {cipher-kit cipher-kit-aes-gcm}}]
-  (let [salt-size          (long salt-size)
-        iv-size            (long (get-iv-size cipher-kit))
-        prefix-size        (+ iv-size salt-size)
-        enc-ba-len         (alength ^bytes enc-ba)
-        _                  (when (< enc-ba-len prefix-size)
-                             ;; Guard the prefix reads below, which would
-                             ;; otherwise fail obscurely - and only after a
-                             ;; needless key derivation - on truncated input
-                             (throw
-                               (java.io.EOFException.
-                                 (str "Encrypted payload too short: need at least "
-                                   prefix-size " bytes, have " enc-ba-len "."))))
+  (let [salt-size   (int salt-size)
+        iv-size     (int (get-iv-size cipher-kit))
+        prefix-size (+ iv-size salt-size)
+        enc-ba-len  (alength ^bytes enc-ba)
+        _           (when (< enc-ba-len prefix-size)
+                      ;; Guard the prefix reads and `doFinal` length below, which
+                      ;; would otherwise fail obscurely (or after a needless key
+                      ;; derivation) on truncated input
+                      (throw
+                        (java.io.EOFException.
+                          (str "Encrypted payload too short: need at least "
+                            prefix-size " bytes, have " enc-ba-len "."))))
 
-        [prefix-ba enc-ba] (enc/ba-split enc-ba prefix-size)
-        [iv-ba salt-ba]    (if (pos? salt-size)
-                             (enc/ba-split prefix-ba iv-size)
-                             [prefix-ba nil])
+        iv-ba       (java.util.Arrays/copyOf ^bytes enc-ba iv-size)
+        salt-ba     (when (pos? salt-size)
+                      (java.util.Arrays/copyOfRange ^bytes enc-ba iv-size prefix-size))
 
         key-ba     (salt->key-fn salt-ba)
         key-spec   (get-key-spec   cipher-kit key-ba)
         param-spec (get-param-spec cipher-kit iv-ba)
-        cipher     (get-cipher     cipher-kit)]
+        ^javax.crypto.Cipher cipher (get-cipher cipher-kit)]
 
     (.init cipher javax.crypto.Cipher/DECRYPT_MODE key-spec param-spec)
-    (.doFinal cipher enc-ba)))
+    (.doFinal cipher ^bytes enc-ba prefix-size (- enc-ba-len prefix-size))))
 
 (comment
   (do
