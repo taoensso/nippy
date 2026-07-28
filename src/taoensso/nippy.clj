@@ -441,19 +441,12 @@
   counted colls (vectors, maps, sets, etc.) and `cache`d values have no total
   size limit. Values that must be buffered to serialize are each capped at
   ~2 GiB: strings, byte arrays, uncounted (lazy) seqs, records, deftypes,
-  custom (`extend-freeze`) types, and metadata maps.
-
-  NB writes are NOT atomic: on error `dout` may have received partial bytes.
-  A shared `with-cache` session's cache IS restored though, so a failed write
-  that emitted nothing leaves the session fully intact."
+  custom (`extend-freeze`) types, and metadata maps."
   [^DataOutput dout x] (io/write-typed+meta-to-out! dout x))
 
 (defn freeze-to-bb!
   "Low-level util. Serializes given arg (any Clojure data type) to given `ByteBuffer`.
-  In most cases you want `freeze` instead.
-
-  On error, restores the buffer's position and (when using a shared
-  `with-cache` session) the session's cache, so both are safe to reuse."
+  In most cases you want `freeze` instead."
   [^ByteBuffer bb x]
   (let [bb     (io/bb-big-endian! bb)
         pos    (.position bb)
@@ -618,11 +611,7 @@
 
 (defn thaw-from-in!
   "Low-level util. Deserializes a frozen object from given `DataInput` to
-  its original Clojure data type. In most cases you want `thaw` instead.
-
-  Note that a `DataInput` has no known remaining length, so malformed input
-  may trigger large allocations before failing. Prefer the buffered utils
-  (`thaw`, `fast-thaw`) for input you don't control."
+  its original Clojure data type. In most cases you want `thaw` instead."
   [^DataInput din] (io/read-typed (DataInputReader. din)))
 
 (defn thaw-from-string
