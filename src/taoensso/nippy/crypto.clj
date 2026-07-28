@@ -120,6 +120,16 @@
   (let [salt-size          (long salt-size)
         iv-size            (long (get-iv-size cipher-kit))
         prefix-size        (+ iv-size salt-size)
+        enc-ba-len         (alength ^bytes enc-ba)
+        _                  (when (< enc-ba-len prefix-size)
+                             ;; Guard the prefix reads below, which would
+                             ;; otherwise fail obscurely - and only after a
+                             ;; needless key derivation - on truncated input
+                             (throw
+                               (java.io.EOFException.
+                                 (str "Encrypted payload too short: need at least "
+                                   prefix-size " bytes, have " enc-ba-len "."))))
+
         [prefix-ba enc-ba] (enc/ba-split enc-ba prefix-size)
         [iv-ba salt-ba]    (if (pos? salt-size)
                              (enc/ba-split prefix-ba iv-size)
