@@ -323,6 +323,27 @@
       (do (bb-writable! bb 3) (write-id bb sc/id-cached-md) (write-md-count bb idx))
       (truss/ex-info! "Cache ref idx out of range" {:idx idx}))))
 
+(defn write-cached-kw
+  "Like `write-cached` but specialized for cached keywords:
+  uses bare kw cache keys (kws can't have meta, can't `.equals` the
+  `[<val> <meta>]` keys used for manually cached vals), and writes kws
+  directly (avoiding re-dispatch through the `Keyword` writer)."
+  [^ByteBuffer bb ^clojure.lang.Keyword kw ^CacheState state]
+  (let [^java.util.HashMap m (.-freeze-idxs state)
+        ?idx (.get m kw)]
+
+    (if-let [idx ?idx]
+      (write-cached-ref bb idx) ; Ref to previously written kw
+      (let [idx (.size m)]
+        (if (impl/md-count? idx)
+          (do
+            (.put m kw idx)
+            (write-cached-ref bb idx)
+            (write-kw bb kw))
+
+          ;; Cache full, just freeze uncached (and don't grow cache)
+          (write-kw bb kw))))))
+
 (defn write-cached-header!
   "Registers `x-val` in the cache and writes its cache ref id.
   Returns true iff `x-val` itself must still be written after the id.
@@ -332,21 +353,48 @@
   here, alongside the id write, so a caller that discards the written bytes
   (see `stream-leaf!`) can undo both together."
   [^ByteBuffer bb x-val ^CacheState state]
-  (let [^java.util.HashMap m (.-freeze-idxs state)
-        k    [x-val (meta x-val)] ; Also check meta for equality
-        ?idx (.get m k)]
+  (if (keyword? x-val)
+    ;; Coalesce with auto-cached kws. NB immediately caches (`cache` is the
+    ;; user explicitly requesting caching), and writes the kw itself since
+    ;; kws are always leaves - so nothing's left for the caller to write
+    (do (write-cached-kw bb x-val state) false)
 
-    (if-let [idx ?idx]
-      (do (write-cached-ref bb idx) false) ; Ref to previously written value
-      (let [idx (.size m)]
-        (when (impl/md-count? idx) ; Else cache full: no id, just freeze uncached
-          (.put m k idx)
-          (write-cached-ref bb idx))
-        true))))
+    (let [^java.util.HashMap m (.-freeze-idxs state)
+          k    [x-val (meta x-val)] ; Also check meta for equality
+          ?idx (.get m k)]
+
+      (if-let [idx ?idx]
+        (do (write-cached-ref bb idx) false) ; Ref to previously written value
+        (let [idx (.size m)]
+          (when (impl/md-count? idx) ; Else cache full: no id, just freeze uncached
+            (.put m k idx)
+            (write-cached-ref bb idx))
+          true)))))
 
 (defn write-cached [^ByteBuffer bb dout_ x-val ^CacheState state]
   (when (write-cached-header! bb x-val state)
     (write-typed+meta x-val bb dout_)))
+
+(def ^:private ^:const max-seen-kws 32768) ; Bound memory use
+
+(defn write-auto-cached-kw
+  "Like `write-cached-kw` but starts caching only on a kw's SECOND
+  occurrence per session (1st occurrence written plain), so that kws
+  that never repeat don't pay any caching cost in the output."
+  [^ByteBuffer bb ^clojure.lang.Keyword kw ^CacheState state]
+  (if-let [idx (.get ^java.util.HashMap (.-freeze-idxs state) kw)]
+    (write-cached-ref bb idx) ; Ref to previously written kw
+    (let [^java.util.HashSet seen (.-seen-kws state)]
+      (enc/cond
+        (.contains seen kw) (write-cached-kw bb kw state) ; 2nd+ occurrence, start caching
+        (< (.size seen) max-seen-kws)
+        (do ; 1st occurrence
+          (.add seen kw)
+          (.add ^java.util.ArrayList (.-seen-log state) kw) ; For `cache-restore!`
+          (write-kw bb kw))
+
+        :else (write-kw bb kw) ; Seen-kws full
+        ))))
 
 ;;;;
 
@@ -384,7 +432,11 @@
 
 (writer Boolean              nil (if (.booleanValue x) (write-id bb sc/id-true) (write-id bb sc/id-false)))
 (writer String               nil (write-str bb x))
-(writer clojure.lang.Keyword nil (write-kw  bb x))
+(writer clojure.lang.Keyword nil
+  (if-let [state (.get impl/tl:cache)]
+    (write-auto-cached-kw bb x state)
+    (write-kw bb x)))
+
 (writer clojure.lang.Symbol  nil (write-sym bb x))
 
 (writer Character sc/id-char    (.putChar   bb (unchecked-char (int x))))

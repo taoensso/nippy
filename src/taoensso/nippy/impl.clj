@@ -319,15 +319,20 @@
   metadata will be efficiently encoded as references to this one.
 
   (freeze [(cache \"foo\") (cache \"foo\") (cache \"foo\")])
-    will incl. a single \"foo\", plus 2x single-byte references to \"foo\"."
+    will incl. a single \"foo\", plus 2x single-byte references to \"foo\".
+
+  Repeated keywords are cached automatically so don't need manual wrapping."
   [x] (if (instance? Cached x) x (Cached. x)))
 
 (deftype CacheState
-  [^java.util.HashMap freeze-idxs ; {<k> <idx>} for freezing, k = [<val> <meta>]
-   ^java.util.HashMap thaw-vals]) ; {<idx> <val>} for thawing
+  [^java.util.HashMap   freeze-idxs ; {<k> <idx>} for freezing, k = <kw> | [<val> <meta>]
+   ^java.util.HashMap   thaw-vals   ; {<idx> <val>} for thawing
+   ^java.util.HashSet   seen-kws    ; #{<kw>} seen this session, Ref. `write-auto-cached-kw`
+   ^java.util.ArrayList seen-log])  ; `seen-kws` in insertion order, for `cache-restore!`
 
 (defn new-cache-state ^CacheState []
-  (CacheState. (java.util.HashMap.) (java.util.HashMap.)))
+  (CacheState. (java.util.HashMap.) (java.util.HashMap.)
+    (java.util.HashSet.) (java.util.ArrayList.)))
 
 (def ^ThreadLocal tl:cache
   "?CacheState for current freeze/thaw session."
@@ -338,6 +343,12 @@
 
   This is a low-level util: you won't need to use this yourself unless
   you're using `freeze-to-out!` or `thaw-from-in!` (also low-level utils).
+
+  ALL values frozen within a single `with-cache` body MUST be thawed
+  together within a single corresponding `with-cache` body:
+
+    (with-cache (freeze-to-out! dout x1) (freeze-to-out! dout x2))
+    (with-cache [(thaw-from-in! din) (thaw-from-in! din)])
 
   See also `cache`."
   [& body]
@@ -354,24 +365,61 @@
            (.set    tl:cache prev#))))))
 
 (defn cache-mark
-  "Returns a checkpoint of given `CacheState`'s `freeze-idxs`,
-  for `cache-restore!`. O(1): exploits the invariant that entries are only
-  ever added, with idx = current size."
-  ^long [^CacheState state] (.size ^java.util.HashMap (.-freeze-idxs state)))
+  "Returns a checkpoint of given `CacheState`'s write state (`freeze-idxs`
+  + `seen-kws`), for `cache-restore!`. O(1): exploits the invariant that
+  entries are only ever added (with idx = current size), packing the two
+  sizes into a single long."
+  ^long [^CacheState state]
+  (bit-or
+    (bit-shift-left (long (.size ^java.util.HashMap   (.-freeze-idxs state))) 32)
+    (do             (long (.size ^java.util.ArrayList (.-seen-log    state))))))
 
 (defn cache-restore!
-  "Restores given `CacheState`'s `freeze-idxs` to given `cache-mark`
+  "Restores given `CacheState`'s write state to given `cache-mark`
   checkpoint, returns nil. Necessary before reattempting or abandoning a
-  write: entries added during a failed/aborted attempt would otherwise later
-  yield cache refs to values whose bytes were never retained."
+  write: `freeze-idxs` entries added during a failed/aborted attempt would
+  otherwise later yield cache refs to values whose bytes were never
+  retained, and stale `seen-kws` entries would make byte output of retried
+  writes differ from non-retried writes of equal data."
   [^CacheState state ^long mark]
-  (let [^java.util.HashMap m (.-freeze-idxs state)]
-    (when (> (.size m) mark)
-      (if (zero? mark)
+  (let [idx-mark (bit-shift-right mark 32)
+        log-mark (bit-and         mark 0xFFFFFFFF)
+        ^java.util.HashMap m (.-freeze-idxs state)]
+
+    (when (> (.size m) idx-mark)
+      (if (zero? idx-mark)
         (.clear m)
         (.removeIf (.values m)
           (reify java.util.function.Predicate
-            (test [_ idx] (>= (long idx) mark))))))
+            (test [_ idx] (>= (long idx) idx-mark))))))
+
+    (let [^java.util.ArrayList log (.-seen-log state)]
+      (when (> (.size log) log-mark)
+        (let [^java.util.HashSet seen (.-seen-kws state)
+              tail (.subList log (int log-mark) (.size log))]
+          (doseq [kw tail] (.remove seen kw))
+          (.clear tail)))) ; Truncates backing list
+    nil))
+
+;;
+
+(defn thaw-mark
+  "Returns a checkpoint of given `CacheState`'s `thaw-vals`,
+  for `thaw-restore!`. O(1)."
+  ^long [^CacheState state] (.size ^java.util.HashMap (.-thaw-vals state)))
+
+(defn thaw-restore!
+  "Restores given `CacheState`'s `thaw-vals` to given `thaw-mark`
+  checkpoint, returns nil. Necessary when abandoning a failed read in a
+  shared session: entries from the failed read would otherwise poison
+  later reads in the same session."
+  [^CacheState state ^long mark]
+  (let [^java.util.HashMap m (.-thaw-vals state)]
+    ;; `read-cached` maintains contiguous Long keys [0, size)
+    (loop [i (dec (.size m))]
+      (when (>= i mark)
+        (.remove m i)
+        (recur (dec i))))
     nil))
 
 ;;;;
@@ -462,17 +510,33 @@
         :content   edn
         :exception e}})))
 
-(let [not-found (Object.)]
+(let [not-found (Object.)
+      pending   (Object.)]
 
   (defn read-cached [read-typed idx input-arg]
     (if-let [^CacheState state (.get tl:cache)]
       (let [^java.util.HashMap m (.-thaw-vals state)
             idx (long idx) ; Normalize key type (callers give Long | Integer)
-            v   (.getOrDefault m idx not-found)]
-        (if (identical? v not-found)
-          (let [x (read-typed input-arg)]
-            (.put m idx x)
-            x)
-          v))
+            v   (.getOrDefault m idx not-found)
+            n   (.size m)]
+
+        (enc/cond
+          (not (identical? v not-found))
+          (if (identical? v pending)
+            (truss/ex-info! "Bad cache ref: cyclic or corrupt data?" {:idx idx})
+            v)
+
+          (== idx n) ; First occurrence
+          ;; Reserve idx before reading: the value may contain nested first
+          ;; occurrences, whose idxs follow this one.
+          (do
+            (.put m idx pending)
+            (let [x (read-typed input-arg)]
+              (.put m idx x)
+              x))
+
+          :else
+          (truss/ex-info! "Bad cache ref: earlier `with-cache` session or corrupt data?"
+            {:idx idx, :cached-count n})))
 
       (truss/ex-info! "Can't thaw without cache available. See `with-cache`." {}))))

@@ -441,12 +441,18 @@
   counted colls (vectors, maps, sets, etc.) and `cache`d values have no total
   size limit. Values that must be buffered to serialize are each capped at
   ~2 GiB: strings, byte arrays, uncounted (lazy) seqs, records, deftypes,
-  custom (`extend-freeze`) types, and metadata maps."
+  custom (`extend-freeze`) types, and metadata maps.
+
+  ALL values frozen within a single `with-cache` body MUST be thawed
+  together within a single corresponding `with-cache` body."
   [^DataOutput dout x] (io/write-typed+meta-to-out! dout x))
 
 (defn freeze-to-bb!
   "Low-level util. Serializes given arg (any Clojure data type) to given `ByteBuffer`.
-  In most cases you want `freeze` instead."
+  In most cases you want `freeze` instead.
+
+  ALL values frozen within a single `with-cache` body MUST be thawed
+  together within a single corresponding `with-cache` body."
   [^ByteBuffer bb x]
   (let [bb    (io/bb-big-endian! bb)
         pos   (.position bb)
@@ -604,15 +610,40 @@
 (defn- thaw-from-bb* [^ByteBuffer bb] (io/read-typed (ByteBufferReader. bb)))
 (defn  thaw-from-bb!
   "Low-level util. Deserializes a frozen object from given `ByteBuffer` to
-  its original Clojure data type. In most cases you want `thaw` instead."
+  its original Clojure data type. In most cases you want `thaw` instead.
+
+  ALL values frozen within a single `with-cache` body MUST be thawed
+  together within a single corresponding `with-cache` body."
   [^ByteBuffer bb]
   (io/bb-big-endian! bb)
-  (thaw-from-bb*     bb))
+  (if-let [state (.get impl/tl:cache)]
+    (let [mark (impl/thaw-mark state)]
+      (try
+        (thaw-from-bb* bb)
+        (catch Throwable t
+          ;; Cache entries from the failed read would corrupt/poison
+          ;; later reads in this shared session
+          (impl/thaw-restore! state mark)
+          (throw t))))
+    (thaw-from-bb* bb)))
 
 (defn thaw-from-in!
   "Low-level util. Deserializes a frozen object from given `DataInput` to
-  its original Clojure data type. In most cases you want `thaw` instead."
-  [^DataInput din] (io/read-typed (DataInputReader. din)))
+  its original Clojure data type. In most cases you want `thaw` instead.
+
+  ALL values frozen within a single `with-cache` body MUST be thawed
+  together within a single corresponding `with-cache` body."
+  [^DataInput din]
+  (if-let [state (.get impl/tl:cache)]
+    (let [mark (impl/thaw-mark state)]
+      (try
+        (io/read-typed (DataInputReader. din))
+        (catch Throwable t
+          ;; Cache entries from the failed read would corrupt/poison
+          ;; later reads in this shared session
+          (impl/thaw-restore! state mark)
+          (throw t))))
+    (io/read-typed (DataInputReader. din))))
 
 (defn thaw-from-string
   "Like `thaw`, but takes a Base64-encoded string.
