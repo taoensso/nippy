@@ -2,6 +2,52 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.8.1` (2026-07-28)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.8.1)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+**Hotfix** release, should be a safe update for users on v3.8.0 - but as always please **test carefully** before using in production, and please **report any unexpected problems** - thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## Since v3.8.0 (2026-07-26)
+
+- [fix] `freeze-to-out!`: restore size-unlimited streaming \[2613609]
+- [fix] `with-bb`: cap buffer growth at max array size \[930a3cb]
+- [sec] Thaw: validate buffered allocation lengths \[ca0fa4f]
+- [fix] Thaw: reject negative collection counts \[b2e16e9]
+- [fix] Crypto: reject truncated encrypted payloads \[fe8ab01]
+- [fix] `with-cache`: restore outer cache \[c368c4a]
+- [fix] `freeze-to-out!`: restore cache on failure \[bb8078b]
+- [fix] `freeze-to-bb!`: restore state on failure \[c0b2228]
+- [fix] `write-sz`: serialize before writing header \[7bc1e3e]
+
+---
+
+# `v3.7.1` (2026-07-28)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.7.1)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+**Hotfix** release, should be a safe update for users on v3.7.0 - but as always please **test carefully** before using in production, and please **report any unexpected problems** - thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## Since v3.7.0 (2026-07-22)
+
+- [fix] `freeze-to-out!`: restore size-unlimited streaming \[323167c]
+- [fix] `with-bb`: cap buffer growth at max array size \[5c6a467]
+- [sec] Thaw: validate buffered allocation lengths \[d7f5242]
+- [fix] Thaw: reject negative collection counts \[1b89f10]
+- [fix] Crypto: reject truncated encrypted payloads \[7d1df89]
+- [fix] `with-cache`: restore outer cache \[c2f59b2]
+- [fix] `freeze-to-out!`: restore cache on failure \[9f4f311]
+- [fix] `freeze-to-bb!`: restore state on failure \[3b7609b]
+- [fix] `write-sz`: serialize before writing header \[0ea3733]
+
+---
+
 # `v3.8.0` (2026-07-26)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.8.0)
