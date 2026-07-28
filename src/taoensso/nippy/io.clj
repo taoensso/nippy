@@ -1516,9 +1516,15 @@
   full, so each is capped at ~2 GiB: strings, byte arrays, uncounted/lazy
   seqs, records, deftypes, custom (`extend-freeze`) types, and metadata maps.
 
-  NB writes are NOT atomic: on error `dout` may have received partial bytes."
+  NB writes are NOT atomic: on error `dout` may have received partial bytes.
+  A shared `with-cache` session's cache IS restored though, so a failed write
+  that flushed nothing (the usual case, since a chunk holds 64 KiB) leaves the
+  session fully intact."
   [^DataOutput dout x]
-  (let [init-depth (long (.get tl:stream-depth))]
+  (let [init-depth (long (.get tl:stream-depth))
+        cache_     (.get impl/tl:cache)
+        cache      (when cache_ @cache_)]
+
     (.set tl:stream-depth (inc init-depth)) ; NB nothing between this and `try`
     (try
       (let [bb_
@@ -1526,8 +1532,6 @@
               (if (zero? init-depth)
                 (doto ^ByteBuffer (.get tl:stream-bb) (.clear))
                 (ByteBuffer/allocate stream-chunk-size)))
-
-            cache_ (.get impl/tl:cache)
 
             ;; `DataOutput` view on the CURRENT chunk, for the rare writers
             ;; that need one. Allocated once per stream, and re-derived if
@@ -1551,6 +1555,13 @@
               (if (<= (.capacity bb) max-cached-bb-capacity)
                 bb
                 (ByteBuffer/allocate stream-chunk-size))))))
+
+      (catch Throwable t
+        ;; Cache entries from the abandoned write would poison later writes in
+        ;; a shared (`with-cache`) session: the next write would emit a bare
+        ;; ref to a value whose bytes were never emitted
+        (when cache_ (vreset! cache_ cache))
+        (throw t))
 
       (finally (.set tl:stream-depth init-depth))))
   nil)
