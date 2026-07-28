@@ -440,11 +440,12 @@
        ;; Streams have no known remaining length, so only negative lengths
        ;; can be rejected before allocation
        (doseq [[label type-id] cases]
-         (is (throws? java.io.EOFException
-               (nippy/thaw-from-in!
-                 (java.io.DataInputStream.
-                   (java.io.ByteArrayInputStream. (malformed type-id -7)))))
-           (str label ", stream, negative length")))))
+         (let [e (truss/throws :default
+                   (nippy/thaw-from-in!
+                     (java.io.DataInputStream.
+                       (java.io.ByteArrayInputStream. (malformed type-id -7)))))]
+           (is (instance? java.io.EOFException (ex-cause e))
+             (str label ", stream, negative length"))))))
 
    (testing "Malformed collection counts"
      ;; These build incrementally so there's no allocation to guard, but a
@@ -471,11 +472,12 @@
             (is (instance? java.io.EOFException (ex-cause e))
               (str label ", buffered, count " n)))
 
-          (is (throws? java.io.EOFException
-                (nippy/thaw-from-in!
-                  (java.io.DataInputStream.
-                    (java.io.ByteArrayInputStream. (malformed type-id n)))))
-            (str label ", stream, count " n))])))
+          (let [e (truss/throws :default
+                    (nippy/thaw-from-in!
+                      (java.io.DataInputStream.
+                        (java.io.ByteArrayInputStream. (malformed type-id n)))))]
+            (is (instance? java.io.EOFException (ex-cause e))
+              (str label ", stream, count " n)))])))
 
    (testing "Thread-local buffer retention"
      (let [max-capacity @(ns-resolve 'taoensso.nippy.io 'max-cached-bb-capacity)
