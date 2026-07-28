@@ -331,12 +331,12 @@
   ;; NB unsafe for the arbitrary user values held by `freeze-idxs`.
   [^java.util.HashMap         freeze-idxs ; {[<val> <meta>] <idx>} for freezing `cache`d vals
    ^java.util.IdentityHashMap kw-idxs     ; {<kw> <idx>} for freezing cached kws
-   ^java.util.HashMap         thaw-vals   ; {<idx> <val>} for thawing
+   ^java.util.ArrayList       thaw-vals   ; [<val> ...] for thawing, indexed by idx
    ^java.util.IdentityHashMap seen-kws    ; #{<kw>} seen this session, Ref. `write-auto-cached-kw`
    ^java.util.ArrayList       seen-log])  ; `seen-kws` in insertion order, for `cache-restore!`
 
 (defn new-cache-state ^CacheState []
-  (CacheState. (java.util.HashMap.) (java.util.IdentityHashMap.) (java.util.HashMap.)
+  (CacheState. (java.util.HashMap.) (java.util.IdentityHashMap.) (java.util.ArrayList.)
     (java.util.IdentityHashMap.) (java.util.ArrayList.)))
 
 (defn cache-idx-count
@@ -422,20 +422,18 @@
 (defn thaw-mark
   "Returns a checkpoint of given `CacheState`'s `thaw-vals`,
   for `thaw-restore!`. O(1)."
-  ^long [^CacheState state] (.size ^java.util.HashMap (.-thaw-vals state)))
+  ^long [^CacheState state] (.size ^java.util.ArrayList (.-thaw-vals state)))
 
 (defn thaw-restore!
   "Restores given `CacheState`'s `thaw-vals` to given `thaw-mark`
   checkpoint, returns nil. Necessary when abandoning a failed read in a
-  shared session: entries from the failed read would otherwise poison
-  later reads in the same session."
+  shared session: entries (including reserved slots) from the failed read
+  would otherwise poison later reads in the same session."
   [^CacheState state ^long mark]
-  (let [^java.util.HashMap m (.-thaw-vals state)]
-    ;; `read-cached` maintains contiguous Long keys [0, size)
-    (loop [i (dec (.size m))]
-      (when (>= i mark)
-        (.remove m i)
-        (recur (dec i))))
+  (let [^java.util.ArrayList l (.-thaw-vals state)
+        n (.size l)]
+    (when (> n mark)
+      (.clear (.subList l (int mark) n))) ; Truncates backing list
     nil))
 
 ;;;;
@@ -526,31 +524,41 @@
         :content   edn
         :exception e}})))
 
-(let [not-found (Object.)
-      pending   (Object.)]
+(let [pending (Object.)]
+
+  ;; Idxs are dense and assigned in arrival order, so an `ArrayList` with
+  ;; positional access serves here - avoiding the `Long` boxing + hashing
+  ;; that a `HashMap` would need per cached ref.
+  ;;
+  ;; NB `idx` comes from untrusted input, so it's bounds-checked against the
+  ;; list's CURRENT size before any access, and the list is only ever grown
+  ;; one entry at a time (never pre-sized from a wire-supplied value).
 
   (defn read-cached [read-typed idx input-arg]
     (if-let [^CacheState state (.get tl:cache)]
-      (let [^java.util.HashMap m (.-thaw-vals state)
-            idx (long idx) ; Normalize key type (callers give Long | Integer)
-            v   (.getOrDefault m idx not-found)
-            n   (.size m)]
+      (let [^java.util.ArrayList l (.-thaw-vals state)
+            idx (long idx) ; Normalize (callers give Long | Integer)
+            n   (.size l)]
 
         (enc/cond
-          (not (identical? v not-found))
-          (if (identical? v pending)
-            (truss/ex-info! "Bad cache ref: cyclic or corrupt data?" {:idx idx})
-            v)
+          (and (< idx n) (>= idx 0)) ; Ref to a value read earlier this session
+          (let [v (.get l (int idx))]
+            (if (identical? v pending)
+              (truss/ex-info! "Bad cache ref: cyclic or corrupt data?" {:idx idx})
+              v))
 
           (== idx n) ; First occurrence
-          ;; Reserve idx before reading: the value may contain nested first
-          ;; occurrences, whose idxs follow this one.
+          ;; Reserve idx BEFORE reading: value may itself contain nested
+          ;; first occurrences (which the writer idxs AFTER this one)
           (do
-            (.put m idx pending)
+            (.add l pending)
             (let [x (read-typed input-arg)]
-              (.put m idx x)
+              (.set l (int idx) x)
               x))
 
+          ;; Legit first occurrences always arrive in idx order, so this
+          ;; is corrupt data or (most likely) a cache ref to an earlier
+          ;; write outside the current `with-cache` session
           :else
           (truss/ex-info! "Bad cache ref: earlier `with-cache` session or corrupt data?"
             {:idx idx, :cached-count n})))
