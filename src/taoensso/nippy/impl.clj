@@ -11,15 +11,6 @@
 
 ;;;; Compatibility config
 
-(def pack-unsigned?
-  "Use tight packing for unsigned integer types?
-  Disabled by default since:
-    1. The benefit (reduced output size) is generally small, and
-    2. Enabling this would change Nippy's byte output for some common data
-       types - possibly affecting the small minority of users that depend
-       on specific byte output."
-  (enc/get-env {:as :bool, :default false} :taoensso.nippy.pack-unsigned))
-
 (def target-release
   "When freezing values, Nippy will target compatibility with the Nippy version
   specified here: 325 for Nippy v3.2.5, etc.
@@ -60,6 +51,13 @@
 
   (defmacro target-release<  [min-release] (not (target>= min-release)))
   (defmacro target-release>= [min-release]      (target>= min-release)))
+
+(defmacro pack-unsigned?
+  "Use tight packing for unsigned integer types?
+  Reduces output size for values in some narrow ranges, at the cost of
+  writing type ids that were added in Nippy v3.3.0. So enabled only when
+  `target-release` >= 330."
+  [] `(target-release>= 330))
 
 (comment (macroexpand '(target-release>= 350)))
 

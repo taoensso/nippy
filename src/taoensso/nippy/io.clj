@@ -94,10 +94,10 @@
     (let [ba  (.getBytes s StandardCharsets/UTF_8)
           len (alength ba)]
       (enc/cond
-        (when     impl/pack-unsigned? (impl/sm-ucount? len)) (do (bb-writable! bb (+ 2 len)) (write-id bb sc/id-str-sm*) (write-sm-ucount bb len))
-        (when-not impl/pack-unsigned? (impl/sm-count?  len)) (do (bb-writable! bb (+ 2 len)) (write-id bb sc/id-str-sm_) (write-sm-count  bb len))
-                                      (impl/md-count?  len)  (do (bb-writable! bb (+ 3 len)) (write-id bb sc/id-str-md)  (write-md-count  bb len))
-        :else                                                (do (bb-writable! bb (+ 5 len)) (write-id bb sc/id-str-lg)  (write-lg-count  bb len)))
+        (when     (impl/pack-unsigned?) (impl/sm-ucount? len)) (do (bb-writable! bb (+ 2 len)) (write-id bb sc/id-str-sm*) (write-sm-ucount bb len))
+        (when-not (impl/pack-unsigned?) (impl/sm-count?  len)) (do (bb-writable! bb (+ 2 len)) (write-id bb sc/id-str-sm_) (write-sm-count  bb len))
+                                        (impl/md-count?  len)  (do (bb-writable! bb (+ 3 len)) (write-id bb sc/id-str-md)  (write-md-count  bb len))
+        :else                                                  (do (bb-writable! bb (+ 5 len)) (write-id bb sc/id-str-lg)  (write-lg-count  bb len)))
       (.put bb ba 0 len))))
 
 (defn write-kw [^ByteBuffer bb ^clojure.lang.Keyword kw]
@@ -138,23 +138,26 @@
       :else                    (do (write-id bb sc/id-long-xl)  (.putLong  bb      n)))))
 
 (defn write-long [^ByteBuffer bb ^long n]
-  (enc/cond
-    (not impl/pack-unsigned?) (write-long-legacy bb n)
-    (zero? n)                 (write-id          bb sc/id-long-0)
-    (pos?  n)
+  ;; Note: keep test unwrapped (no `not`) so that it stays a compile-time constant
+  (if (impl/pack-unsigned?)
     (enc/cond
-      (<= n impl/range-ubyte)  (do (write-id bb sc/id-long-pos-sm) (.put      bb (unchecked-byte  (+ n    Byte/MIN_VALUE))))
-      (<= n impl/range-ushort) (do (write-id bb sc/id-long-pos-md) (.putShort bb (unchecked-short (+ n   Short/MIN_VALUE))))
-      (<= n impl/range-uint)   (do (write-id bb sc/id-long-pos-lg) (.putInt   bb (int             (+ n Integer/MIN_VALUE))))
-      :else                    (do (write-id bb sc/id-long-xl)     (.putLong  bb                     n)))
-
-    :else
-    (let [y (- n)]
+      (zero? n) (write-id bb sc/id-long-0)
+      (pos?  n)
       (enc/cond
-        (<= y impl/range-ubyte)  (do (write-id bb sc/id-long-neg-sm) (.put      bb (unchecked-byte  (+ y    Byte/MIN_VALUE))))
-        (<= y impl/range-ushort) (do (write-id bb sc/id-long-neg-md) (.putShort bb (unchecked-short (+ y   Short/MIN_VALUE))))
-        (<= y impl/range-uint)   (do (write-id bb sc/id-long-neg-lg) (.putInt   bb (int             (+ y Integer/MIN_VALUE))))
-        :else                    (do (write-id bb sc/id-long-xl)     (.putLong  bb                     n))))))
+        (<= n impl/range-ubyte)  (do (write-id bb sc/id-long-pos-sm) (.put      bb (unchecked-byte  (+ n    Byte/MIN_VALUE))))
+        (<= n impl/range-ushort) (do (write-id bb sc/id-long-pos-md) (.putShort bb (unchecked-short (+ n   Short/MIN_VALUE))))
+        (<= n impl/range-uint)   (do (write-id bb sc/id-long-pos-lg) (.putInt   bb (int             (+ n Integer/MIN_VALUE))))
+        :else                    (do (write-id bb sc/id-long-xl)     (.putLong  bb                     n)))
+
+      :else
+      (let [y (- n)]
+        (enc/cond
+          (<= y impl/range-ubyte)  (do (write-id bb sc/id-long-neg-sm) (.put      bb (unchecked-byte  (+ y    Byte/MIN_VALUE))))
+          (<= y impl/range-ushort) (do (write-id bb sc/id-long-neg-md) (.putShort bb (unchecked-short (+ y   Short/MIN_VALUE))))
+          (<= y impl/range-uint)   (do (write-id bb sc/id-long-neg-lg) (.putInt   bb (int             (+ y Integer/MIN_VALUE))))
+          :else                    (do (write-id bb sc/id-long-xl)     (.putLong  bb                     n)))))
+
+    (write-long-legacy bb n)))
 
 ;; Coll headers (id + count) are written by BOTH the buffered writers below and
 ;; the streaming writer (see `write-typed+meta-to-out!`). They're macros so that
@@ -166,11 +169,11 @@
   [bb id-0 id-sm* id-sm_ id-md id-lg cnt]
   `(let [cnt# ~cnt]
      (enc/cond
-       (do                           (zero?           cnt#)) (do (write-id ~bb ~id-0))
-       (when     impl/pack-unsigned? (impl/sm-ucount? cnt#)) (do (write-id ~bb ~id-sm*) (write-sm-ucount ~bb cnt#))
-       (when-not impl/pack-unsigned? (impl/sm-count?  cnt#)) (do (write-id ~bb ~id-sm_) (write-sm-count  ~bb cnt#))
-                                     (impl/md-count?  cnt#)  (do (write-id ~bb ~id-md)  (write-md-count  ~bb cnt#))
-       :else                                                 (do (write-id ~bb ~id-lg)  (write-lg-count  ~bb cnt#)))))
+       (do                             (zero?           cnt#)) (do (write-id ~bb ~id-0))
+       (when     (impl/pack-unsigned?) (impl/sm-ucount? cnt#)) (do (write-id ~bb ~id-sm*) (write-sm-ucount ~bb cnt#))
+       (when-not (impl/pack-unsigned?) (impl/sm-count?  cnt#)) (do (write-id ~bb ~id-sm_) (write-sm-count  ~bb cnt#))
+                                       (impl/md-count?  cnt#)  (do (write-id ~bb ~id-md)  (write-md-count  ~bb cnt#))
+       :else                                                   (do (write-id ~bb ~id-lg)  (write-lg-count  ~bb cnt#)))))
 
 (defmacro write-coll-header
   "Writes coll id + count."

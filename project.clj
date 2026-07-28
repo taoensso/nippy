@@ -40,7 +40,6 @@
      "-Dtaoensso.elide-deprecated=true"
      "-Dtaoensso.nippy.thaw-serializable-allowlist-base=base.1, base.2"
      "-Dtaoensso.nippy.thaw-serializable-allowlist-add=add.1 , add.2"
-     #_"-Dtaoensso.nippy.pack-unsigned=true"
      ;; Target release is consumed at compile time; run `lein clean` after changing.
      #_"-Dtaoensso.nippy.target-release=360"]
 
