@@ -448,18 +448,18 @@
   "Low-level util. Serializes given arg (any Clojure data type) to given `ByteBuffer`.
   In most cases you want `freeze` instead."
   [^ByteBuffer bb x]
-  (let [bb     (io/bb-big-endian! bb)
-        pos    (.position bb)
-        dout_  (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (io/bb->dout bb)))))
-        cache_ (.get impl/tl:cache)
-        cache  (when cache_ @cache_)]
+  (let [bb    (io/bb-big-endian! bb)
+        pos   (.position bb)
+        dout_ (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (io/bb->dout bb)))))
+        state (.get impl/tl:cache)
+        mark  (if state (impl/cache-mark state) 0)]
     (try
       (io/write-typed+meta x bb dout_)
       (catch Throwable t
         ;; Bytes and cache entries from the abandoned write would poison
         ;; later writes (esp. in a shared `with-cache` session)
         (.position bb pos)
-        (when cache_ (vreset! cache_ cache))
+        (when state (impl/cache-restore! state mark))
         (if (instance? java.nio.BufferOverflowException t)
           (throw
             (java.io.EOFException.

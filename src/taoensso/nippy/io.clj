@@ -8,7 +8,7 @@
     [schema :as sc]])
 
   (:import
-   [taoensso.nippy.impl Cached]
+   [taoensso.nippy.impl Cached CacheState]
    [java.nio.charset StandardCharsets]
    [java.nio ByteBuffer BufferOverflowException]
    [java.io
@@ -304,6 +304,25 @@
         :else                (do (write-id bb sc/id-reader-lg) (write-bytes-lg bb edn-ba)))
       true)))
 
+(defn write-cached-ref
+  "Writes cache ref id (+ idx payload when idx > 7) for given idx <= 32767."
+  [^ByteBuffer bb ^long idx]
+  (if (impl/sm-count? idx)
+    (case (int idx)
+      0 (do (bb-writable! bb 1) (write-id bb sc/id-cached-0))
+      1 (do (bb-writable! bb 1) (write-id bb sc/id-cached-1))
+      2 (do (bb-writable! bb 1) (write-id bb sc/id-cached-2))
+      3 (do (bb-writable! bb 1) (write-id bb sc/id-cached-3))
+      4 (do (bb-writable! bb 1) (write-id bb sc/id-cached-4))
+      5 (do (bb-writable! bb 1) (write-id bb sc/id-cached-5))
+      6 (do (bb-writable! bb 1) (write-id bb sc/id-cached-6))
+      7 (do (bb-writable! bb 1) (write-id bb sc/id-cached-7))
+      (do   (bb-writable! bb 2) (write-id bb sc/id-cached-sm) (write-sm-count bb idx)))
+
+    (if (impl/md-count? idx)
+      (do (bb-writable! bb 3) (write-id bb sc/id-cached-md) (write-md-count bb idx))
+      (truss/ex-info! "Cache ref idx out of range" {:idx idx}))))
+
 (defn write-cached-header!
   "Registers `x-val` in the cache and writes its cache ref id.
   Returns true iff `x-val` itself must still be written after the id.
@@ -312,43 +331,21 @@
   emitted bytes and the cache idxs they imply. NB the cache mutation happens
   here, alongside the id write, so a caller that discards the written bytes
   (see `stream-leaf!`) can undo both together."
-  [^ByteBuffer bb x-val cache_]
-  (let [cache @cache_
-        k     #_x-val [x-val (meta x-val)] ; Also check meta for equality
-        ?idx  (get cache k)
-        ^int idx
-        (or ?idx
-          (let [idx (count cache)]
-            (vswap! cache_ assoc k idx)
-            idx))
+  [^ByteBuffer bb x-val ^CacheState state]
+  (let [^java.util.HashMap m (.-freeze-idxs state)
+        k    [x-val (meta x-val)] ; Also check meta for equality
+        ?idx (.get m k)]
 
-        first-occurance? (nil? ?idx)]
+    (if-let [idx ?idx]
+      (do (write-cached-ref bb idx) false) ; Ref to previously written value
+      (let [idx (.size m)]
+        (when (impl/md-count? idx) ; Else cache full: no id, just freeze uncached
+          (.put m k idx)
+          (write-cached-ref bb idx))
+        true))))
 
-    (enc/cond
-      (impl/sm-count? idx)
-      (do
-        (case (int idx)
-          0 (write-id bb sc/id-cached-0)
-          1 (write-id bb sc/id-cached-1)
-          2 (write-id bb sc/id-cached-2)
-          3 (write-id bb sc/id-cached-3)
-          4 (write-id bb sc/id-cached-4)
-          5 (write-id bb sc/id-cached-5)
-          6 (write-id bb sc/id-cached-6)
-          7 (write-id bb sc/id-cached-7)
-          (do (write-id bb sc/id-cached-sm) (write-sm-count bb idx)))
-        first-occurance?)
-
-      (impl/md-count? idx)
-      (do (write-id bb sc/id-cached-md) (write-md-count bb idx)
-          first-occurance?)
-
-      ;; (truss/ex-info! "Max cache size exceeded" {:idx idx})
-      :else true ; Cache full: no id, just freeze uncached
-      )))
-
-(defn write-cached [^ByteBuffer bb dout_ x-val cache_]
-  (when (write-cached-header! bb x-val cache_)
+(defn write-cached [^ByteBuffer bb dout_ x-val ^CacheState state]
+  (when (write-cached-header! bb x-val state)
     (write-typed+meta x-val bb dout_)))
 
 ;;;;
@@ -421,8 +418,8 @@
 
 (writer Cached nil {:stream-kind :cached}
   (let [x-val (.-val x)]
-    (if-let [cache_ (.get impl/tl:cache)]
-      (write-cached           bb dout_ x-val cache_)
+    (if-let [state (.get impl/tl:cache)]
+      (write-cached bb dout_ x-val state)
       (write-typed+meta x-val bb dout_))))
 
 (writer "[B"                    nil (write-bytes        bb x))
@@ -1329,15 +1326,15 @@
     ([init-size f] (with-bb init-size f copy-bb))
     ([init-size f finalize]
      (let [init-depth (long (.get      tl:depth))
-           cache_           (.get impl/tl:cache)
-           init-cache (when cache_ @cache_)]
+           state            (.get impl/tl:cache)
+           mark       (if state (impl/cache-mark state) 0)]
 
        (.set tl:depth (inc init-depth))
        (try
          (enc/cond
            (zero? init-depth) ; Unnested call
            (let [^ByteBuffer bb (.get tl:bb)]
-             (when-let [[ba final-bb] (with-bb bb cache_ init-cache f finalize)]
+             (when-let [[ba final-bb] (with-bb bb state mark f finalize)]
                (let [^ByteBuffer cached-bb
                      (cond
                        (<= (.capacity ^ByteBuffer final-bb) max-cached-bb-capacity) final-bb
@@ -1350,15 +1347,21 @@
 
            :else ; Nested call
            (let [private-bb (ByteBuffer/allocate (.capacity ^ByteBuffer (.get tl:bb)))] ; Isolate from parent bb
-             (when-let [[ba _bb] (with-bb private-bb cache_ init-cache f finalize)]
+             (when-let [[ba _bb] (with-bb private-bb state mark f finalize)]
                ba)))
+
+         (catch Throwable t
+           ;; Cache entries from the abandoned write would poison later writes
+           ;; in a shared (`with-cache`) session
+           (when state (impl/cache-restore! state mark))
+           (throw t))
 
          (finally (.set tl:depth init-depth)))))
 
-    ([bb cache_ cache f finalize]
+    ([bb state mark f finalize]
      (loop [^ByteBuffer bb bb]
-       (.clear bb)                          ; Reset buffer before (re)use
-       (when cache_ (vreset! cache_ cache)) ; Reset cache  before (re)use
+       (.clear bb)                                    ; Reset buffer before (re)use
+       (when state (impl/cache-restore! state mark))  ; Reset cache  before (re)use
        (let [dout_  (let [v_ (volatile! nil)] (fn [] (or @v_ (vreset! v_ (bb->dout bb)))))
              result
              (try
@@ -1369,7 +1372,12 @@
            (recur (grown-bb bb))
            ;; NB `finalize` runs outside the retry loop: it may write `bb`'s
            ;; bytes onward, and must never run for a write we'll discard
-           [(when result (finalize bb)) bb]))))))
+           (if result
+             [(finalize bb) bb]
+             (do
+               ;; Written bytes are being discarded, restore cache to match
+               (when state (impl/cache-restore! state mark))
+               [nil bb]))))))))
 
 ;;;; Streaming writes
 
@@ -1396,14 +1404,14 @@
 
   On overflow: discards the value's partial bytes, makes room, and retries.
   Retrying is safe because (a) leaf writers mutate only `bb`'s position and
-  contents plus the cache volatile, both of which we restore, and (b) no
+  contents plus the cache state, both of which we restore, and (b) no
   flush ever happens partway through a leaf, so its bytes are always still
   in the chunk and above `pos`.
 
   NB `f` takes `x` rather than closing over it, so callers can pass a constant
   fn instead of allocating a closure per value written."
-  [^DataOutput dout bb_ dout_ cache_ f x]
-  (let [cache (when cache_ @cache_)]
+  [^DataOutput dout bb_ dout_ state f x]
+  (let [mark (if state (impl/cache-mark state) 0)]
     (loop [retried? false]
       (let [^ByteBuffer bb @bb_
             pos  (.position bb)
@@ -1412,8 +1420,8 @@
               (catch BufferOverflowException _ true))]
 
         (when overflowed?
-          (.position bb pos)                   ; Discard the value's partial bytes
-          (when cache_ (vreset! cache_ cache)) ; And any cache entries it made
+          (.position bb pos)                            ; Discard the value's partial bytes
+          (when state (impl/cache-restore! state mark)) ; And any cache entries it made
           (if (or retried? (zero? pos))
             (vreset! bb_ (grown-bb bb)) ; Value alone exceeds chunk, need a bigger one
             (stream-flush! dout bb))    ; Chunk had prior bytes, flushing may suffice
@@ -1436,7 +1444,7 @@
 
 (defn- stream-write-typed!
   "Streaming counterpart to `write-typed`."
-  [^DataOutput dout bb_ dout_ cache_ x]
+  [^DataOutput dout bb_ dout_ state x]
   ;; Cheap pre-filter (only colls and `Cached` are ever streamed), then ask
   ;; Clojure which impl it would actually dispatch to. `custom-freezable?`
   ;; types are excluded since `extend-freeze` takes precedence.
@@ -1449,10 +1457,10 @@
           (stream-kind x))]
 
     (if (nil? kind)
-      (stream-leaf! dout bb_ dout_ cache_ leaf-typed x)
+      (stream-leaf! dout bb_ dout_ state leaf-typed x)
 
-      (let [el! (fn [el]  (stream-write+meta! dout bb_ dout_ cache_ el))
-            hd! (fn [f v] (stream-leaf!       dout bb_ dout_ cache_ f v))
+      (let [el! (fn [el]  (stream-write+meta! dout bb_ dout_ state el))
+            hd! (fn [f v] (stream-leaf!       dout bb_ dout_ state f v))
             kv! (fn [k v] (el! k) (el! v))]
 
         (case kind
@@ -1472,30 +1480,31 @@
           :seq
           (if (counted? x)
             (do (hd! leaf-seq-header (count x)) (run! el! x))
-            (stream-leaf! dout bb_ dout_ cache_ leaf-typed x))
+            (stream-leaf! dout bb_ dout_ state leaf-typed x))
 
           :cached
           (let [x-val (.-val ^Cached x)]
-            (if (nil? cache_)
-              (el! x-val) ; No `with-cache` session, so nothing to cache against
+            (if (nil? state)
+              ;; No `with-cache` session, so nothing to cache against
+              (el! x-val)
               ;; NB the cache id write and its cache mutation happen together
               ;; inside the leaf, so an overflow rolls back both. On retry the
               ;; idx is recomputed identically, so the flag we read here is
               ;; always the successful attempt's.
               (let [write-val?_ (volatile! false)]
-                (stream-leaf! dout bb_ dout_ cache_
+                (stream-leaf! dout bb_ dout_ state
                   (fn [_ ^ByteBuffer bb _]
-                    (vreset! write-val?_ (write-cached-header! bb x-val cache_)))
+                    (vreset! write-val?_ (write-cached-header! bb x-val state)))
                   nil)
                 (when @write-val?_ (el! x-val))))))))))
 
 (defn- stream-write+meta!
   "Streaming counterpart to `write-typed+meta`."
-  [^DataOutput dout bb_ dout_ cache_ x]
+  [^DataOutput dout bb_ dout_ state x]
   (when (instance? clojure.lang.IObj x)
     (when-let [m (when taoensso.nippy/*incl-metadata?* (not-empty (meta x)))]
-      (stream-leaf!    dout bb_ dout_ cache_ leaf-meta m)))
-  (stream-write-typed! dout bb_ dout_ cache_ x))
+      (stream-leaf!    dout bb_ dout_ state leaf-meta m)))
+  (stream-write-typed! dout bb_ dout_ state x))
 
 ;; Chunk is reused between (unnested) calls: `freeze-to-out!` is often called
 ;; in a tight loop, and a fresh 64 KiB alloc per call dominates its cost for
@@ -1520,8 +1529,8 @@
   session fully intact."
   [^DataOutput dout x]
   (let [init-depth (long (.get tl:stream-depth))
-        cache_     (.get impl/tl:cache)
-        cache      (when cache_ @cache_)]
+        state      (.get impl/tl:cache)
+        mark       (if state (impl/cache-mark state) 0)]
 
     (.set tl:stream-depth (inc init-depth)) ; NB nothing between this and `try`
     (try
@@ -1542,7 +1551,7 @@
                   (nth cached 1)
                   (let [d (bb->dout bb)] (vreset! v_ [bb d]) d))))]
 
-        (stream-write+meta! dout bb_ dout_ cache_ x)
+        (stream-write+meta! dout bb_ dout_ state x)
         (stream-flush! dout ^ByteBuffer @bb_)
 
         ;; NB only on success: on failure the thread-local still holds a valid
@@ -1558,7 +1567,7 @@
         ;; Cache entries from the abandoned write would poison later writes in
         ;; a shared (`with-cache`) session: the next write would emit a bare
         ;; ref to a value whose bytes were never emitted
-        (when cache_ (vreset! cache_ cache))
+        (when state (impl/cache-restore! state mark))
         (throw t))
 
       (finally (.set tl:stream-depth init-depth))))
