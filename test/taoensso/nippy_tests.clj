@@ -171,6 +171,31 @@
                (select-keys head-meta [:compressor-id :encryptor-id])))
         (is (= x (thaw frozen {:password password})))]))
 
+   (testing "Truncated encrypted payloads"
+     ;; Ciphertext shorter than its iv+salt prefix must be rejected up front,
+     ;; before any (needless) key derivation
+     (let [derivations (volatile! 0)
+           salt->key   (fn [salt-ba]
+                         (vswap! derivations inc)
+                         (crypto/take-ba 16 (crypto/sha512-key-ba salt-ba "pwd")))
+           iv-size     (long (crypto/get-iv-size crypto/cipher-kit-aes-gcm))
+           try-decrypt (fn [salt-size len]
+                         (vreset! derivations 0)
+                         [(truss/throws :default
+                            (crypto/decrypt
+                              {:salt-size    salt-size
+                               :salt->key-fn salt->key
+                               :enc-ba       (byte-array (int len))}))
+                          @derivations])]
+
+       (into []
+         (for [salt-size [0 16], len [0 1 (dec (+ iv-size salt-size))]]
+           (let [[e n-derivations] (try-decrypt salt-size len)]
+             [(is (instance? java.io.EOFException e)
+                (str "salt-size " salt-size ", length " len))
+              (is (zero? n-derivations)
+                (str "no key derivation for salt-size " salt-size ", length " len))])))))
+
    (testing "Unsigned long types"
      (let [range-ushort+ (+ (long impl/range-ushort) 128)
            range-uint+   (+ (long impl/range-uint)   128)]
