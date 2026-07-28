@@ -63,12 +63,12 @@ From time to time, Nippy may introduce:
 - Support for serializing **new types**
 - Optimizations to the serialization of **pre-existing types**
 
-To help ease **rolling updates** and to better support **rollback**, Nippy (since version v3.4) will always introduce such changes over **two version releases**:
+To help better support **rolling deployments** and **rollback**, Nippy will always introduce such changes over **two version releases**:
 
 - Release 1: to add **read support** for the new types
 - Release 2: to add **write support** for the new types
 
-Starting from v3.4, Nippy's release notes will **always clearly indicate** if a particular update sequence is recommended.
+So if you use **rolling deployments** please ensure you update **step by step** (e.g. v3.5 → v3.6 → v3.7) so that read support is fully deployed before the corresponding writes might happen.
 
 ### Stability of byte output
 
