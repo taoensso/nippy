@@ -362,10 +362,40 @@
 
 ;;;; Freeze API
 
+(defn- wrap-bb-head-ba
+  "Copies given header + bb's written bytes into a single new byte array."
+  ^bytes [^ByteBuffer bb ^bytes head-ba]
+  (let [head-len (alength head-ba)
+        data-len (.position bb)
+        out-ba   (byte-array (+ head-len data-len))]
+    (System/arraycopy head-ba     0 out-ba        0 head-len)
+    (System/arraycopy (.array bb) (.arrayOffset bb) out-ba head-len data-len)
+    out-ba))
+
+(def ^:private ^bytes head-ba-plain
+  "Precomputed header for the common {:compressor-id nil :encryptor-id nil}
+  case, saves a memoized lookup on every default `freeze`.
+
+  Cloned since `sc/get-head-ba` memoizes a MUTABLE array - use only as an
+  `arraycopy` source, never expose or modify."
+  (let [^bytes ba (sc/get-head-ba {:compressor-id nil :encryptor-id nil})]
+    (java.util.Arrays/copyOf ba (alength ba))))
+
 (defn- freeze-raw
   (^bytes [x]   (io/with-bb 512 (fn [bb dout_] (io/write-typed+meta x bb dout_) true)))
   ;; NB no ^bytes hint: returns whatever `finalize` returns
   ([x finalize] (io/with-bb 512 (fn [bb dout_] (io/write-typed+meta x bb dout_) true) finalize)))
+
+(defn- freeze-raw-header ^bytes [x] (freeze-raw x (fn [bb] (wrap-bb-head-ba bb head-ba-plain))))
+(defn- freeze-raw-auto   ^bytes [x]
+  (freeze-raw x
+    (fn [^ByteBuffer bb]
+      (if (> (.position bb) 8192)
+        (let [raw-ba (java.util.Arrays/copyOf (.array bb) (.position bb))
+              ba     (compress lz4-compressor raw-ba)]
+          (sc/wrap-header ba {:compressor-id :lz4 :encryptor-id nil}))
+        (wrap-bb-head-ba bb head-ba-plain)))))
+
 (defn  freeze
   "Main freezing util.
 
@@ -383,37 +413,50 @@
    (call-with-bindings :freeze opts
      (fn []
        (let [no-header? (or (get opts :no-header?) (get opts :skip-header?)) ; Undocumented
-             encryptor  (when password encryptor)
-             ^bytes ba  (impl/with-cache (freeze-raw x))]
+             encryptor  (when password encryptor)]
 
-         (if (and (nil? compressor) (nil? encryptor))
-           (if no-header?
-             (do             ba)
-             (sc/wrap-header ba {:compressor-id nil :encryptor-id nil}))
+         (enc/cond
+           (and (not no-header?) (nil? encryptor) (nil? compressor))
+           (impl/with-cache (freeze-raw-header x))
 
-           (let [compressor
-                 (if (identical? compressor :auto)
-                   (if no-header?
-                     lz4-compressor
-                     (if-let [fc *auto-freeze-compressor*]
-                       (fc ba)
-                       ;; Intelligently enable compression only if benefit
-                       ;; is likely to outweigh cost:
-                       (when (> (alength ba) 8192) lz4-compressor)))
+           (and
+             (not no-header?)
+             (nil? encryptor)
+             (identical? compressor :auto)
+             (not *auto-freeze-compressor*))
+           (impl/with-cache (freeze-raw-auto x))
 
-                   (if (fn? compressor)
-                     (compressor ba) ; Assume compressor selector fn
-                     compressor      ; Assume compressor
-                     ))
+           :else
+           (let [^bytes ba (impl/with-cache (freeze-raw x))]
 
-                 ba (if compressor (compress compressor         ba) ba)
-                 ba (if encryptor  (encrypt  encryptor password ba) ba)]
+             (if (and (nil? compressor) (nil? encryptor))
+               (if no-header?
+                 (do             ba)
+                 (sc/wrap-header ba {:compressor-id nil :encryptor-id nil}))
 
-             (if no-header?
-               (do             ba)
-               (sc/wrap-header ba
-                 {:compressor-id (when-let [c compressor] (or (compression/standard-header-ids (compression/header-id c)) :else))
-                  :encryptor-id  (when-let [e encryptor]  (or (encryption/standard-header-ids  (encryption/header-id  e)) :else))})))))))))
+               (let [compressor
+                     (if (identical? compressor :auto)
+                       (if no-header?
+                         lz4-compressor
+                         (if-let [fc *auto-freeze-compressor*]
+                           (fc ba)
+                           ;; Intelligently enable compression only if benefit
+                           ;; is likely to outweigh cost:
+                           (when (> (alength ba) 8192) lz4-compressor)))
+
+                       (if (fn? compressor)
+                         (compressor ba) ; Assume compressor selector fn
+                         compressor      ; Assume compressor
+                         ))
+
+                     ba (if compressor (compress compressor         ba) ba)
+                     ba (if encryptor  (encrypt  encryptor password ba) ba)]
+
+                 (if no-header?
+                   (do             ba)
+                   (sc/wrap-header ba
+                     {:compressor-id (when-let [c compressor] (or (compression/standard-header-ids (compression/header-id c)) :else))
+                      :encryptor-id  (when-let [e encryptor]  (or (encryption/standard-header-ids  (encryption/header-id  e)) :else))})))))))))))
 
 (defn fast-freeze
   "Like `freeze` but:
