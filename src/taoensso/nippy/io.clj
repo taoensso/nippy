@@ -34,6 +34,10 @@
 (defprotocol IWriteTypedNoMeta    (write-typed      [_ ^ByteBuffer bb dout_] "Writes given object as type-prefixed bytes. Excludes IObj meta."))
 (defprotocol IWriteTypedWithMeta  (write-typed+meta [_ ^ByteBuffer bb dout_] "Writes given object as type-prefixed bytes. Includes IObj meta when present."))
 (defprotocol IWriteTypedNoMetaDin (write-typed-din  [_ ^DataOutput    dout ] "Writes given object as type-prefixed bytes. Excludes IObj meta. Takes legacy `DataInput`, used for custom extensions."))
+(defprotocol ^:private IStreamKind
+  (stream-kind [_]
+    "Returns this native writer's ?streaming strategy. Registered in parallel
+    with `IWriteTypedNoMeta` so both use identical protocol dispatch."))
 
 (defmacro write-id        [bb id] `(.put      ~bb (unchecked-byte  ~id)))
 (defmacro write-sm-ucount [bb  n] `(.put      ~bb (unchecked-byte (+ ~n Byte/MIN_VALUE)))) ; Unsigned
@@ -364,15 +368,18 @@
 
 (defmacro ^:private writer
   "Convenience util / short-hand."
-  [atype id & impl-body]
-  (let [aclass     (if (string? atype) (Class/forName atype) atype)
-        x          (with-meta 'x    {:tag atype})
-        bb         (with-meta 'bb   {:tag 'ByteBuffer})
-        id-form    (when id `(write-id ~'bb ~id))
-        freezable? (if (= atype 'Object) nil true)]
+  [atype id & body]
+  (let [[opts impl-body] (if (map? (first body)) [(first body) (next body)] [nil body])
+        stream-kind (get opts :stream-kind)
+        aclass      (if (string? atype) (Class/forName atype) atype)
+        x           (with-meta 'x    {:tag atype})
+        bb          (with-meta 'bb   {:tag 'ByteBuffer})
+        id-form     (when id `(write-id ~'bb ~id))
+        freezable?  (if (= atype 'Object) nil true)]
 
     `(extend ~aclass
        impl/INativeFreezable {:native-freezable? (fn [~x            ] ~freezable?) }
+       IStreamKind           {:stream-kind       (fn [~x            ] ~stream-kind)}
        IWriteTypedNoMeta     {:write-typed       (fn [~x ~bb ~'dout_] ~id-form ~@impl-body)})))
 
 (writer nil       sc/id-nil    nil)
@@ -412,7 +419,7 @@
   (.putLong bb (.getMostSignificantBits  x))
   (.putLong bb (.getLeastSignificantBits x)))
 
-(writer Cached nil
+(writer Cached nil {:stream-kind :cached}
   (let [x-val (.-val x)]
     (if-let [cache_ (.get impl/tl:cache)]
       (write-cached           bb dout_ x-val cache_)
@@ -445,19 +452,19 @@
   :else nil ; Handle via Serializable
   )
 
-(writer clojure.lang.MapEntry sc/id-map-entry
+(writer clojure.lang.MapEntry sc/id-map-entry {:stream-kind :map-entry}
   (write-typed+meta (key x) bb dout_)
   (write-typed+meta (val x) bb dout_))
 
-(writer clojure.lang.PersistentQueue    nil (write-counted-coll   bb dout_ sc/id-queue-lg      x))
-(writer clojure.lang.PersistentTreeSet  nil (write-counted-coll   bb dout_ sc/id-sorted-set-lg x))
-(writer clojure.lang.PersistentTreeMap  nil (write-kvs            bb dout_ sc/id-sorted-map-lg x))
-(writer clojure.lang.APersistentVector  nil (write-vec            bb dout_                     x))
-(writer clojure.lang.APersistentSet     nil (write-set            bb dout_                     x))
-(writer clojure.lang.APersistentMap     nil (write-map            bb dout_                     x false))
-(writer clojure.lang.PersistentList     nil (write-counted-coll   bb dout_  sc/id-list-0   sc/id-list-sm   sc/id-list-md sc/id-list-lg x))
+(writer clojure.lang.PersistentQueue    nil {:stream-kind :queue}      (write-counted-coll   bb dout_ sc/id-queue-lg      x))
+(writer clojure.lang.PersistentTreeSet  nil {:stream-kind :sorted-set} (write-counted-coll   bb dout_ sc/id-sorted-set-lg x))
+(writer clojure.lang.PersistentTreeMap  nil {:stream-kind :sorted-map} (write-kvs            bb dout_ sc/id-sorted-map-lg x))
+(writer clojure.lang.APersistentVector  nil {:stream-kind :vec}        (write-vec            bb dout_                     x))
+(writer clojure.lang.APersistentSet     nil {:stream-kind :set}        (write-set            bb dout_                     x))
+(writer clojure.lang.APersistentMap     nil {:stream-kind :map}        (write-map            bb dout_                     x false))
+(writer clojure.lang.PersistentList     nil {:stream-kind :list}       (write-counted-coll   bb dout_  sc/id-list-0   sc/id-list-sm   sc/id-list-md sc/id-list-lg x))
 (writer clojure.lang.LazySeq            nil (write-uncounted-coll bb dout_ #_sc/id-seq-0  #_sc/id-seq-sm  #_sc/id-seq-md  sc/id-seq-lg x))
-(writer clojure.lang.ISeq               nil (write-coll           bb dout_   sc/id-seq-0    sc/id-seq-sm    sc/id-seq-md  sc/id-seq-lg x))
+(writer clojure.lang.ISeq               nil {:stream-kind :seq}        (write-coll           bb dout_   sc/id-seq-0    sc/id-seq-sm    sc/id-seq-md  sc/id-seq-lg x))
 (writer clojure.lang.IRecord            nil
   (if (impl/custom-freezable? x)
     (write-typed-din x (dout_))
@@ -1376,60 +1383,6 @@
 ;; their count up-front, so they stay buffered.
 
 (def ^:private ^:const stream-chunk-size (* 64 1024))
-
-(def ^:private stream-kinds
-  "Maps a native `IWriteTypedNoMeta` impl -> streaming strategy.
-
-  NB keyed on the impl that Clojure's protocol dispatch actually resolves to,
-  NOT on `instance?` checks. Dispatch prefers superclasses over interfaces, so
-  hand-mirroring it silently corrupts output for types like:
-    - `MapEntry`, which extends `APersistentVector`
-    - `()`, an `EmptyList` that does NOT extend `PersistentList`
-    - a `deftype` implementing `ISeq`, which resolves to the `IType` writer
-
-  Anything not found here is written as a leaf, which is always correct.
-
-  NB built eagerly, at load time: every native writer above is already
-  registered, so this snapshot can only ever hold NATIVE impls. A lookup hit
-  therefore proves dispatch resolved to a writer we emulate byte-for-byte,
-  even if `extend-freeze` later replaces one of these classes' writers."
-  (let [impls (:impls IWriteTypedNoMeta)]
-    (reduce-kv
-      (fn [m c kind] (if-let [i (get impls c)] (assoc m i kind) m))
-      {}
-      {clojure.lang.MapEntry          :map-entry
-       clojure.lang.PersistentQueue   :queue
-       clojure.lang.PersistentTreeSet :sorted-set
-       clojure.lang.PersistentTreeMap :sorted-map
-       clojure.lang.APersistentVector :vec
-       clojure.lang.APersistentSet    :set
-       clojure.lang.APersistentMap    :map
-       clojure.lang.PersistentList    :list
-       clojure.lang.ISeq              :seq
-       Cached                         :cached})))
-
-(def ^:private ^java.util.concurrent.ConcurrentHashMap stream-kinds-cache
-  "(class -> ?kind) memoization of the `stream-kinds` lookup, which is on the
-  hot path (once per value) and otherwise walks the class hierarchy each time.
-
-  Sound because dispatch is a pure fn of `(class x)`, and because
-  `stream-kinds` holds only native impls (see there), so a cached kind can
-  never be a disguised `extend-freeze` writer."
-  (java.util.concurrent.ConcurrentHashMap.))
-
-(defn- stream-kind
-  "Returns the streaming strategy for `x`, or nil to write it as a leaf."
-  [x]
-  (let [c (class x)
-        v (.get stream-kinds-cache c)]
-    (enc/cond
-      (nil? v)
-      (let [kind (get stream-kinds (find-protocol-impl IWriteTypedNoMeta x))]
-        (.put stream-kinds-cache c (or kind ::nil))
-        kind)
-
-      (identical? v ::nil) nil
-      :else v)))
 
 (defn- stream-flush!
   "Writes `bb`'s pending bytes onward to `dout`, then clears `bb`."
