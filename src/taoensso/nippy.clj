@@ -443,7 +443,9 @@
   ~2 GiB: strings, byte arrays, uncounted (lazy) seqs, records, deftypes,
   custom (`extend-freeze`) types, and metadata maps.
 
-  NB writes are NOT atomic: on error `dout` may have received partial bytes."
+  NB writes are NOT atomic: on error `dout` may have received partial bytes.
+  A shared `with-cache` session's cache IS restored though, so a failed write
+  that emitted nothing leaves the session fully intact."
   [^DataOutput dout x] (io/write-typed+meta-to-out! dout x))
 
 (defn freeze-to-bb!
