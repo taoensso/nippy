@@ -1,0 +1,167 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --surface:   #fcfcfb;
+    --ink:       #0b0b0b;
+    --ink-2:     #52514e;
+    --muted:     #898781;
+    --grid:      #e1e0d9;
+    --baseline:  #c3c2b7;
+    --nippy:     #2a78d6;
+    --fressian:  #eb6834;
+    --reader:    #1baf7a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1400px;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: 46px 56px 34px;
+  }
+
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 40px; }
+  h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.3px; }
+  .sub { margin-top: 8px; font-size: 15px; color: var(--ink-2); }
+
+  .legend { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+  .legend div { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--ink-2); white-space: nowrap; }
+  .sw { width: 13px; height: 13px; border-radius: 3px; flex: none; }
+
+  .panel { margin-top: 40px; }
+  .ptitle { font-size: 13px; font-weight: 600; letter-spacing: 0.9px; text-transform: uppercase; color: var(--ink-2); }
+  .ptitle span { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+
+  .plot { position: relative; margin-top: 20px; padding-left: 108px; padding-right: 74px; }
+  .grid { position: absolute; left: 108px; right: 74px; top: 0; bottom: 0; pointer-events: none; }
+  .gl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid); }
+  .gl.zero { background: var(--baseline); }
+
+  .group { position: relative; padding: 16px 0; }
+  .glabel {
+    position: absolute; left: -108px; top: 50%; transform: translateY(-50%);
+    width: 92px; text-align: right;
+    font-size: 12.5px; font-weight: 600; letter-spacing: 0.7px;
+    text-transform: uppercase; color: var(--ink-2);
+  }
+  .row { display: flex; align-items: center; height: 22px; }
+  .row + .row { margin-top: 4px; }
+  .bar { height: 100%; border-radius: 0 4px 4px 0; }
+  .val {
+    margin-left: 10px; font-size: 13.5px; color: var(--ink-2);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+
+  .axis { position: relative; height: 24px; margin-left: 108px; margin-right: 74px; border-top: 1px solid var(--baseline); }
+  .tick { position: absolute; top: 7px; transform: translateX(-50%); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  footer { margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--grid); font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Benchmarks: Nippy v3.8.1</h1>
+    <div class="sub">Using Nippy stress data</div>
+  </div>
+  <div class="legend">
+    <div><span class="sw" style="background: var(--nippy)"></span>Nippy 3.8.1</div>
+    <div><span class="sw" style="background: var(--fressian)"></span>data.fressian 1.1.1</div>
+    <div><span class="sw" style="background: var(--reader)"></span>tools.reader.edn 1.6.0</div>
+  </div>
+</header>
+
+<!-- ============ TIME ============ -->
+<div class="panel">
+  <div class="ptitle">Time <span>(msecs / 10k laps, lower is better)</span></div>
+
+  <div class="plot">
+    <div class="grid">
+      <div class="gl zero" style="left: 0%"></div>
+      <div class="gl" style="left: 16.6667%"></div>
+      <div class="gl" style="left: 33.3333%"></div>
+      <div class="gl" style="left: 50%"></div>
+      <div class="gl" style="left: 66.6667%"></div>
+      <div class="gl" style="left: 83.3333%"></div>
+      <div class="gl" style="left: 100%"></div>
+    </div>
+
+    <div class="group">
+      <div class="glabel">Roundtrip</div>
+      <div class="row"><div class="bar" style="width: 18.708%; background: var(--nippy)"></div><div class="val">2,245</div></div>
+      <div class="row"><div class="bar" style="width: 27.150%; background: var(--fressian)"></div><div class="val">3,258</div></div>
+      <div class="row"><div class="bar" style="width: 94.742%; background: var(--reader)"></div><div class="val">11,369</div></div>
+    </div>
+
+    <div class="group">
+      <div class="glabel">Freeze</div>
+      <div class="row"><div class="bar" style="width: 8.525%; background: var(--nippy)"></div><div class="val">1,023</div></div>
+      <div class="row"><div class="bar" style="width: 18.775%; background: var(--fressian)"></div><div class="val">2,253</div></div>
+      <div class="row"><div class="bar" style="width: 27.408%; background: var(--reader)"></div><div class="val">3,289</div></div>
+    </div>
+
+    <div class="group">
+      <div class="glabel">Thaw</div>
+      <div class="row"><div class="bar" style="width: 10.183%; background: var(--nippy)"></div><div class="val">1,222</div></div>
+      <div class="row"><div class="bar" style="width: 8.458%; background: var(--fressian)"></div><div class="val">1,015</div></div>
+      <div class="row"><div class="bar" style="width: 67.333%; background: var(--reader)"></div><div class="val">8,080</div></div>
+    </div>
+  </div>
+
+  <div class="axis">
+    <div class="tick" style="left: 0%">0</div>
+    <div class="tick" style="left: 16.6667%">2,000</div>
+    <div class="tick" style="left: 33.3333%">4,000</div>
+    <div class="tick" style="left: 50%">6,000</div>
+    <div class="tick" style="left: 66.6667%">8,000</div>
+    <div class="tick" style="left: 83.3333%">10,000</div>
+    <div class="tick" style="left: 100%">12,000</div>
+  </div>
+</div>
+
+<!-- ============ SIZE ============ -->
+<div class="panel">
+  <div class="ptitle">Serialized size <span>(bytes, smaller is better)</span></div>
+
+  <div class="plot">
+    <div class="grid">
+      <div class="gl zero" style="left: 0%"></div>
+      <div class="gl" style="left: 12.5%"></div>
+      <div class="gl" style="left: 25%"></div>
+      <div class="gl" style="left: 37.5%"></div>
+      <div class="gl" style="left: 50%"></div>
+      <div class="gl" style="left: 62.5%"></div>
+      <div class="gl" style="left: 75%"></div>
+      <div class="gl" style="left: 87.5%"></div>
+      <div class="gl" style="left: 100%"></div>
+    </div>
+
+    <div class="group">
+      <div class="row"><div class="bar" style="width: 53.238%; background: var(--nippy)"></div><div class="val">8,518</div></div>
+      <div class="row"><div class="bar" style="width: 76.388%; background: var(--fressian)"></div><div class="val">12,222</div></div>
+      <div class="row"><div class="bar" style="width: 99.250%; background: var(--reader)"></div><div class="val">15,880</div></div>
+    </div>
+  </div>
+
+  <div class="axis">
+    <div class="tick" style="left: 0%">0</div>
+    <div class="tick" style="left: 12.5%">2,000</div>
+    <div class="tick" style="left: 25%">4,000</div>
+    <div class="tick" style="left: 37.5%">6,000</div>
+    <div class="tick" style="left: 50%">8,000</div>
+    <div class="tick" style="left: 62.5%">10,000</div>
+    <div class="tick" style="left: 75%">12,000</div>
+    <div class="tick" style="left: 87.5%">14,000</div>
+    <div class="tick" style="left: 100%">16,000</div>
+  </div>
+</div>
+
+<footer>2020 MacBook Pro M1 (16&nbsp;GB) &middot; OpenJDK&nbsp;25 &middot; Clojure&nbsp;1.12.5 &middot; Nippy defaults (LZ4 compression, no encryption)</footer>
+
+</body>
+</html>

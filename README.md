@@ -80,7 +80,7 @@ So starting with Nippy v3.4, Nippy's release notes will **always clearly indicat
 
 ## Performance
 
-Nippy is fast! Latest [benchmark](../../blob/master/test/taoensso/nippy_benchmarks.clj) results:
+Nippy is pretty fast. Latest [benchmark](../../blob/master/test/taoensso/nippy_benchmarks.clj) results:
 
 ![benchmarks-png](../../raw/master/benchmarks.png)
 
