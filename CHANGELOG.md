@@ -2,6 +2,82 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.8.1` (pending)
+
+- **Dependency**: TODO LATER
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+Hotfix for v3.8.0, should be a safe update for users on v3.8.0 - but as always
+please **test carefully** before using in production, and please 
+**report any unexpected problems** - thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## 👉 Change in behavior for malformed input
+
+Nippy now **rejects** some malformed/corrupt input that it previously accepted or
+failed on obscurely. Valid data is unaffected, and no wire format has changed - but
+mentioning since the change is observable:
+
+- A negative collection count previously yielded a silently EMPTY collection, and now throws.
+- A truncated encrypted payload previously failed obscurely (and only after a needless key derivation), and now throws an `EOFException`.
+- An implausible length prefix in buffered input is now rejected BEFORE it's used to size an allocation.
+
+Code that catches a specific exception type from `thaw` or `crypto/decrypt` on corrupt
+input may therefore see a different type than before.
+
+## Since v3.8.0 (2026-07-26)
+
+- [sec] Thaw: validate buffered allocation lengths \[TODO LATER]
+- [fix] `freeze-to-out!`: restore size-unlimited streaming \[TODO LATER]
+- [fix] `with-cache`: restore outer cache \[TODO LATER]
+- [fix] `write-sz`: serialize before writing header \[TODO LATER]
+- [fix] `freeze-to-bb!`: restore state on failure \[TODO LATER]
+- [fix] `freeze-to-out!`: restore cache on failure \[TODO LATER]
+- [fix] Thaw: reject negative collection counts \[TODO LATER]
+- [fix] Crypto: reject truncated encrypted payloads \[TODO LATER]
+- [fix] `with-bb`: cap buffer growth at max array size \[TODO LATER]
+
+---
+
+# `v3.7.1` (pending)
+
+- **Dependency**: TODO LATER
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+Hotfix for v3.7.0, should be a safe update for users on v3.7.0 - but as always
+please **test carefully** before using in production, and please 
+**report any unexpected problems** - thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## 👉 Change in behavior for malformed input
+
+Nippy now **rejects** some malformed/corrupt input that it previously accepted or
+failed on obscurely. Valid data is unaffected, and no wire format has changed - but
+mentioning since the change is observable:
+
+- A negative collection count previously yielded a silently EMPTY collection, and now throws.
+- A truncated encrypted payload previously failed obscurely (and only after a needless key derivation), and now throws an `EOFException`.
+- An implausible length prefix in buffered input is now rejected BEFORE it's used to size an allocation.
+
+Code that catches a specific exception type from `thaw` or `crypto/decrypt` on corrupt
+input may therefore see a different type than before.
+
+## Since v3.7.0 (2026-07-22)
+
+- [sec] Thaw: validate buffered allocation lengths \[TODO LATER]
+- [fix] `freeze-to-out!`: restore size-unlimited streaming \[TODO LATER]
+- [fix] `with-cache`: restore outer cache \[TODO LATER]
+- [fix] `write-sz`: serialize before writing header \[TODO LATER]
+- [fix] `freeze-to-bb!`: restore state on failure \[TODO LATER]
+- [fix] `freeze-to-out!`: restore cache on failure \[TODO LATER]
+- [fix] Thaw: reject negative collection counts \[TODO LATER]
+- [fix] Crypto: reject truncated encrypted payloads \[TODO LATER]
+- [fix] `with-bb`: cap buffer growth at max array size \[TODO LATER]
+
+---
+
 # `v3.8.0` (2026-07-26)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.8.0)
