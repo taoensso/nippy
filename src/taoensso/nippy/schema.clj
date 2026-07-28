@@ -277,15 +277,23 @@
 
 (comment (wrap-header (.getBytes "foo") {:compressor-id :lz4, :encryptor-id nil}))
 
-(let [head-sig head-sig] ; Not ^:const
+(let [^bytes head-sig head-sig] ; Not ^:const
+  (defn try-parse-header-meta
+    "Returns ?head-meta."
+    [^bytes ba]
+    (let [len (alength ba)]
+      (when
+        (and
+          (> len 4)
+          (== (aget ba 0) (aget head-sig 0))
+          (== (aget ba 1) (aget head-sig 1))
+          (== (aget ba 2) (aget head-sig 2)))
+
+        ;; Header appears to be well-formed
+        (get head-meta (aget ba 3) {:unrecognized-meta? true}))))
+
   (defn try-parse-header
     "Returns ?[data-ba head-meta]."
     [^bytes ba]
-    (let [len (alength ba)]
-      (when (> len 4)
-        (let [-head-sig (java.util.Arrays/copyOf ba 3)]
-          (when (java.util.Arrays/equals -head-sig ^bytes head-sig)
-            ;; Header appears to be well-formed
-            (let [meta-id (aget ba 3)
-                  data-ba (java.util.Arrays/copyOfRange ba 4 len)]
-              [data-ba (get head-meta meta-id {:unrecognized-meta? true})])))))))
+    (when-let [head-meta (try-parse-header-meta ba)]
+      [(java.util.Arrays/copyOfRange ba 4 (alength ba)) head-meta])))
