@@ -391,8 +391,8 @@
   (freeze-raw x
     (fn [^ByteBuffer bb]
       (if (> (.position bb) 8192)
-        (let [raw-ba (java.util.Arrays/copyOf (.array bb) (.position bb))
-              ba     (compress lz4-compressor raw-ba)]
+        ;; Compress straight out of `bb`'s backing array, no intermediate copy
+        (let [ba (compression/lz4-compress-range (.array bb) (.arrayOffset bb) (.position bb))]
           (sc/wrap-header ba {:compressor-id :lz4 :encryptor-id nil}))
         (wrap-bb-head-ba bb head-ba-plain)))))
 

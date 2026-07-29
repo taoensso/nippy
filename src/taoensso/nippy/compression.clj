@@ -40,32 +40,34 @@
 ;;;; Airlift
 
 (defn- airlift-compress
-  ^bytes [^io.airlift.compress.Compressor c ^bytes ba prepend-size?]
-  (let [in-len      (alength ba)
-        max-out-len (.maxCompressedLength c in-len)]
+  (^bytes [c ba prepend-size?] (airlift-compress c ba 0 (alength ^bytes ba) prepend-size?))
+  (^bytes [^io.airlift.compress.Compressor c ^bytes ba off in-len prepend-size?]
+   (let [off         (int off)
+         in-len      (int in-len)
+         max-out-len (.maxCompressedLength c in-len)]
 
-    (if prepend-size?
-      (let [ba-max-out  (byte-array (int (+ 4 max-out-len)))
-            int-size-ba (int-size->ba in-len)
-            _           (System/arraycopy int-size-ba 0 ba-max-out 0 4)
-            out-len
-            (.compress c
-              ba         0 in-len
-              ba-max-out 4 max-out-len)]
+     (if prepend-size?
+       (let [ba-max-out  (byte-array (int (+ 4 max-out-len)))
+             int-size-ba (int-size->ba in-len)
+             _           (System/arraycopy int-size-ba 0 ba-max-out 0 4)
+             out-len
+             (.compress c
+               ba         off in-len
+               ba-max-out 4 max-out-len)]
 
-        (if (== out-len max-out-len)
-          (do                           ba-max-out)
-          (java.util.Arrays/copyOfRange ba-max-out 0 (+ 4 out-len))))
+         (if (== out-len max-out-len)
+           (do                           ba-max-out)
+           (java.util.Arrays/copyOfRange ba-max-out 0 (+ 4 out-len))))
 
-      (let [ba-max-out (byte-array max-out-len)
-            out-len
-            (.compress c
-              ba         0 in-len
-              ba-max-out 0 max-out-len)]
+       (let [ba-max-out (byte-array max-out-len)
+             out-len
+             (.compress c
+               ba         off in-len
+               ba-max-out 0 max-out-len)]
 
-        (if (== out-len max-out-len)
-          (do                           ba-max-out)
-          (java.util.Arrays/copyOfRange ba-max-out 0 out-len))))))
+         (if (== out-len max-out-len)
+           (do                           ba-max-out)
+           (java.util.Arrays/copyOfRange ba-max-out 0 out-len)))))))
 
 (defn- airlift-decompress
   ^bytes [^io.airlift.compress.Decompressor d ^bytes ba max-out-len]
@@ -108,7 +110,18 @@
     ICompressor
     (header-id  [_] :lz4)
     (compress   [_ ba] (airlift-compress   (.get tl:airlift-lz4-compressor)   ba true))
-    (decompress [_ ba] (airlift-decompress (.get tl:airlift-lz4-decompressor) ba nil))))
+    (decompress [_ ba] (airlift-decompress (.get tl:airlift-lz4-decompressor) ba nil)))
+
+  (defn ^:no-doc lz4-compress-range
+    "Like `(compress lz4-compressor ba)`, but compresses only `len` bytes
+    from `off` - letting callers skip an intermediate copy. Byte output is
+    identical. Used for the default (`:auto`) freeze path, which compresses
+    straight out of its write buffer.
+
+    Deliberately a plain fn rather than an addition to `ICompressor`, which
+    is public and may have user implementations."
+    ^bytes [^bytes ba off len]
+    (airlift-compress (.get tl:airlift-lz4-compressor) ba off len true)))
 
 (do
   (enc/def* ^:private ^ThreadLocal tl:airlift-lzo-compressor   (enc/threadlocal (io.airlift.compress.lzo.LzoCompressor.)))
