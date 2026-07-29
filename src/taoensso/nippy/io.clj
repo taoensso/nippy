@@ -46,11 +46,61 @@
 
 (enc/declare-remote ^:dynamic taoensso.nippy/*incl-metadata?*)
 
-(defmacro write-typed+meta [x bb dout_]
+(defmacro write-typed+meta* "Like `write-typed+meta`, but takes a pre-read `*incl-metadata?*`."
+  [x bb dout_ incl-meta?]
   `(let [x# ~x]
-     (if (and (instance? clojure.lang.IObj x#) taoensso.nippy/*incl-metadata?*)
+     (if (and ~incl-meta? (instance? clojure.lang.IObj x#))
        (write-typed-meta x# ~bb ~dout_)
        (write-typed      x# ~bb ~dout_))))
+
+(defmacro write-typed+meta [x bb dout_] `(write-typed+meta* ~x ~bb ~dout_ taoensso.nippy/*incl-metadata?*))
+
+(declare fast-writers? write-double write-kw*) ; Defined below, used by `write-el`
+
+(def ^:private fast-path-writers
+  "`write-el`'s `instanceof` fast paths, in check order:
+  [[<class> <sample-val> (fn [bb x]) -> <write-form>] ...].
+
+  SINGLE SOURCE OF TRUTH for both `write-el` (which builds its `cond` from
+  this) and `fast-writers?` (which uses the samples to detect an
+  `extend-freeze` that must take precedence). Keeping two lists in sync by
+  hand risked silently bypassing a user's writer.
+
+  NB no type here may implement `IObj` (none can carry metadata), since the
+  fast path skips the metadata check."
+  [['clojure.lang.Keyword :kw (fn [bb x] `(write-kw*    ~bb ~x ~'-el-state))]
+   ['String               ""  (fn [bb x] `(write-str    ~bb ~x))]
+   ['Long                 0   (fn [bb x] `(write-long   ~bb ~x))]
+   ['Double               0.0 (fn [bb x] `(write-double ~bb ~x))]])
+
+(defmacro ^:private with-els
+  "Establishes context for `write-el`, captured ONCE for a whole collection
+  rather than re-read for each of its elements. Must wrap every `write-el`."
+  {:style/indent 0}
+  [& body]
+  `(let [~'-el-fast?  (fast-writers?)
+         ~'-el-meta?  taoensso.nippy/*incl-metadata?*
+         ~'-el-state  (.get impl/tl:cache)]
+     ~@body))
+
+(defmacro ^:private write-el
+  "Like `write-typed+meta`, but for collection elements. Must appear within
+  `with-els`.
+
+  Common types bypass protocol dispatch since mixed element types repeatedly
+  miss Clojure's single-class protocol cache. Fast-path types cannot implement
+  `IObj`, since their metadata check is skipped. Ref. `fast-path-writers`,
+  `fast-writers?`."
+  [x bb dout_]
+  (let [x* (gensym "x")]
+    `(let [~x* ~x]
+       (if ~'-el-fast?
+         (cond
+           ~@(mapcat
+               (fn [[class _ write-form]] [`(instance? ~class ~x*) (write-form bb x*)])
+               fast-path-writers)
+           :else (write-typed+meta* ~x* ~bb ~dout_ ~'-el-meta?))
+         (write-typed+meta*         ~x* ~bb ~dout_ ~'-el-meta?)))))
 
 (defmacro write-id        [bb id] `(.put      ~bb (unchecked-byte  ~id)))
 (defmacro write-sm-ucount [bb  n] `(.put      ~bb (unchecked-byte (+ ~n Byte/MIN_VALUE)))) ; Unsigned
@@ -80,7 +130,7 @@
   `(do
      (write-id       ~bb ~id)
      (write-lg-count ~bb ~alen)
-     (enc/reduce-n (fn [_# idx#] (write-typed+meta (aget ~arr idx#) ~bb ~dout_)) nil ~alen)))
+     (with-els (enc/reduce-n (fn [_# idx#] (write-el (aget ~arr idx#) ~bb ~dout_)) nil ~alen))))
 
 (defn write-biginteger [^ByteBuffer bb ^BigInteger n] (write-bytes-lg bb (.toByteArray n)))
 
@@ -159,6 +209,11 @@
 
     (write-long-legacy bb n)))
 
+(defn write-double [^ByteBuffer bb ^double n]
+  (if (zero? n)
+    (do (write-id bb sc/id-double-0))
+    (do (write-id bb sc/id-double) (.putDouble bb n))))
+
 ;; Coll headers (id + count) are written by BOTH the buffered writers below and
 ;; the streaming writer (see `write-typed+meta-to-out!`). They're macros so that
 ;; there's a single source of truth while the buffered writers keep emitting
@@ -189,41 +244,43 @@
   (let [cnt (count v)]
     (write-coll-header* bb sc/id-vec-0 sc/id-vec-sm* sc/id-vec-sm_ sc/id-vec-md sc/id-vec-lg cnt)
     (when-not (zero? cnt)
-      (run! (fn [el] (write-typed+meta el bb dout_)) v))))
+      (with-els (run! (fn [el] (write-el el bb dout_)) v)))))
 
 (defn write-kvs
   ([^ByteBuffer bb dout_ id-lg coll]
    (let [cnt (count coll)]
      (write-id       bb id-lg)
      (write-lg-count bb cnt)
-     (enc/run-kv!
-       (fn [k v]
-         (write-typed+meta k bb dout_)
-         (write-typed+meta v bb dout_))
-       coll)))
+     (with-els
+       (enc/run-kv!
+         (fn [k v]
+           (write-el k bb dout_)
+           (write-el v bb dout_))
+         coll))))
 
   ([^ByteBuffer bb dout_ id-empty id-sm id-md id-lg coll]
    (let [cnt (count coll)]
      (write-coll-header bb id-empty id-sm id-md id-lg cnt)
      (when-not (zero? cnt)
-       (enc/run-kv!
-         (fn [k v]
-           (write-typed+meta k bb dout_)
-           (write-typed+meta v bb dout_))
-         coll)))))
+       (with-els
+         (enc/run-kv!
+           (fn [k v]
+             (write-el k bb dout_)
+             (write-el v bb dout_))
+           coll))))))
 
 (defn write-counted-coll
   ([^ByteBuffer bb dout_ id-lg coll]
    (let [cnt (count coll)]
      (write-id       bb id-lg)
      (write-lg-count bb cnt)
-     (reduce (fn [_ in] (write-typed+meta in bb dout_)) nil coll)))
+     (with-els (reduce (fn [_ in] (write-el in bb dout_)) nil coll))))
 
   ([^ByteBuffer bb dout_ id-empty id-sm id-md id-lg coll]
    (let [cnt (count coll)]
      (write-coll-header bb id-empty id-sm id-md id-lg cnt)
      (when-not (zero? cnt)
-       (reduce (fn [_ in] (write-typed+meta in bb dout_)) nil coll)))))
+       (with-els (reduce (fn [_ in] (write-el in bb dout_)) nil coll))))))
 
 (defn write-uncounted-coll
   ([^ByteBuffer bb dout_ id-empty id-sm id-md id-lg coll] (write-counted-coll bb dout_ id-empty id-sm id-md id-lg coll)) ; Extra O(n) count
@@ -232,7 +289,7 @@
    (write-id bb id-lg)
    (let [cnt-idx   (.position bb)
          _         (.putInt   bb 0) ; lg-count placeholder
-         ^long cnt (reduce (fn [^long cnt in] (write-typed+meta in bb dout_) (unchecked-inc cnt)) 0 coll)]
+         ^long cnt (with-els (reduce (fn [^long cnt in] (write-el in bb dout_) (unchecked-inc cnt)) 0 coll))]
      (.putInt bb cnt-idx cnt))))
 
 (defn write-coll
@@ -252,7 +309,8 @@
   (let [cnt (count m)]
     (write-coll-header* bb sc/id-map-0 sc/id-map-sm* sc/id-map-sm_ sc/id-map-md sc/id-map-lg cnt)
     (when-not (zero? cnt)
-      (reduce-kv
+      (with-els
+        (reduce-kv
           (fn [_ k v]
             (if (enc/and? is-metadata? (fn? v) (qualified-symbol? k))
               (do
@@ -261,10 +319,10 @@
                   (write-typed  impl/meta-protocol-key bb dout_))
                 (write-id bb sc/id-nil))
               (do
-                (write-typed+meta k bb dout_)
-                (write-typed+meta v bb dout_))))
-        nil
-        m))))
+                (write-el k bb dout_)
+                (write-el v bb dout_))))
+          nil
+          m)))))
 
 (defn write-set
   "Micro-optimized `write-counted-coll` w/ id-set-0 id-set-sm id-set-md id-set-lg."
@@ -272,7 +330,7 @@
   (let [cnt (count s)]
     (write-coll-header* bb sc/id-set-0 sc/id-set-sm* sc/id-set-sm_ sc/id-set-md sc/id-set-lg cnt)
     (when-not (zero? cnt)
-      (reduce (fn [_ in] (write-typed+meta in bb dout_)) nil s))))
+      (with-els (reduce (fn [_ in] (write-el in bb dout_)) nil s)))))
 
 (defn write-sz
   "Writes given arg using Java `Serializable`.
@@ -412,6 +470,15 @@
         :else (write-kw bb kw) ; Seen-kws full
         ))))
 
+(defn write-kw*
+  "Writes given keyword, auto-caching it in the given (current) session.
+  Takes `state` so that callers writing many keywords
+  can read `tl:cache` once rather than once per keyword."
+  [^ByteBuffer bb ^clojure.lang.Keyword kw ^CacheState state]
+  (if state
+    (write-auto-cached-kw bb kw state)
+    (write-kw             bb kw)))
+
 ;;;;
 
 (extend-protocol IWriteTypedWithMeta
@@ -443,11 +510,7 @@
 
 (writer Boolean              nil (if (.booleanValue x) (write-id bb sc/id-true) (write-id bb sc/id-false)))
 (writer String               nil (write-str bb x))
-(writer clojure.lang.Keyword nil
-  (if-let [state (.get impl/tl:cache)]
-    (write-auto-cached-kw bb x state)
-    (write-kw bb x)))
-
+(writer clojure.lang.Keyword nil (write-kw* bb x (.get impl/tl:cache)))
 (writer clojure.lang.Symbol  nil (write-sym bb x))
 
 (writer Character sc/id-char    (.putChar   bb (unchecked-char (int x))))
@@ -455,11 +518,8 @@
 (writer Short     sc/id-short   (.putShort  bb (unchecked-short     x)))
 (writer Integer   sc/id-integer (.putInt    bb                 (int x)))
 (writer Float     sc/id-float   (.putFloat  bb                      x))
-(writer Long      nil           (write-long bb                      x))
-(writer Double    nil
-  (if (zero? ^double x)
-    (do (write-id bb sc/id-double-0))
-    (do (write-id bb sc/id-double) (.putDouble bb x))))
+(writer Long      nil           (write-long   bb                    x))
+(writer Double    nil           (write-double bb                    x))
 
 (writer BigInteger sc/id-biginteger (write-biginteger bb x))
 (writer BigDecimal sc/id-bigdec
@@ -603,6 +663,28 @@
           {:serializable-error e1
            :readable-error     e2})
         (or e1 e2)))))
+
+;;;; Fast-path guard
+
+(let [samples (mapv second fast-path-writers) ; One per `write-el` fast-path type
+      resolve-writers (fn [proto] (mapv #(find-protocol-impl proto %) samples))
+      builtin-writers (resolve-writers IWriteTypedNoMeta)
+      last_           (volatile! nil)] ; ?[<proto> <result>]
+
+  (defn fast-writers?
+    "Returns true iff `write-el`'s fast paths match the effective protocol
+    writers. `extend` installs a new protocol map, so the usual case needs
+    only an identity check. Called once per collection."
+    []
+    (let [proto IWriteTypedNoMeta
+          last  @last_]
+      (if (and last (identical? proto (nth last 0)))
+        (nth last 1)
+        (let [result (= builtin-writers (resolve-writers proto))]
+          ;; Cache proto+result as a PAIR: separate volatiles could be
+          ;; interleaved by concurrent `extend`s into a mismatched pair
+          (vreset! last_ [proto result])
+          result)))))
 
 ;;;; Reading
 
