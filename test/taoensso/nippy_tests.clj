@@ -924,6 +924,194 @@
        (is (= ["zero" "one"] (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap good)))
          "Session still clean after failed read")])))
 
+;;;; Shared dicts
+
+(def test-dict (nippy/shared-dict [:name :email :age]))
+
+(deftest _shared-dict
+  (let [row {:name "n", :email "e", :age 0}
+        fd  (fn [x] (freeze x {:compressor nil, :shared-dict test-dict}))
+        f_  (fn [x] (freeze x {:compressor nil}))]
+
+    [(is (= row (thaw (fd row) {:shared-dict test-dict})))
+     (is (= row (thaw (freeze row {:shared-dict test-dict}) {:shared-dict test-dict}))
+       "Default (compressing) path")
+
+     (is (< (count (fd row)) (count (f_ row))) "Dict hits shrink payload")
+     (is (ba= (fd [:novel]) (f_ [:novel]))
+       "Zero dict hits: no marker cost")
+
+     (let [x [(nippy/cache "s") (nippy/cache "s") :name (nippy/cache "s")]]
+       (is (= ["s" "s" :name "s"] (thaw (fd x) {:shared-dict test-dict}))
+         "Session cache refs work across late dict activation"))
+
+     (let [v [:novel :name]
+           x (nippy/cache v)]
+       (is (= v (thaw (fd x) {:shared-dict test-dict}))
+         "Dict can activate inside a pending session-cache value"))
+
+     (let [x [(nippy/cache "s") (nippy/cache "s") :novel :novel :novel]]
+       (is (ba= (fd x) (f_ x))
+         "Zero dict hits: no marker cost alongside session caching"))
+
+     ;; Mixed: dict kws (incl. manually cached) + novel repeated kws (3x, so
+     ;; the offset session-ref branch is hit) + manually cached non-kw +
+     ;; dict kw across a nested-writer boundary
+     (is (= [:name :novel :novel :novel {:x "s", :y "s"} (->NestedFreezeWrapper :email) :email]
+           (thaw
+             (fd [(nippy/cache :name) :novel :novel :novel
+                  {:x (nippy/cache "s"), :y (nippy/cache "s")}
+                  (->NestedFreezeWrapper :email) :email])
+             {:shared-dict test-dict})))
+
+     ;; The marker (id + count + fingerprint) is a wire format: these bytes
+     ;; may NEVER change (would render frozen dict payloads unthawable)
+     (is (= (seq (java.util.Arrays/copyOf ^bytes (fd :name) (+ 4 11)))
+            (concat [78 80 89 0] [124 0 3 33 8 -66 49 -36 -56 59 -80]))
+       "Header + dict marker bytes for (shared-dict [:name :email :age])")]))
+
+(deftest _shared-dict-strs
+  (let [dict (nippy/shared-dict [:name "country" "currency"])
+        fd   (fn [x] (freeze x {:compressor nil, :shared-dict dict}))
+        f_   (fn [x] (freeze x {:compressor nil}))
+        row  {"country" "de", "currency" "eur", :name "n"}]
+
+    [(is (= row (thaw (fd row) {:shared-dict dict})))
+     (is (< (count (fd row)) (count (f_ row))) "Dict strings shrink payload")
+
+     ;; NB `(String. ...)`: distinct-equal instances prove `.equals` (not
+     ;; identity) lookup semantics
+     (is (identical? (nth @dict 1)
+           (first (thaw (fd [(String. "country")]) {:shared-dict dict})))
+       "Dict string occurrences thaw to the dict's own shared instance")
+
+     (is (ba= (fd [(nippy/cache (String. "country"))]) (fd ["country"]))
+       "Manual `cache` coalesces with dict strings (same bytes as plain)")
+
+     (is (throws? :ex-info "mismatch"
+           (thaw (freeze [:k] {:shared-dict (nippy/shared-dict [:k])})
+             {:shared-dict            (nippy/shared-dict [":k"])}))
+       "Kw and same-print string fingerprint differently")
+
+     (is (throws? :ex-info (nippy/shared-dict ["a" (String. "a")]))
+       "Dup detection uses `.equals`, not identity")
+     (is (throws? :ex-info (nippy/shared-dict [(str (char 0xD800))])))
+
+     ;; Locks the string fingerprint encoding (wire format, never change)
+     (is (= (seq (java.util.Arrays/copyOf ^bytes (fd :name) (+ 4 11)))
+            (concat [78 80 89 0] [124 0 3 3 -41 -58 -35 74 123 101 -4]))
+       "Header + dict marker bytes for (shared-dict [:name \"country\" \"currency\"])")]))
+
+(deftest _shared-dict-safety
+  (let [dict-a  (nippy/shared-dict [:a1 :a2])
+        dict-a+ (nippy/shared-dict [:a1 :a2 :a3])
+        dict-b  (nippy/shared-dict [:b1 :b2])
+        dict-r  (nippy/shared-dict [:a2 :a1])
+        frozen  (freeze [:a1 :a2] {:shared-dict dict-a})]
+
+    [(is (= [:a1 :a2] (thaw frozen {:shared-dict dict-a})))
+     (is (= [:a1 :a2] (thaw frozen {:shared-dict dict-a+})) "Append-only dict evolution")
+     (is (throws? :ex-info "needs the same dict" (thaw frozen)))
+     (is (throws? :ex-info "mismatch" (thaw frozen {:shared-dict dict-b})))
+     (is (throws? :ex-info "mismatch" (thaw frozen {:shared-dict dict-r})) "Reordering detected")
+     (is (throws? :ex-info "mismatch"
+           (thaw (freeze [:a1] {:shared-dict dict-a+}) {:shared-dict dict-a}))
+       "Thaw dict must be >= freeze dict")
+
+     (is (= ["q" "q"] (thaw (freeze [(nippy/cache "q") (nippy/cache "q")]) {:shared-dict dict-a}))
+       "Dict-less data thaws fine with a dict given: no marker => dict
+        DISABLED, so the in-stream idx-0 ref resolves to the session value")
+
+     ;; Forged wire input fails loud
+     (let [ba (freeze :a1 {:shared-dict dict-a, :compressor nil})]
+       (aset-byte ba 5 -1) (aset-byte ba 6 -1) ; Marker dict-count -> -1
+       (is (throws? :ex-info "mismatch" (thaw ba {:shared-dict dict-a}))))
+     (is (throws? :ex-info "Bad cache ref"
+           (nippy/fast-thaw (byte-array [sc/id-cached-md -1 -1]))))
+
+     ;; Constructor and opt validation
+     (is (throws? :ex-info (nippy/shared-dict [])))
+     (is (throws? :ex-info (nippy/shared-dict [:a 42])))
+     (is (throws? :ex-info (nippy/shared-dict [:a :a])))
+     (is (throws? :ex-info (nippy/shared-dict [(keyword (str (char 0xD800)))]))
+       "Unpaired surrogates would fingerprint identically to `?`")
+     (is (throws? :ex-info (freeze :x {:shared-dict [:a]})) "Opt must be a precompiled dict")]))
+
+(deftest _shared-dict-sessions
+  (let [dict (nippy/shared-dict [:k1 :k2 "s1"])
+        msgs->ba
+        (fn [msgs]
+          (let [baos (java.io.ByteArrayOutputStream.)
+                dout (java.io.DataOutputStream. baos)]
+            (binding [nippy/*shared-dict* dict]
+              (nippy/with-cache
+                (doseq [m msgs]
+                  (try (nippy/freeze-to-out! dout m) (catch Throwable _)))))
+            (.toByteArray baos)))]
+
+    [(is (ba= (msgs->ba [[:k1 "s1" (nippy/cache "s1") :x :x (->NestedFreezeWrapper :k2)]])
+              (binding [nippy/*shared-dict* dict] (nippy/fast-freeze [:k1 "s1" (nippy/cache "s1") :x :x (->NestedFreezeWrapper :k2)])))
+       "Streamed/buffered byte parity with dict, incl. dict string (plain + manually cached) + nested-writer boundary")
+
+     ;; Parity for the cases that exercise marker rollback/ordering:
+     ;; buffer-growth retries (large value) and pre-value metadata
+     ;; NB > 1 MiB so the buffered side ALWAYS overflows + retries at least
+     ;; once (`with-bb`'s reused thread-local buffer retains <= 1 MiB)
+     (let [big  (into [:k1] (repeat 400 (apply str (repeat 3000 "x"))))
+           metd (with-meta [:k1 :k2] {:m :k2})]
+       [(is (ba= (msgs->ba [big])  (binding [nippy/*shared-dict* dict] (nippy/fast-freeze big)))  "Parity with dict + buffer growth")
+        (is (ba= (msgs->ba [metd]) (binding [nippy/*shared-dict* dict] (nippy/fast-freeze metd))) "Parity with first dict hit in metadata")
+        (is (= metd (binding [nippy/*shared-dict* dict]
+                      (nippy/with-cache (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap (msgs->ba [metd])))))))])
+
+     (is (ba= (msgs->ba [[:k1]])       (msgs->ba [[:k1       (Object.)] [:k1]])) "Failed writes roll back dict marker flag: byte output unaffected by failure history")
+     (is (ba= (msgs->ba [[:k1] [:k1]]) (msgs->ba [[:k1] [:k1 (Object.)] [:k1]])) "Failed writes PRESERVE an already-written marker flag (no marker re-emit)")
+
+     ;; Failed reads preserve an already-ENABLED dict (nonzero thaw-dict-k)
+     (let [^bytes ba-s1  (msgs->ba [[:k1]])
+           ^bytes ba-s12 (msgs->ba [[:k1] [:k2]])
+           msg2   (java.util.Arrays/copyOfRange ba-s12 (alength ba-s1) (alength ba-s12))
+           bad2   (java.util.Arrays/copyOf ^bytes msg2 (dec (alength ^bytes msg2)))]
+       (binding [nippy/*shared-dict* dict]
+         (nippy/with-cache
+           [(is (= [:k1] (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap ba-s1))) "Enables dict")
+            (is (throws? (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap bad2))))
+            (is (= [:k2] (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap msg2)))
+              "Dict still enabled after failed read")])))
+
+     ;; Failed reads roll back the marker-enabled dict
+     (let [good (binding [nippy/*shared-dict* dict] (nippy/fast-freeze [:k1 :k2]))
+           bad  (java.util.Arrays/copyOf ^bytes good (dec (alength ^bytes good)))]
+       (binding [nippy/*shared-dict* dict]
+         (nippy/with-cache
+           [(is (throws?     (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap bad))))
+            (is (= [:k1 :k2] (nippy/thaw-from-bb! (java.nio.ByteBuffer/wrap good)))
+              "Session still clean after failed read")])))
+
+     ;; Only one marker is valid per session, so thawing concatenated
+     ;; single-payload sessions in ONE session fails loud (mixed sessions)
+     (let [ba1 (binding [nippy/*shared-dict* dict] (nippy/fast-freeze [:k1]))
+           din (java.io.DataInputStream. (java.io.ByteArrayInputStream. (enc/ba-concat ba1 ba1)))]
+       (binding [nippy/*shared-dict* dict]
+         (nippy/with-cache
+           [(is (= [:k1]                       (nippy/thaw-from-in! din)))
+            (is (throws? :ex-info "Unexpected" (nippy/thaw-from-in! din)))])))]))
+
+(deftest _shared-dict-threads
+  (let [dict (nippy/shared-dict
+               (into (mapv #(keyword (str "k" %)) (range 100))
+                     (mapv #(str     "s" %)       (range 100))))
+        rows (mapv (fn [i] {(keyword (str "k" (mod i 100))) i
+                            (str "s" (mod i 100)) i ; Dynamic => distinct-equal instances
+                            :novel i})
+               (range 200))]
+    (is (= rows
+          (vec
+            (pmap
+              (fn [row] (thaw (freeze row {:shared-dict dict}) {:shared-dict dict}))
+              rows)))
+      "Shared dict across threads")))
+
 ;;;; Serialized output
 
 (defn ba-hash [^bytes ba] (hash (seq ba)))

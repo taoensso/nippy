@@ -322,6 +322,123 @@
   Repeated keywords are cached automatically so don't need manual wrapping."
   [x] (if (instance? Cached x) x (Cached. x)))
 
+;;;; Shared dicts
+
+(def ^:private ^:const max-dict-count 32767) ; Same md-count cap as session cache idxs
+(def ^:private ^:const fnv64-offset -3750763034362895579) ; FNV-1a 64 offset basis
+(def ^:private ^:const fnv64-prime   1099511628211)       ; FNV-1a 64 prime
+
+(defn- fnv64-b  ^long [^long h ^long b] (unchecked-multiply (bit-xor h b) fnv64-prime))
+(defn- fnv64-ba ^long [^long h ^bytes ba]
+  (let [len (alength ba)]
+    (loop [i 0, h h]
+      (if (== i len)
+        h
+        (recur (unchecked-inc i)
+          (fnv64-b h (bit-and (aget ba i) 0xff)))))))
+
+(defn- entry-hash
+  "Returns a stable 64-bit hash of given `shared-dict` entry (kw or string)
+  for dict fingerprints."
+  ^long [x]
+  ;; Uses an explicit FNV-1a fold over UTF-8 bytes since these hashes go to the wire
+  ;; and so must be stable across JVM/Clojure/Nippy versions.
+  (fnv64-ba (fnv64-b (long fnv64-offset) (if (keyword? x) 0 1))
+    (.getBytes ^String (str x) java.nio.charset.StandardCharsets/UTF_8)))
+
+(deftype SharedDict
+  ;; Static shared dict of known kws + strings, Ref. `shared-dict`.
+  ;; Immutable after construction => safe to share across threads/sessions
+  [^objects entries                    ; idx -> kw | string
+   ^java.util.IdentityHashMap kw-idxs  ; {kw  idx} (kws interned => identity is equality)
+   ^java.util.HashMap         str-idxs ; {str idx}
+   ^long max-str-len                   ; Longest str entry (-1 if none)
+   ^longs prefix-hashes                ; [i] = fingerprint of entries[0..i-1], for append-only dict evolution
+   ]
+
+  clojure.lang.IDeref (deref [_] (vec entries)))
+
+(defn ^:public shared-dict
+  "Experimental, subject to change. Feedback welcome!
+
+  Given an ordered coll of keywords and/or strings, returns a precompiled
+  dictionary schema for use with `*shared-dict*` or `:shared-dict` opts:
+
+    {:name \"Alice\", \"country\" \"DE\", \"currency\" \"EUR\"} ; Row data
+
+    (def row-dict (nippy/shared-dict [:name \"country\" \"currency\"])) ; Row schema
+    (nippy/freeze x  {:shared-dict row-dict})
+    (nippy/thaw   ba {:shared-dict row-dict})
+
+  All participating freeze and thaw calls then encode these known values
+  as small 1-3 byte references.
+
+  Usage:
+
+  - Version and store your dict definition with your code!
+
+  - Thawing data that used a dict entry REQUIRES a dict whose leading
+    entries are identical (same entries and order) to the dict used to
+    freeze (Nippy validates this and throws on mismatch).
+
+  - NEVER remove or reorder entries. APPENDING is safe: data frozen
+    with an older (shorter) version of a dict thaws fine with a newer
+    (appended-to) version. So during rollouts, upgrade dicts on your
+    readers before your writers.
+
+  - Order entries by expected frequency: the first 8 get 1-byte refs.
+  - Max dict size: 32767 entries.
+  - Deref a dict to get back its entry vector."
+
+  [entries]
+  (when-not (and (sequential? entries) (<= 1 (count entries) max-dict-count))
+    (truss/ex-info! "`shared-dict` expects a non-empty ordered sequence of <= 32767 keywords/strings"
+      {:type (type entries), :count (when (sequential? entries) (count entries))}))
+
+  (let [n    (count entries)
+        earr (object-array n)
+        kwm  (java.util.IdentityHashMap. n)
+        strm (java.util.HashMap. (int (/ n 0.7))) ; Cap ctor arg, avoid rehash
+        ph   (long-array (inc n))
+        enc8 (.newEncoder java.nio.charset.StandardCharsets/UTF_8)]
+
+    (aset ph 0 (long fnv64-offset)) ; Seed
+    (reduce
+      (fn [^long idx e]
+
+        (when-not (or (keyword? e) (string? e))
+          (truss/ex-info! "`shared-dict` entries must all be keywords or strings"
+            {:idx idx, :value e, :type (type e)}))
+
+        (when (if (keyword? e) (.containsKey kwm e) (.containsKey strm e))
+          (truss/ex-info! "`shared-dict` entries must be distinct"
+            {:idx idx, :duplicate e}))
+
+        (when-not (.canEncode enc8 ^String (str e))
+          ;; Unpaired surrogates lossily encode to `?` (in fingerprints AND in
+          ;; Nippy's kw/str wire formats themselves), conflating distinct entries
+          (truss/ex-info! "`shared-dict` entries must be UTF-8 encodable (no unpaired surrogates)"
+            {:idx idx, :value e}))
+
+        (aset earr idx e)
+        (if (keyword? e)
+          (.put kwm  e (int idx))
+          (.put strm e (int idx)))
+
+        (aset ph (inc idx)
+          (unchecked-add
+            (unchecked-multiply (aget ph idx) fnv64-prime)
+            (entry-hash e)))
+
+        (inc idx))
+      0 entries)
+
+    (SharedDict. earr kwm strm
+      (reduce (fn [^long m ^String s] (max m (.length s))) -1 (.keySet strm))
+      ph)))
+
+(enc/declare-remote ^:dynamic taoensso.nippy/*shared-dict*)
+
 (deftype CacheState
   ;; Keywords use `IdentityHashMap`s: keywords are interned and don't override
   ;; `equals`, so identity IS equality for them - and a flat open-addressed
@@ -331,17 +448,45 @@
    ^java.util.IdentityHashMap kw-idxs     ; {<kw> <idx>} for freezing cached kws
    ^java.util.ArrayList       thaw-vals   ; [<val> ...] for thawing, indexed by idx
    ^java.util.IdentityHashMap seen-kws    ; #{<kw>} seen this session, Ref. `write-auto-cached-kw`
-   ^java.util.ArrayList       seen-log])  ; `seen-kws` in insertion order, for `cache-restore!`
+   ^java.util.ArrayList       seen-log    ; `seen-kws` in insertion order, for `cache-restore!`
+   ^SharedDict                 dict        ; ?SharedDict fixed at session creation, Ref. `shared-dict`
+   ^longs                     mut])       ; [<freeze-marker-written?> <thaw-dict-k>]
+                                          ;   (mutable long holder: deftype mutable fields are private)
+
+(defn- current-shared-dict
+  "Returns ?SharedDict from `taoensso.nippy/*shared-dict*`, validating type."
+  ^SharedDict []
+  (when-let [d taoensso.nippy/*shared-dict*]
+    (if (instance? SharedDict d)
+      d
+      (truss/ex-info! "Expected `:shared-dict` value to be built with `nippy/shared-dict`"
+        {:value d, :type (type d)}))))
 
 (defn new-cache-state ^CacheState []
   (CacheState. (java.util.HashMap.) (java.util.IdentityHashMap.) (java.util.ArrayList.)
-    (java.util.IdentityHashMap.) (java.util.ArrayList.)))
+    (java.util.IdentityHashMap.) (java.util.ArrayList.)
+    (current-shared-dict) (long-array 2)))
+
+(defn dict-count
+  "Returns given `CacheState`'s full dict size (0 if no dict)."
+  ^long [^CacheState state]
+  (if-let [^SharedDict d (.-dict state)]
+    (alength ^objects (.-entries d))
+    0))
+
+(defn active-dict-count
+  "Returns given `CacheState`'s active dict size (0 before its first hit):
+  the current freeze-side idx offset for session cache entries."
+  ^long [^CacheState state]
+  (if (zero? (aget ^longs (.-mut state) 0)) 0 (dict-count state)))
 
 (defn cache-idx-count
   "Returns the number of cache idxs allocated so far by given `CacheState`.
 
   Idxs come from a SINGLE monotonic sequence shared by both freeze maps,
-  since the thaw side assigns them by arrival order."
+  since the thaw side assigns them by arrival order. NB both maps store
+  SESSION-RELATIVE idxs (`cache-restore!` depends on this); any dict offset
+  is added at ref-emission time only."
   ^long [^CacheState state]
   (+ (.size ^java.util.HashMap         (.-freeze-idxs state))
      (.size ^java.util.IdentityHashMap (.-kw-idxs     state))))
@@ -378,12 +523,13 @@
 
 (defn cache-mark
   "Returns a checkpoint of given `CacheState`'s write state (`freeze-idxs`
-  + `seen-kws`), for `cache-restore!`. O(1): exploits the invariant that
-  entries are only ever added (with idx = current size), packing the two
-  sizes into a single long."
+  + `seen-kws` + dict marker flag), for `cache-restore!`. O(1): exploits the
+  invariant that entries are only ever added (with idx = current size),
+  packing the two sizes (each <= 32768) + flag into a single long."
   ^long [^CacheState state]
   (bit-or
-    (bit-shift-left (cache-idx-count state) 32)
+    (bit-shift-left (aget ^longs (.-mut state) 0) 41)
+    (bit-shift-left (cache-idx-count state) 20)
     (do (long (.size ^java.util.ArrayList (.-seen-log state))))))
 
 (defn cache-restore!
@@ -394,14 +540,19 @@
   retained, and stale `seen-kws` entries would make byte output of retried
   writes differ from non-retried writes of equal data."
   [^CacheState state ^long mark]
-  (let [idx-mark (bit-shift-right mark 32)
-        log-mark (bit-and         mark 0xFFFFFFFF)
+  (let [idx-mark (bit-and (bit-shift-right mark 20) 0xFFFFF)
+        log-mark (bit-and                  mark     0xFFFFF)
         ^java.util.HashMap         fm (.-freeze-idxs state)
         ^java.util.IdentityHashMap km (.-kw-idxs     state)]
+
+    (aset ^longs (.-mut state) 0 (bit-shift-right mark 41)) ; Dict marker flag
 
     (when (> (cache-idx-count state) idx-mark)
       (if (zero? idx-mark)
         (do (.clear fm) (.clear km))
+        ;; NB compares each entry's STORED idx against the count checkpoint,
+        ;; correct only because both maps store session-relative idxs
+        ;; (idx = `cache-idx-count` at insertion time), Ref. `cache-idx-count`
         (let [pred (reify java.util.function.Predicate
                      (test [_ idx] (>= (long idx) idx-mark)))]
           (.removeIf (.values fm) pred)
@@ -418,20 +569,27 @@
 ;;
 
 (defn thaw-mark
-  "Returns a checkpoint of given `CacheState`'s `thaw-vals`,
-  for `thaw-restore!`. O(1)."
-  ^long [^CacheState state] (.size ^java.util.ArrayList (.-thaw-vals state)))
+  "Returns a checkpoint of given `CacheState`'s read state (`thaw-vals` +
+  thaw dict count), for `thaw-restore!`. O(1)."
+  ^long [^CacheState state]
+  (bit-or
+    (bit-shift-left (aget ^longs (.-mut state) 1) 32)
+    (do (long (.size ^java.util.ArrayList (.-thaw-vals state))))))
 
 (defn thaw-restore!
-  "Restores given `CacheState`'s `thaw-vals` to given `thaw-mark`
+  "Restores given `CacheState`'s read state to given `thaw-mark`
   checkpoint, returns nil. Necessary when abandoning a failed read in a
   shared session: entries (including reserved slots) from the failed read
-  would otherwise poison later reads in the same session."
+  would otherwise poison later reads in the same session, and a dict
+  enabled by a failed read's marker would silently misresolve later
+  dict-less reads."
   [^CacheState state ^long mark]
-  (let [^java.util.ArrayList l (.-thaw-vals state)
+  (let [size-mark (bit-and mark 0xFFFFFFFF)
+        ^java.util.ArrayList l (.-thaw-vals state)
         n (.size l)]
-    (when (> n mark)
-      (.clear (.subList l (int mark) n))) ; Truncates backing list
+    (aset ^longs (.-mut state) 1 (bit-shift-right mark 32)) ; Thaw dict count
+    (when (> n size-mark)
+      (.clear (.subList l (int size-mark) n))) ; Truncates backing list
     nil))
 
 ;;;;
@@ -536,22 +694,27 @@
     (if-let [^CacheState state (.get tl:cache)]
       (let [^java.util.ArrayList l (.-thaw-vals state)
             idx (long idx) ; Normalize (callers give Long | Integer)
+            k   (aget ^longs (.-mut state) 1) ; Thaw dict count, 0 unless a validated dict marker was read
+            rel (- idx k) ; Session-relative idx
             n   (.size l)]
 
         (enc/cond
-          (and (< idx n) (>= idx 0)) ; Ref to a value read earlier this session
-          (let [v (.get l (int idx))]
+          (and (< idx k) (>= idx 0)) ; Ref to a shared dict entry
+          (aget ^objects (.-entries ^SharedDict (.-dict state)) (int idx))
+
+          (and (< rel n) (>= rel 0)) ; Ref to a value read earlier this session
+          (let [v (.get l (int rel))]
             (if (identical? v pending)
               (truss/ex-info! "Bad cache ref: cyclic or corrupt data?" {:idx idx})
               v))
 
-          (== idx n) ; First occurrence
+          (== rel n) ; First occurrence
           ;; Reserve idx BEFORE reading: value may itself contain nested
           ;; first occurrences (which the writer idxs AFTER this one)
           (do
             (.add l pending)
             (let [x (read-typed input-arg)]
-              (.set l (int idx) x)
+              (.set l (int rel) x)
               x))
 
           ;; Legit first occurrences always arrive in idx order, so this
@@ -559,6 +722,39 @@
           ;; write outside the current `with-cache` session
           :else
           (truss/ex-info! "Bad cache ref: earlier `with-cache` session or corrupt data?"
-            {:idx idx, :cached-count n})))
+            {:idx idx, :cached-count n, :dict-count k})))
+
+      (truss/ex-info! "Can't thaw without cache available. See `with-cache`." {})))
+
+  (defn read-shared-dict-marker!
+    "Validates a shared-dict marker (dict count + fingerprint) against the
+    current session's dict and enables dict refs for the session, returns
+    nil. Refs into the dict idx range are honored ONLY after this validation,
+    so a mismatched or missing dict always fails loud. See `shared-dict`."
+    [wire-count ^long wire-hash]
+    (if-let [^CacheState state (.get tl:cache)]
+      (let [^SharedDict dict (.-dict state)
+            ^longs     mut  (.-mut  state)
+            wire-count (long wire-count)]
+
+        (when (nil? dict)
+          (truss/ex-info! "Data was frozen with a `:shared-dict`, so thawing needs the same dict"
+            {:frozen {:dict-count wire-count}}))
+
+        ;; A marker activates the dict at its first hit, possibly after
+        ;; ordinary session cache entries already exist. A second marker
+        ;; indicates concatenated/mixed session output or corrupt data.
+        (when-not (zero? (aget mut 1))
+          (truss/ex-info! "Unexpected duplicate `:shared-dict` marker: earlier `with-cache` session or corrupt data?"
+            {:frozen {:dict-count wire-count}}))
+
+        (let [^longs ph (.-prefix-hashes dict)
+              n (alength ^objects (.-entries dict))]
+          (when-not (and (<= 1 wire-count n) (== (aget ph (int wire-count)) wire-hash))
+            (truss/ex-info! "`:shared-dict` mismatch: data was frozen with a different dict (never remove or reorder dict entries!)"
+              {:frozen {:dict-count wire-count}, :given {:dict-count n}}))
+
+          (aset mut 1 wire-count)
+          nil))
 
       (truss/ex-info! "Can't thaw without cache available. See `with-cache`." {}))))

@@ -8,7 +8,7 @@
     [schema :as sc]])
 
   (:import
-   [taoensso.nippy.impl Cached CacheState]
+   [taoensso.nippy.impl Cached CacheState SharedDict]
    [java.nio.charset StandardCharsets]
    [java.nio ByteBuffer BufferOverflowException]
    [java.io
@@ -55,7 +55,7 @@
 
 (defmacro write-typed+meta [x bb dout_] `(write-typed+meta* ~x ~bb ~dout_ taoensso.nippy/*incl-metadata?*))
 
-(declare fast-writers? write-double write-kw*) ; Defined below, used by `write-el`
+(declare fast-writers? write-double write-kw* write-str*) ; Defined below, used by `write-el`
 
 (def ^:private fast-path-writers
   "`write-el`'s `instanceof` fast paths, in check order:
@@ -69,7 +69,7 @@
   NB no type here may implement `IObj` (none can carry metadata), since the
   fast path skips the metadata check."
   [['clojure.lang.Keyword :kw (fn [bb x] `(write-kw*    ~bb ~x ~'-el-state))]
-   ['String               ""  (fn [bb x] `(write-str    ~bb ~x))]
+   ['String               ""  (fn [bb x] `(write-str*   ~bb ~x ~'-el-state))]
    ['Long                 0   (fn [bb x] `(write-long   ~bb ~x))]
    ['Double               0.0 (fn [bb x] `(write-double ~bb ~x))]])
 
@@ -397,26 +397,59 @@
       (do (bb-writable! bb 3) (write-id bb sc/id-cached-md) (write-md-count bb idx))
       (truss/ex-info! "Cache ref idx out of range" {:idx idx}))))
 
+(defn write-shared-dict-marker!
+  "Activates the session's shared dict at its first hit by writing its marker,
+  returns nil. The marker is a transparent prefix to the immediately following
+  dict ref, so an unused dict emits no marker."
+  [^ByteBuffer bb ^CacheState state]
+  (let [^longs mut (.-mut state)]
+    (when (zero? (aget mut 0))
+      (let [^SharedDict dict (.-dict state)
+            n (alength ^objects (.-entries dict))]
+        (bb-writable!   bb 11)
+        (write-id       bb sc/id-shared-dict)
+        (write-md-count bb n)
+        (.putLong       bb (aget ^longs (.-prefix-hashes dict) n))
+        (aset mut 0 1))) ; Mutation alongside byte write, so both roll back together
+    nil))
+
+(defn- write-shared-dict-ref
+  "Activates `state`'s dict when necessary, then writes its entry ref."
+  [^ByteBuffer bb ^long idx ^CacheState state]
+  (write-shared-dict-marker! bb state)
+  (write-cached-ref bb idx))
+
 (defn write-cached-kw
   "Like `write-cached` but specialized for cached keywords:
   uses bare kw cache keys (kws can't have meta, can't `.equals` the
   `[<val> <meta>]` keys used for manually cached vals), and writes kws
-  directly (avoiding re-dispatch through the `Keyword` writer)."
+  directly (avoiding re-dispatch through the `Keyword` writer).
+
+  NB session maps store session-RELATIVE idxs (`cache-restore!` depends on
+  this); the active dict offset is added at ref-emission time only."
   [^ByteBuffer bb ^clojure.lang.Keyword kw ^CacheState state]
-  (let [^java.util.IdentityHashMap m (.-kw-idxs state)
-        ?idx (.get m kw)]
+  (let [^SharedDict dict (.-dict state)]
+    (enc/cond
+      :if-let [didx (when dict (.get ^java.util.IdentityHashMap (.-kw-idxs dict) kw))]
+      (write-shared-dict-ref bb (long didx) state) ; Ref to shared dict entry
 
-    (if-let [idx ?idx]
-      (write-cached-ref bb idx) ; Ref to previously written kw
-      (let [idx (impl/cache-idx-count state)]
-        (if (impl/md-count? idx)
-          (do
-            (.put m kw idx)
-            (write-cached-ref bb idx)
-            (write-kw bb kw))
+      :let [^java.util.IdentityHashMap m (.-kw-idxs state)
+            k    (impl/active-dict-count state)
+            ?idx (.get m kw)]
 
-          ;; Cache full, just freeze uncached (and don't grow cache)
-          (write-kw bb kw))))))
+      :if-let [idx ?idx]
+      (write-cached-ref bb (+ k (long idx))) ; Ref to previously written kw
+
+      :let [idx (impl/cache-idx-count state)]
+
+      (impl/md-count? (+ (impl/dict-count state) idx))
+      (do
+        (.put m kw idx)
+        (write-cached-ref bb (+ k idx))
+        (write-kw bb kw))
+
+      ;; Cache full, just freeze uncached (and don't grow cache)
+      :else (write-kw bb kw))))
 
 (defn write-cached-header!
   "Registers `x-val` in the cache and writes its cache ref id.
@@ -433,17 +466,32 @@
     ;; kws are always leaves - so nothing's left for the caller to write
     (do (write-cached-kw bb x-val state) false)
 
-    (let [^java.util.HashMap m (.-freeze-idxs state)
-          k    [x-val (meta x-val)] ; Also check meta for equality
-          ?idx (.get m k)]
+    (enc/cond
+      ;; Coalesce with dict strings (a session entry would shadow the
+      ;; cheaper dict ref)
+      :if-let
+      [didx
+       (when (string? x-val)
+         (when-let [^SharedDict dict (.-dict state)]
+           (.get ^java.util.HashMap (.-str-idxs dict) x-val)))]
 
-      (if-let [idx ?idx]
-        (do (write-cached-ref bb idx) false) ; Ref to previously written value
-        (let [idx (impl/cache-idx-count state)]
-          (when (impl/md-count? idx) ; Else cache full: no id, just freeze uncached
-            (.put m k idx)
-            (write-cached-ref bb idx))
-          true)))))
+      (do (write-shared-dict-ref bb (long didx) state) false) ; Ref to shared dict entry
+
+      :let
+      [^java.util.HashMap m (.-freeze-idxs state)
+       k     (impl/active-dict-count state)
+       m-key [x-val (meta x-val)] ; Also check meta for equality
+       ?idx  (.get m m-key)]
+
+      :if-let [idx ?idx]
+      (do (write-cached-ref bb (+ k (long idx))) false) ; Ref to previously written value
+
+      :else
+      (let [idx (impl/cache-idx-count state)]
+        (when (impl/md-count? (+ (impl/dict-count state) idx)) ; Else cache full: no id, just freeze uncached
+          (.put m m-key idx) ; NB session-relative idx, Ref. `cache-restore!`
+          (write-cached-ref bb (+ k idx)))
+        true))))
 
 (defn write-cached [^ByteBuffer bb dout_ x-val ^CacheState state]
   (when (write-cached-header! bb x-val state)
@@ -454,21 +502,30 @@
 (defn write-auto-cached-kw
   "Like `write-cached-kw` but starts caching only on a kw's SECOND
   occurrence per session (1st occurrence written plain), so that kws
-  that never repeat don't pay any caching cost in the output."
-  [^ByteBuffer bb ^clojure.lang.Keyword kw ^CacheState state]
-  (if-let [idx (.get ^java.util.IdentityHashMap (.-kw-idxs state) kw)]
-    (write-cached-ref bb idx) ; Ref to previously written kw
-    (let [^java.util.IdentityHashMap seen (.-seen-kws state)]
-      (enc/cond
-        (.containsKey seen kw) (write-cached-kw bb kw state) ; 2nd+ occurrence, start caching
-        (< (.size seen) max-seen-kws)
-        (do ; 1st occurrence
-          (.put seen kw kw)
-          (.add ^java.util.ArrayList (.-seen-log state) kw) ; For `cache-restore!`
-          (write-kw bb kw))
+  that never repeat don't pay any caching cost in the output.
 
-        :else (write-kw bb kw) ; Seen-kws full
-        ))))
+  NB dict hits skip the 2nd-occurrence policy AND the seen tracking:
+  a dict entry is already cached, so even a 1st occurrence is a tiny ref."
+  [^ByteBuffer bb ^clojure.lang.Keyword kw ^CacheState state]
+  (enc/cond
+    :if-let [didx (when-let [^SharedDict dict (.-dict state)]
+                    (.get ^java.util.IdentityHashMap (.-kw-idxs dict) kw))]
+    (write-shared-dict-ref bb (long didx) state) ; Ref to shared dict entry
+
+    :if-let [idx (.get ^java.util.IdentityHashMap (.-kw-idxs state) kw)]
+    (write-cached-ref bb (+ (impl/active-dict-count state) (long idx))) ; Ref to previously written kw
+
+    :let [^java.util.IdentityHashMap seen (.-seen-kws state)]
+
+    (.containsKey seen kw) (write-cached-kw bb kw state) ; 2nd+ occurrence, start caching
+    (< (.size seen) max-seen-kws)
+    (do ; 1st occurrence
+      (.put seen kw kw)
+      (.add ^java.util.ArrayList (.-seen-log state) kw) ; For `cache-restore!`
+      (write-kw bb kw))
+
+    :else (write-kw bb kw) ; Seen-kws full
+    ))
 
 (defn write-kw*
   "Writes given keyword, auto-caching it in the given (current) session.
@@ -478,6 +535,23 @@
   (if state
     (write-auto-cached-kw bb kw state)
     (write-kw             bb kw)))
+
+(defn write-str*
+  "Writes given string, as a dict ref when the given (current) session's
+  dict contains it. NB strings get no auto (2nd-occurrence) caching:
+  dict hit or plain write, so nothing here mutates session state."
+  [^ByteBuffer bb ^String s ^CacheState state]
+  (enc/cond
+    :if-let
+    [didx
+     (when state
+       (when-let [^SharedDict dict (.-dict state)]
+         ;; Length guard skips guaranteed misses, avoiding
+         ;; `hashCode` (O(len), uncached for fresh strings)
+         (when (<= (.length s) (.-max-str-len dict))
+           (.get ^java.util.HashMap (.-str-idxs dict) s))))]
+    (write-shared-dict-ref bb (long didx) state) ; Ref to shared dict entry
+    :else (write-str bb s)))
 
 ;;;;
 
@@ -509,9 +583,9 @@
 (writer (type ()) sc/id-list-0 nil)
 
 (writer Boolean              nil (if (.booleanValue x) (write-id bb sc/id-true) (write-id bb sc/id-false)))
-(writer String               nil (write-str bb x))
-(writer clojure.lang.Keyword nil (write-kw* bb x (.get impl/tl:cache)))
-(writer clojure.lang.Symbol  nil (write-sym bb x))
+(writer String               nil (write-str* bb x (.get impl/tl:cache)))
+(writer clojure.lang.Keyword nil (write-kw*  bb x (.get impl/tl:cache)))
+(writer clojure.lang.Symbol  nil (write-sym  bb x))
 
 (writer Character sc/id-char    (.putChar   bb (unchecked-char (int x))))
 (writer Byte      sc/id-byte    (.put       bb (unchecked-byte      x)))
@@ -1235,6 +1309,11 @@
         sc/id-cached-7  (impl/read-cached read-typed 7 ibr)
         sc/id-cached-sm (impl/read-cached read-typed (read-sm-count ibr) ibr)
         sc/id-cached-md (impl/read-cached read-typed (read-md-count ibr) ibr)
+
+        sc/id-shared-dict
+        (do
+          (impl/read-shared-dict-marker! (read-md-count ibr) (.readLong ibr))
+          (read-typed ibr))
 
         sc/id-byte-array-0    (byte-array 0)
         sc/id-byte-array-sm   (read-bytes ibr (read-sm-count ibr))

@@ -195,6 +195,8 @@
    67  [:cached-sm          nil]
    68  [:cached-md          nil]
 
+   124 [:shared-dict [[:bytes 10] [:elements 1]]] ; Added v3.9.0 (2026), Ref. `shared-dict`
+
    ;;; DEPRECATED (only support thawing)
    ;; Desc-sorted by deprecation date
 

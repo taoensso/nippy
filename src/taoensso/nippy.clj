@@ -141,6 +141,25 @@
 
 (enc/defonce ^:dynamic *incl-metadata?* "Include metadata when freezing/thawing?" true)
 
+(enc/defonce ^:dynamic *shared-dict*
+  "Experimental, subject to change. Feedback welcome!
+
+  Optional shared dictionary to use when freezing/thawing,
+  nil => none (default).
+
+  Prefer equivalent `:shared-dict` option of `freeze`/`thaw` where possible.
+
+  Binding the var directly is for the low-level `with-cache` API:
+    (def my-dict (nippy/shared-dict [:kw1 :kw2 \"str1\" \"str2\" ...]))
+    (binding [nippy/*shared-dict* my-dict]
+      (nippy/with-cache ...))
+
+  Has no effect on `freeze-to-out!`/`freeze-to-bb!` calls made outside
+  any `with-cache` session (no session => no caching).
+
+  See `shared-dict` for details."
+  nil)
+
 (enc/defonce ^:dynamic *thaw-xform*
   "Experimental, subject to change. Feedback welcome!
 
@@ -341,6 +360,7 @@
             (opt->bindings :auto-freeze-compressor #'*auto-freeze-compressor*)
             (opt->bindings :custom-readers         #'*custom-readers*)
             (opt->bindings :incl-metadata?         #'*incl-metadata?*)
+            (opt->bindings :shared-dict             #'*shared-dict*)
             (opt->bindings :thaw-xform             #'*thaw-xform*)
             (opt->bindings :serializable-allowlist
               (case action
@@ -583,6 +603,7 @@
                       '*auto-freeze-compressor*      *auto-freeze-compressor*
                       '*custom-readers*              *custom-readers*
                       '*incl-metadata?*              *incl-metadata?*
+                      '*shared-dict*                  *shared-dict*
                       '*thaw-serializable-allowlist* *thaw-serializable-allowlist*
                       '*thaw-xform*                  *thaw-xform*})}
                   e)))
@@ -875,7 +896,7 @@
   (read-quarantined-serializable-object-unsafe!
     (thaw (freeze (java.util.concurrent.Semaphore. 1)))))
 
-(enc/defaliases impl/cache impl/with-cache)
+(enc/defaliases impl/cache impl/with-cache impl/shared-dict)
 
 (comment
   (thaw (freeze [(cache "foo") (cache "foo") (cache "foo")]))
