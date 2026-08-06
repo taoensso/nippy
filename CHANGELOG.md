@@ -2,6 +2,55 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.9.0-beta1` (2026-08-06)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.9.0-beta1)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+**BETA**: for early testers only, not yet recommended for production.
+
+**Major performance release**. Includes new automatic keyword caching, and many other optimizations that together yield up to 2x faster performance in several common cases.
+
+Intended as a non-breaking release, but touches a lot of core code. As always please **test carefully** before using for anything important, and please **report any unexpected problems** - thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## Rolling updates
+
+Updating Nippy with a **rolling deployment** (>1 coexisting Nippy version)?
+
+Then please ensure you update **step by step** (e.g. v3.5 → v3.6 → v3.7) so that read support is fully deployed before the corresponding writes might happen.
+
+## New byte output
+
+v3.9 changes the [byte output](https://github.com/taoensso/nippy#stability-of-byte-output) of several common Nippy data types.
+
+Almost no one should care about this, but mentioning for the tiny minority of users that depend on Nippy's byte output remaining stable.
+
+## Since v3.8.1 (2026-07-28)
+
+* [fix] `write-long`: support `Long/MIN_VALUE` \[2115360]
+* [new] Add shared dictionaries \[da69caf]
+* [new] Update benchmark results \[df391d2]
+* [prf] Cache: auto-cache keywords \[03725ac]
+* [prf] Freeze: enable tight packing by default \[2705bb1]
+* [prf] Freeze: copy-free compression \[e36a2ff]
+* [prf] Freeze: fast-path common elements \[bbff6c6]
+* [prf] Freeze: streamline common paths \[50a56ac]
+* [prf] Freeze: optimize default header copy \[79f17cd]
+* [prf] Thaw: direct transient loop for `read-into` \[5f05346]
+* [prf] Thaw: decode keywords from bytes \[bff8c29]
+* [prf] Thaw: build lists directly \[5a417fc]
+* [prf] Thaw: decode strings in place \[2ac10be]
+* [prf] Thaw: bulk-build short vectors \[7fde2b1]
+* [prf] Thaw: avoid header copies \[d119f59]
+* [prf] Crypto: reduce buffer copies \[1b62a1d]
+* [prf] Cache: use ArrayList for `read-cached` \[ecb1206]
+* [prf] Cache: identity maps for keywords \[ac4958e]
+* [prf] Cache: use mutable Java state \[eecda2d]
+
+---
+
 # `v3.8.1` (2026-07-28)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.8.1)
