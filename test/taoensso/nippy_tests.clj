@@ -752,6 +752,12 @@
 
       (finally (restore)))))
 
+(deftest _types-long-extremes
+  ;; Tight packing negates negative longs to pack them, so `Long/MIN_VALUE`
+  ;; needs its own (unpacked) path
+  (let [ns [Long/MIN_VALUE Long/MAX_VALUE]]
+    (is (= ns (thaw (freeze ns))))))
+
 ;;;; Caching
 
 (deftest _caching

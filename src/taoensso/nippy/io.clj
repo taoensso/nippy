@@ -199,6 +199,9 @@
         (<= n impl/range-uint)   (do (write-id bb sc/id-long-pos-lg) (.putInt   bb (int             (+ n Integer/MIN_VALUE))))
         :else                    (do (write-id bb sc/id-long-xl)     (.putLong  bb                     n)))
 
+      ;; Would overflow on `(- n)` below, and is too large to pack anyway
+      (== n Long/MIN_VALUE) (do (write-id bb sc/id-long-xl) (.putLong bb n))
+
       :else
       (let [y (- n)]
         (enc/cond
