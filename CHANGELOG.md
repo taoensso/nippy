@@ -2,6 +2,82 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# `v3.9.0` (2026-09-06)
+
+- **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.9.0)
+- **Versioning**: [Break Versioning](https://www.taoensso.com/break-versioning)
+
+This promotes [v3.9.0-RC1](../../releases/tag/v3.9.0-RC1) to final with a small fix and a few extra optimizations.
+
+**Major performance release**. Includes automatic keyword caching, optional shared dictionaries, and many other optimizations that together yield up to 2x faster performance in several common cases.
+
+As always, please **test carefully** before updating against production data, and **report any unexpected problems** - thank you! 🙏
+
+\- [Peter Taoussanis](https://www.taoensso.com)
+
+## BREAKING
+
+Users of low-level `freeze-to-out!`/`freeze-to-bb!` and `thaw-from-in!`/`thaw-from-bb!`, please note:
+
+If your freeze calls are wrapped in `with-cache`, your thaw calls MUST likewise be wrapped
+(with matching session boundaries). This has always been true, but is extra important now
+that Nippy has automatic keyword caching enabled by default \[03725ac].
+
+## Rolling updates
+
+Updating Nippy with a **rolling deployment** (>1 coexisting Nippy version)?
+
+Then please ensure you update **step by step** (e.g. v3.5 → v3.6 → v3.7) so that read support is fully deployed before the corresponding writes might happen.
+
+Shared dictionaries are opt-in: deploy v3.9 readers with matching dictionaries BEFORE enabling dictionary writes.
+
+## New byte output
+
+v3.9 changes the [byte output](https://github.com/taoensso/nippy#stability-of-byte-output) of several common Nippy data types, including repeated keywords and tightly packed strings, collections, and longs.
+
+Almost no one should care about this, but mentioning for the tiny minority of users that depend on Nippy's byte output remaining stable.
+
+## Since v3.9.0-RC1 (2026-08-21)
+
+- [fix] Cache: respect custom freezers \[8f48e3c]
+- [prf] Thaw: reduce cache allocations \[67cceaa]
+- [prf] Arrays: streamline indexed loops \[4bec13b]
+- [prf] Deftypes: streamline field reads \[7d177f3]
+- [doc] Benchmarks: update for v3.9.0 \[715f78f]
+
+## Since v3.8.1 (2026-07-28)
+
+- [fix] `write-long`: support `Long/MIN_VALUE` \[2115360]
+- [fix] Cache: respect custom freezers \[8f48e3c]
+- [new] Add shared dictionaries \[da69caf]
+- [new] Update benchmark results \[74eebdc, df391d2]
+- [prf] Cache: auto-cache keywords \[03725ac]
+- [prf] Freeze: enable tight packing by default \[2705bb1]
+- [prf] Freeze: copy-free compression \[e36a2ff]
+- [prf] Freeze: fast-path common elements \[bbff6c6]
+- [prf] Freeze: streamline common paths \[50a56ac]
+- [prf] Freeze: optimize default header copy \[79f17cd]
+- [prf] Thaw: reduce cache allocations \[67cceaa]
+- [prf] Arrays: streamline indexed loops \[4bec13b]
+- [prf] Deftypes: streamline field reads \[7d177f3]
+- [prf] Thaw: direct transient loop for `read-into` \[5f05346]
+- [prf] Thaw: decode keywords from bytes \[bff8c29]
+- [prf] Thaw: build lists directly \[5a417fc]
+- [prf] Thaw: decode strings in place \[2ac10be]
+- [prf] Thaw: bulk-build short vectors \[7fde2b1]
+- [prf] Thaw: avoid header copies \[d119f59]
+- [prf] Crypto: reduce buffer copies \[1b62a1d]
+- [prf] Cache: use ArrayList for `read-cached` \[ecb1206]
+- [prf] Cache: identity maps for keywords \[ac4958e]
+- [prf] Cache: use mutable Java state \[eecda2d]
+- [doc] Benchmarks: update for v3.9.0 \[715f78f]
+- [doc] Update rolling deployment info \[5ea1728]
+- [doc] Remove unnecessary details \[97f0252]
+- [nop] Bump Encore from v3.169.1 to v3.171.0 \[d44feec]
+- [nop] Streaming: simplify dispatch \[86a4c20]
+
+---
+
 # `v3.9.0-RC1` (2026-08-21)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.9.0-RC1)
