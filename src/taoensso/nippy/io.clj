@@ -1217,7 +1217,7 @@
 
 (defn- read-deftype-fields ^objects [^IByteReader ibr n]
   (let [vals (object-array n)]
-    (enc/reduce-n (fn [_ i] (aset vals i (read-typed ibr))) nil n)
+    (dotimes [i n] (aset vals i (read-typed ibr)))
     vals))
 
 (defn read-deftype [^IByteReader ibr class-name legacy?]
