@@ -463,38 +463,41 @@
   here, alongside the id write, so a caller that discards the written bytes
   (see `stream-leaf!`) can undo both together."
   [^ByteBuffer bb x-val ^CacheState state]
-  (if (keyword? x-val)
-    ;; Coalesce with auto-cached kws. NB immediately caches (`cache` is the
-    ;; user explicitly requesting caching), and writes the kw itself since
-    ;; kws are always leaves - so nothing's left for the caller to write
+  (enc/cond
+
+    ;; Coalesce with auto-cached kws.
+    ;; NB immediately caches (`cache` is the user explicitly requesting caching),
+    ;; and writes the kw itself since kws are always leaves -
+    ;; so nothing's left for the caller to write
+    (and (keyword? x-val) (not (impl/custom-freezable? x-val)))
     (do (write-cached-kw bb x-val state) false)
 
-    (enc/cond
-      ;; Coalesce with dict strings (a session entry would shadow the
-      ;; cheaper dict ref)
-      :if-let
-      [didx
-       (when (string? x-val)
-         (when-let [^SharedDict dict (.-dict state)]
-           (.get ^java.util.HashMap (.-str-idxs dict) x-val)))]
+    ;; Coalesce with dict strings (a session entry would shadow the
+    ;; cheaper dict ref)
+    :if-let
+    [didx
+     (when (string? x-val)
+       (when-let [^SharedDict dict (.-dict state)]
+         (when-not (impl/custom-freezable? x-val)
+           (.get ^java.util.HashMap (.-str-idxs dict) x-val))))]
 
-      (do (write-shared-dict-ref bb (long didx) state) false) ; Ref to shared dict entry
+    (do (write-shared-dict-ref bb (long didx) state) false) ; Ref to shared dict entry
 
-      :let
-      [^java.util.HashMap m (.-freeze-idxs state)
-       k     (impl/active-dict-count state)
-       m-key [x-val (meta x-val)] ; Also check meta for equality
-       ?idx  (.get m m-key)]
+    :let
+    [^java.util.HashMap m (.-freeze-idxs state)
+     k     (impl/active-dict-count state)
+     m-key [x-val (meta x-val)] ; Also check meta for equality
+     ?idx  (.get m m-key)]
 
-      :if-let [idx ?idx]
-      (do (write-cached-ref bb (+ k (long idx))) false) ; Ref to previously written value
+    :if-let [idx ?idx]
+    (do (write-cached-ref bb (+ k (long idx))) false) ; Ref to previously written value
 
-      :else
-      (let [idx (impl/cache-idx-count state)]
-        (when (impl/md-count? (+ (impl/dict-count state) idx)) ; Else cache full: no id, just freeze uncached
-          (.put m m-key idx) ; NB session-relative idx, Ref. `cache-restore!`
-          (write-cached-ref bb (+ k idx)))
-        true))))
+    :else
+    (let [idx (impl/cache-idx-count state)]
+      (when (impl/md-count? (+ (impl/dict-count state) idx)) ; Else cache full: no id, just freeze uncached
+        (.put m m-key idx) ; NB session-relative idx, Ref. `cache-restore!`
+        (write-cached-ref bb (+ k idx)))
+      true)))
 
 (defn write-cached [^ByteBuffer bb dout_ x-val ^CacheState state]
   (when (write-cached-header! bb x-val state)

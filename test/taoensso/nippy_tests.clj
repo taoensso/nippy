@@ -735,7 +735,9 @@
             (alter-var-root v (constantly p))
             (#'clojure.core/-reset-methods p))
           (alter-var-root #'nippy/*custom-readers*
-            (fn [m] (dissoc m (impl/coerce-custom-type-id :nippy-tests/upper-str)))))]
+            (fn [m] (dissoc m
+                      (impl/coerce-custom-type-id :nippy-tests/upper-str)
+                      (impl/coerce-custom-type-id :nippy-tests/upper-kw)))))]
     (try
       [(is (io/fast-writers?) "Fast path enabled by default")
        (is (not-any? #(instance? clojure.lang.IObj %)
@@ -748,7 +750,25 @@
          [(is (not (io/fast-writers?)) "Fast path disabled by `extend-freeze`")
           (is (= "A"        (thaw (freeze  "a"))))
           (is (= ["A" :b 1] (thaw (freeze ["a" :b 1]))))
-          (is (= {"A" "B"}  (thaw (freeze {"a" "b"}))))])]
+          (is (= {"A" "B"}  (thaw (freeze {"a" "b"}))))])
+
+       (testing "Explicit caching respects custom keyword and dictionary string freezers"
+         (nippy/extend-freeze clojure.lang.Keyword :nippy-tests/upper-kw [x out]
+           (.writeUTF out (.toUpperCase (name x))))
+         (nippy/extend-thaw :nippy-tests/upper-kw [in] (keyword (.readUTF in)))
+         (doseq [dict [nil (nippy/shared-dict [:b "a"])]]
+           (binding [nippy/*shared-dict* dict]
+             (let [x [(nippy/cache :b) (nippy/cache "a") (nippy/cache :b) (nippy/cache "a")]]
+               (doseq [ba [(nippy/fast-freeze x)
+                          (let [out (java.io.ByteArrayOutputStream.)]
+                            (nippy/with-cache
+                              (nippy/freeze-to-out! (java.io.DataOutputStream. out) x))
+                            (.toByteArray out))]]
+                 (is (= [:B "A" :B "A"] (nippy/fast-thaw ba)))
+                 (is (= [:B "A" :B "A"]
+                       (nippy/with-cache
+                         (nippy/thaw-from-in!
+                           (java.io.DataInputStream. (java.io.ByteArrayInputStream. ba)))))))))))]
 
       (finally (restore)))))
 
