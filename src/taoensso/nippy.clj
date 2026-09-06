@@ -618,7 +618,7 @@
 
                  (try
                    (if (and (nil? compressor) (nil? encryptor))
-                     (impl/with-cache
+                     (impl/with-thaw-cache
                        (thaw-from-bb*
                          (ByteBuffer/wrap data-ba  (int data-offset)
                            (-    (alength data-ba) (int data-offset)))))
@@ -630,7 +630,7 @@
 
                            ba (if encryptor  (decrypt    encryptor password ba) ba)
                            ba (if compressor (decompress compressor         ba) ba)]
-                       (impl/with-cache (thaw-from-bb* (ByteBuffer/wrap ba)))))
+                       (impl/with-thaw-cache (thaw-from-bb* (ByteBuffer/wrap ba)))))
                    (catch Exception e (ex-fn e)))))
 
              ;; Hacky + can actually segfault JVM due to Snappy bug,
@@ -679,7 +679,7 @@
 
   Equivalent to (but a little faster than) `thaw` with opts:
     {:no-header? true, :compressor nil, :encryptor nil}."
-  [^bytes ba] (impl/with-cache (thaw-from-bb* (ByteBuffer/wrap ba))))
+  [^bytes ba] (impl/with-thaw-cache (thaw-from-bb* (ByteBuffer/wrap ba))))
 
 (defn- thaw-from-bb* [^ByteBuffer bb] (io/read-typed (ByteBufferReader. bb)))
 (defn  thaw-from-bb!

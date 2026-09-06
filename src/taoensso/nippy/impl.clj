@@ -467,6 +467,11 @@
     (java.util.IdentityHashMap.) (java.util.ArrayList.)
     (current-shared-dict) (long-array 2)))
 
+(defn new-thaw-cache-state ^CacheState []
+  (CacheState. (java.util.HashMap.) (java.util.IdentityHashMap. 0) (java.util.ArrayList.)
+    (java.util.IdentityHashMap. 0) (java.util.ArrayList.)
+    (current-shared-dict) (long-array 2)))
+
 (defn dict-count
   "Returns given `CacheState`'s full dict size (0 if no dict)."
   ^long [^CacheState state]
@@ -495,6 +500,19 @@
   "?CacheState for current freeze/thaw session."
   (enc/threadlocal))
 
+(defmacro with-cache* [state-form & body]
+  `(let [prev# (.get tl:cache)] ; ?CacheState of enclosing `with-cache`
+     (try
+       (.set tl:cache ~state-form)
+       (do ~@body)
+       (finally
+         ;; Restore (NOT just remove) so that an enclosing `with-cache`
+         ;; retains its cache. Removing here would cause the OUTER thaw to
+         ;; throw "Can't thaw without cache available" on its next cached ref.
+         (if (nil? prev#)
+           (.remove tl:cache)
+           (.set    tl:cache prev#))))))
+
 (defmacro ^:public with-cache
   "Executes body with support for freezing/thawing cached values.
 
@@ -509,17 +527,13 @@
 
   See also `cache`."
   [& body]
-  `(let [prev# (.get tl:cache)] ; ?CacheState of enclosing `with-cache`
-     (try
-       (.set tl:cache (new-cache-state))
-       (do ~@body)
-       (finally
-         ;; Restore (NOT just remove) so that an enclosing `with-cache`
-         ;; retains its cache. Removing here would cause the OUTER thaw to
-         ;; throw "Can't thaw without cache available" on its next cached ref.
-         (if (nil? prev#)
-           (.remove tl:cache)
-           (.set    tl:cache prev#))))))
+  `(with-cache* (new-cache-state) ~@body))
+
+(defmacro with-thaw-cache
+  "Like `with-cache`, with minimal writer maps: reads do not use them,
+  but custom readers may still call low-level freeze utilities."
+  [& body]
+  `(with-cache* (new-thaw-cache-state) ~@body))
 
 (defn cache-mark
   "Returns a checkpoint of given `CacheState`'s write state (`freeze-idxs`
