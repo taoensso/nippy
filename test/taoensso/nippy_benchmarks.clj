@@ -166,12 +166,12 @@
 ;;;; Results
 
 (comment
-  {:last-updated    "2026-07-28"
+  {:last-updated    "2026-09-06"
    :system          "2020 Macbook Pro M1, 16 GB memory"
    :clojure-version "1.12.5"
-   :java-version    "OpenJDK 25"
+   :java-version    "OpenJDK 26.0.2.1"
    :deps
-   '[[com.taoensso/nippy        "3.9.0-dev"]
+   '[[com.taoensso/nippy        "3.9.0"]
      [org.clojure/tools.reader  "1.6.0"]
      [org.clojure/data.fressian "1.1.1"]
      [org.tukaani/xz            "1.12"]
@@ -180,26 +180,27 @@
   (bench-serialization {:all? true})
 
   ;; Per-category medians of 3 AC-powered runs
-  {:reader          {:round 11575, :freeze 3389, :thaw 8025, :size 15880}
-   :fressian        {:round 3377,  :freeze 2174, :thaw 1090, :size 12222}
-   :nippy/lzma2     {:round 9958,  :freeze 6229, :thaw 3730, :size 3700}
-   :nippy/encrypted {:round 1311,  :freeze 557,  :thaw 751,  :size 7863}
-   :nippy/default   {:round 1193,  :freeze 496,  :thaw 697,  :size 7835}
-   :nippy/fast      {:round 987,   :freeze 335,  :thaw 652,  :size 14017}}
+  {:reader          {:round 11042, :freeze 3533, :thaw 7052, :size 15880}
+   :fressian        {:round 2957,  :freeze 1975, :thaw 932,  :size 12222}
+   :nippy/lzma2     {:round 9451,  :freeze 6082, :thaw 3375, :size 3700}
+   :nippy/encrypted {:round 1156,  :freeze 558,  :thaw 600,  :size 7863}
+   :nippy/default   {:round 1093,  :freeze 523,  :thaw 578,  :size 7835}
+   :nippy/fast      {:round 885,   :freeze 359,  :thaw 529,  :size 14017}}
 
   (bench-compressors
     {:laps 1e4 :warmup 2e4}
     {:laps 1e2 :warmup 2e2})
 
+  ;; Times in msecs / 10k laps, except LZMA2: 100 laps
   ;; Note that ratio depends on compressibility of stress data
   ;; Per-category medians of 3 AC-powered runs
-  {:lz4                {:round 256,  :compress 215,  :decompress 41,  :ratio 0.56}
-   :lzo                {:round 256,  :compress 198,  :decompress 59,  :ratio 0.52}
-   :snappy/prepended   {:round 352,  :compress 221,  :decompress 131, :ratio 0.48}
-   :snappy/unprepended {:round 351,  :compress 213,  :decompress 131, :ratio 0.48}
-   :zstd/prepended     {:round 1024, :compress 791,  :decompress 233, :ratio 0.35}
-   :zstd/unprepended   {:round 1014, :compress 763,  :decompress 232, :ratio 0.35}
-   :lzma2/level0       {:round 103,  :compress 67,   :decompress 36,  :ratio 0.26}
-   :lzma2/level3       {:round 173,  :compress 136,  :decompress 36,  :ratio 0.25}
-   :lzma2/level6       {:round 715,  :compress 669,  :decompress 46,  :ratio 0.25}
-   :lzma2/level9       {:round 2093, :compress 1920, :decompress 165, :ratio 0.25}})
+  {:lz4                {:round 203,  :compress 161,  :decompress 42,  :ratio 0.56}
+   :lzo                {:round 248,  :compress 187,  :decompress 60,  :ratio 0.52}
+   :snappy/prepended   {:round 334,  :compress 208,  :decompress 126, :ratio 0.48}
+   :snappy/unprepended {:round 332,  :compress 207,  :decompress 125, :ratio 0.48}
+   :zstd/prepended     {:round 976,  :compress 741,  :decompress 233, :ratio 0.35}
+   :zstd/unprepended   {:round 974,  :compress 740,  :decompress 234, :ratio 0.35}
+   :lzma2/level0       {:round 94,   :compress 65,   :decompress 30,  :ratio 0.26}
+   :lzma2/level3       {:round 165,  :compress 130,  :decompress 35,  :ratio 0.25}
+   :lzma2/level6       {:round 666,  :compress 622,  :decompress 44,  :ratio 0.25}
+   :lzma2/level9       {:round 1911, :compress 1765, :decompress 147, :ratio 0.25}})

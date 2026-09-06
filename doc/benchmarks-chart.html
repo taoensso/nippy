@@ -50,7 +50,7 @@
   }
   .row { display: flex; align-items: center; height: 22px; }
   .row + .row { margin-top: 4px; }
-  .bar { height: 100%; border-radius: 0 4px 4px 0; }
+  .bar { flex-shrink: 0; height: 100%; border-radius: 0 4px 4px 0; }
   .val {
     margin-left: 10px; font-size: 13.5px; color: var(--ink-2);
     font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -66,11 +66,11 @@
 
 <header>
   <div>
-    <h1>Benchmarks: Nippy v3.9 dev</h1>
-    <div class="sub">Using Nippy stress data</div>
+    <h1>Benchmarks: Nippy v3.9.0</h1>
+    <div class="sub">Using Nippy stress data &middot; Median of 3 runs &middot; 2026-09-06</div>
   </div>
   <div class="legend">
-    <div><span class="sw" style="background: var(--nippy)"></span>Nippy v3.9 dev</div>
+    <div><span class="sw" style="background: var(--nippy)"></span>Nippy v3.9.0</div>
     <div><span class="sw" style="background: var(--fressian)"></span>data.fressian 1.1.1</div>
     <div><span class="sw" style="background: var(--reader)"></span>tools.reader.edn 1.6.0</div>
   </div>
@@ -93,23 +93,23 @@
 
     <div class="group">
       <div class="glabel">Roundtrip</div>
-      <div class="row"><div class="bar" style="width: 9.942%; background: var(--nippy)"></div><div class="val">1,193</div></div>
-      <div class="row"><div class="bar" style="width: 28.142%; background: var(--fressian)"></div><div class="val">3,377</div></div>
-      <div class="row"><div class="bar" style="width: 96.458%; background: var(--reader)"></div><div class="val">11,575</div></div>
+      <div class="row"><div class="bar" style="width: 9.108%; background: var(--nippy)"></div><div class="val">1,093</div></div>
+      <div class="row"><div class="bar" style="width: 24.642%; background: var(--fressian)"></div><div class="val">2,957</div></div>
+      <div class="row"><div class="bar" style="width: 92.017%; background: var(--reader)"></div><div class="val">11,042</div></div>
     </div>
 
     <div class="group">
       <div class="glabel">Freeze</div>
-      <div class="row"><div class="bar" style="width: 4.133%; background: var(--nippy)"></div><div class="val">496</div></div>
-      <div class="row"><div class="bar" style="width: 18.117%; background: var(--fressian)"></div><div class="val">2,174</div></div>
-      <div class="row"><div class="bar" style="width: 28.242%; background: var(--reader)"></div><div class="val">3,389</div></div>
+      <div class="row"><div class="bar" style="width: 4.358%; background: var(--nippy)"></div><div class="val">523</div></div>
+      <div class="row"><div class="bar" style="width: 16.458%; background: var(--fressian)"></div><div class="val">1,975</div></div>
+      <div class="row"><div class="bar" style="width: 29.442%; background: var(--reader)"></div><div class="val">3,533</div></div>
     </div>
 
     <div class="group">
       <div class="glabel">Thaw</div>
-      <div class="row"><div class="bar" style="width: 5.808%; background: var(--nippy)"></div><div class="val">697</div></div>
-      <div class="row"><div class="bar" style="width: 9.083%; background: var(--fressian)"></div><div class="val">1,090</div></div>
-      <div class="row"><div class="bar" style="width: 66.875%; background: var(--reader)"></div><div class="val">8,025</div></div>
+      <div class="row"><div class="bar" style="width: 4.817%; background: var(--nippy)"></div><div class="val">578</div></div>
+      <div class="row"><div class="bar" style="width: 7.767%; background: var(--fressian)"></div><div class="val">932</div></div>
+      <div class="row"><div class="bar" style="width: 58.767%; background: var(--reader)"></div><div class="val">7,052</div></div>
     </div>
   </div>
 
@@ -161,7 +161,7 @@
   </div>
 </div>
 
-<footer>2020 MacBook Pro M1 (16&nbsp;GB) &middot; OpenJDK&nbsp;25 &middot; Clojure&nbsp;1.12.5 &middot; Nippy defaults (LZ4 compression, no encryption)</footer>
+<footer>2020 MacBook Pro M1 (16&nbsp;GB) &middot; OpenJDK&nbsp;26.0.2.1 &middot; Clojure&nbsp;1.12.5 &middot; Nippy defaults (LZ4 compression, no encryption)</footer>
 
 </body>
 </html>
