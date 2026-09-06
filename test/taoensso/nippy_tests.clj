@@ -220,6 +220,19 @@
        (mapv (fn [[k aval]] (is (array= aval (-> aval nippy/freeze nippy/thaw)) (name k)))
          (get-in (nippy/stress-data {}) [:non-comparable :arrays]))))
 
+   (testing "Empty and large arrays through buffered and stream readers"
+     (doseq [n [0 1000]
+             x [(object-array (take n (cycle [nil 42 "hello" :kw])))
+                (into-array String (map str (range n)))
+                (int-array (range n)) (long-array (range n))
+                (float-array (range n)) (double-array (range n))]]
+       (let [ba (nippy/fast-freeze x)]
+         [(is (array= x (nippy/fast-thaw ba)))
+          (is (array= x
+                (nippy/with-cache
+                  (nippy/thaw-from-in!
+                    (java.io.DataInputStream. (java.io.ByteArrayInputStream. ba))))))])))
+
    (is (gen-test 1600 [gen-data] (= gen-data (thaw (freeze gen-data)))) "Generative")])
 
 (deftest _generic-map-thaw

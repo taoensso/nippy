@@ -130,7 +130,7 @@
   `(do
      (write-id       ~bb ~id)
      (write-lg-count ~bb ~alen)
-     (with-els (enc/reduce-n (fn [_# idx#] (write-el (aget ~arr idx#) ~bb ~dout_)) nil ~alen))))
+     (with-els (dotimes [idx# ~alen] (write-el (aget ~arr idx#) ~bb ~dout_)))))
 
 (defn write-biginteger [^ByteBuffer bb ^BigInteger n] (write-bytes-lg bb (.toByteArray n)))
 
@@ -986,11 +986,9 @@
   (let [thawed-sym (with-meta 'thawed-sym {:tag thaw-type})
         array-sym  (with-meta 'array-sym  {:tag array-type})]
     `(let [~array-sym ~array]
-       (enc/reduce-n
-         (fn [_# idx#]
-           (let [~thawed-sym (read-typed ~ibr)]
-             (aset ~'array-sym idx# ~'thawed-sym)))
-         nil (alength ~'array-sym))
+       (dotimes [idx# (alength ~'array-sym)]
+         (let [~thawed-sym (read-typed ~ibr)]
+           (aset ~'array-sym idx# ~'thawed-sym)))
        ~'array-sym)))
 
 (defmacro ^:private read-prim-array
@@ -1004,9 +1002,8 @@
          (let [^ByteBuffer bb# (.toByteBuffer ~ibr)]
            (.get (~as-buffer bb#) ~'array-sym)
            (bb-advance bb# (* alen# ~bytes)))
-         (enc/reduce-n ; Element-wise read for legacy `DataInput` support
-           (fn [_# idx#] (aset ~'array-sym idx# (~read-el ~ibr)))
-           nil alen#))
+         (dotimes [idx# alen#] ; Element-wise read for legacy `DataInput` support
+           (aset ~'array-sym idx# (~read-el ~ibr))))
        ~'array-sym)))
 
 (enc/declare-remote ^:dynamic taoensso.nippy/*thaw-xform*)
