@@ -1251,8 +1251,9 @@
            "Try repeatedly to catch possible protocol interface races"))
 
        (is (gen-test 400 [gen-data]
-             (ba= (-> gen-data freeze)
-                  (-> gen-data freeze thaw freeze))) "Generative")])
+             (let [gen-data (-> gen-data freeze thaw)] ; Thaw may change map types, Ref. #192
+               (ba= (-> gen-data freeze)
+                    (-> gen-data freeze thaw freeze)))) "Generative")])
 
     (testing "f(x)=f(y) => x=y"
       (let [vals_ (atom {})]
