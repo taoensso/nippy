@@ -1632,16 +1632,15 @@
   "Returns a new `ByteBuffer` with at least `min-capacity` and double the
   capacity of the given one, capped at `max-bb-capacity`. Throws a clear
   error when already at cap."
-  (^ByteBuffer [bb] (grown-bb bb 0))
-  (^ByteBuffer [^ByteBuffer bb ^long min-capacity]
-   (let [capacity (long (.capacity bb))]
-     (when (>= capacity (long max-bb-capacity))
-       (truss/ex-info! "Serialized value too large to freeze"
-         {:max-size max-bb-capacity}))
+  ^ByteBuffer [^ByteBuffer bb ^long min-capacity]
+  (let [capacity (long (.capacity bb))]
+    (when (>= capacity (long max-bb-capacity))
+      (truss/ex-info! "Serialized value too large to freeze"
+        {:max-size max-bb-capacity}))
 
-     (ByteBuffer/allocate
-       (int (min (long max-bb-capacity)
-              (max min-capacity (* 2 capacity))))))))
+    (ByteBuffer/allocate
+      (int (min (long max-bb-capacity)
+             (max min-capacity (* 2 capacity)))))))
 
 (let [^ThreadLocal tl:bb    (enc/threadlocal (java.nio.ByteBuffer/allocate 512))
       ^ThreadLocal tl:depth (enc/threadlocal 0)
@@ -1756,7 +1755,7 @@
   fn instead of allocating a closure per value written."
   [^DataOutput dout bb_ dout_ state f x]
   (let [mark (if state (impl/cache-mark state) 0)]
-    (loop [retried? false]
+    (loop []
       (let [^ByteBuffer bb @bb_
             pos  (.position bb)
             overflowed?
@@ -1764,12 +1763,17 @@
               (catch BufferOverflowException _ true))]
 
         (when overflowed?
-          (.position bb pos)                            ; Discard the value's partial bytes
-          (when state (impl/cache-restore! state mark)) ; And any cache entries it made
-          (if (or retried? (zero? pos))
-            (vreset! bb_ (grown-bb bb)) ; Value alone exceeds chunk, need a bigger one
-            (stream-flush! dout bb))    ; Chunk had prior bytes, flushing may suffice
-          (recur true))))))
+          ;; Capacity needed by the value's failed write, when known (else <= 0)
+          (let [needed (- (long (.get tl:required-capacity)) pos)]
+            (.set tl:required-capacity 0)
+            (.position bb pos)                            ; Discard the value's partial bytes
+            (when state (impl/cache-restore! state mark)) ; And any cache entries it made
+            (stream-flush! dout bb)                       ; Make room, may suffice
+            (when (or (zero? pos) (> needed (.capacity bb)))
+              ;; Value alone exceeds chunk, need a bigger one. Sizing to `needed`
+              ;; avoids repeatedly re-writing (e.g. re-encoding) a large value.
+              (vreset! bb_ (grown-bb bb needed))))
+          (recur))))))
 
 ;; Constant leaf writers, to avoid allocating a closure per value written
 (def ^:private leaf-typed       (fn [x   ^ByteBuffer bb dout_] (write-typed x      bb dout_)))
@@ -1878,6 +1882,7 @@
 
     (.set tl:stream-depth (inc init-depth)) ; NB nothing between this and `try`
     (try
+      (.set tl:required-capacity 0) ; Clear any stale value, see `stream-leaf!`
       (let [bb_
             (volatile!
               (if (zero? init-depth)

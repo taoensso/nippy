@@ -542,6 +542,11 @@
                    (java.io.DataInputStream.
                      (java.io.ByteArrayInputStream. (freeze-to-ba x))))))]))
 
+   (testing "Single values larger than a chunk"
+     (let [big (apply str (repeat 1200000 "x"))] ; > max retained chunk, so always forces a grow
+       (doseq [x [big [(apply str (repeat 50000 "y")) big :after]]] ; Chunk empty, and part-filled
+         (is (ba= (freeze-to-ba x) (nippy/fast-freeze x))))))
+
    (testing "Types whose dispatch differs from their interfaces"
      ;; `MapEntry` extends `APersistentVector`; `()` is an `EmptyList` that
      ;; does NOT extend `PersistentList`; `SeqishType` is an `ISeq` that
