@@ -624,12 +624,17 @@
                            (-    (alength data-ba) (int data-offset)))))
 
                      (let [ba
-                           (if (zero? data-offset)
-                             (do                           data-ba)
-                             (java.util.Arrays/copyOfRange data-ba (int data-offset) (alength data-ba)))
+                           (if (and (nil? encryptor) (identical? compressor lz4-compressor))
+                             ;; Decompress straight out of `data-ba`, no intermediate copy
+                             (compression/lz4-decompress-range data-ba data-offset)
+                             (let [ba
+                                   (if (zero? data-offset)
+                                     (do                           data-ba)
+                                     (java.util.Arrays/copyOfRange data-ba (int data-offset) (alength data-ba)))
 
-                           ba (if encryptor  (decrypt    encryptor password ba) ba)
-                           ba (if compressor (decompress compressor         ba) ba)]
+                                   ba (if encryptor  (decrypt    encryptor password ba) ba)
+                                   ba (if compressor (decompress compressor         ba) ba)]
+                               ba))]
                        (impl/with-thaw-cache (thaw-from-bb* (ByteBuffer/wrap ba)))))
                    (catch Exception e (ex-fn e)))))
 

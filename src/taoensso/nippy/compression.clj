@@ -30,10 +30,12 @@
     (.writeInt dos (int size))
     (.toByteArray baos)))
 
-(defn- ba->int-size [ba]
-  (let [bais (ByteArrayInputStream. ba)
-        dis  (DataInputStream. bais)]
-    (.readInt dis)))
+(defn- ba->int-size
+  ([ba    ] (ba->int-size ba 0))
+  ([ba off]
+   (let [bais (ByteArrayInputStream. ba (int off) 4)
+         dis  (DataInputStream. bais)]
+     (.readInt dis))))
 
 (comment (ba->int-size (int-size->ba 3737)))
 
@@ -70,26 +72,28 @@
            (java.util.Arrays/copyOfRange ba-max-out 0 out-len)))))))
 
 (defn- airlift-decompress
-  ^bytes [^io.airlift.compress.Decompressor d ^bytes ba max-out-len]
-  (if max-out-len
-    (let [max-out-len (int        max-out-len)
-          ba-max-out  (byte-array max-out-len)
-          out-len
-          (.decompress d
-            ba         0 (alength ba)
-            ba-max-out 0 max-out-len)]
+  (^bytes [d ba max-out-len] (airlift-decompress d ba 0 max-out-len))
+  (^bytes [^io.airlift.compress.Decompressor d ^bytes ba off max-out-len]
+   (let [off (int off)]
+     (if max-out-len
+       (let [max-out-len (int        max-out-len)
+             ba-max-out  (byte-array max-out-len)
+             out-len
+             (.decompress d
+               ba         off (- (alength ba) off)
+               ba-max-out 0 max-out-len)]
 
-      (if (== out-len max-out-len)
-        (do                           ba-max-out)
-        (java.util.Arrays/copyOfRange ba-max-out 0 out-len)))
+         (if (== out-len max-out-len)
+           (do                           ba-max-out)
+           (java.util.Arrays/copyOfRange ba-max-out 0 out-len)))
 
-    ;; Prepended size
-    (let [out-len (ba->int-size ba)
-          ba-out  (byte-array (int out-len))]
-      (.decompress d
-        ba     4 (- (alength ba) 4)
-        ba-out 0 out-len)
-      ba-out)))
+       ;; Prepended size
+       (let [out-len (ba->int-size ba off)
+             ba-out  (byte-array (int out-len))]
+         (.decompress d
+           ba     (+ off 4) (- (alength ba) off 4)
+           ba-out 0 out-len)
+         ba-out)))))
 
 (do
   (enc/def* ^:private ^ThreadLocal tl:airlift-zstd-compressor   (enc/threadlocal (io.airlift.compress.zstd.ZstdCompressor.)))
@@ -121,7 +125,14 @@
     Deliberately a plain fn rather than an addition to `ICompressor`, which
     is public and may have user implementations."
     ^bytes [^bytes ba off len]
-    (airlift-compress (.get tl:airlift-lz4-compressor) ba off len true)))
+    (airlift-compress (.get tl:airlift-lz4-compressor) ba off len true))
+
+  (defn ^:no-doc lz4-decompress-range
+    "Like `(decompress lz4-compressor ba)`, but reads from `off` - letting
+    callers skip an intermediate copy. Used by `thaw`, which decompresses
+    straight out of its input (past the header)."
+    ^bytes [^bytes ba off]
+    (airlift-decompress (.get tl:airlift-lz4-decompressor) ba off nil)))
 
 (do
   (enc/def* ^:private ^ThreadLocal tl:airlift-lzo-compressor   (enc/threadlocal (io.airlift.compress.lzo.LzoCompressor.)))
