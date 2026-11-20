@@ -2,6 +2,15 @@ This project uses [**Break Versioning**](https://www.taoensso.com/break-versioni
 
 ---
 
+# Pending
+
+## Since v3.9.0 (2026-09-06)
+
+* [prf] `thaw`: skip copy before LZ4 decompress \[0be875d]
+* [prf] `freeze-to-out!`: grow chunk to needed size \[6215c85]
+
+---
+
 # `v3.9.0` (2026-09-06)
 
 - **Dependency**: [on Clojars](https://clojars.org/com.taoensso/nippy/versions/3.9.0)
